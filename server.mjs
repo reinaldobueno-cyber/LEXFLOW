@@ -30,7 +30,7 @@ const server = http.createServer(async (req, res) => {
 
     const url = new URL(req.url, `http://${req.headers.host}`);
     if(url.pathname === '/api/health'){
-      return send(res, 200, JSON.stringify({ok:true, service:'lexflow-controljus', time:new Date().toISOString()}), {'Content-Type':'application/json; charset=utf-8'});
+      return send(res, 200, JSON.stringify({ok:true, service:'lexflow-controljus', commit:process.env.RENDER_GIT_COMMIT || '', time:new Date().toISOString()}), {'Content-Type':'application/json; charset=utf-8'});
     }
 
     if(url.pathname === '/api/controljus/publicacoes'){
