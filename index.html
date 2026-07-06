@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>LexFlow — Camada de Execução sobre o ControlJus</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F6F3EC; --paper-2:#EFEBE0; --ink:#16233A; --ink-2:#2A3B54; --ink-soft:#5A6B85;
+  --line:#DDD6C4; --selo:#7C2333; --vermelho:#B23A2E; --laranja:#C97A2B; --amarelo:#B8941F;
+  --verde:#3F7D52; --cinza:#8B8F94; --azul:#2E5C8A; --white:#FFFDF9;
+  --shadow: 0 1px 2px rgba(22,35,58,0.06), 0 4px 16px rgba(22,35,58,0.06);
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{font-family:'IBM Plex Sans', sans-serif; background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased;}
+.mono{font-family:'IBM Plex Mono', monospace;} .serif{font-family:'Source Serif 4', serif;}
+#app{display:flex; min-height:100vh;}
+
+.sidebar{width:238px; flex-shrink:0; background:var(--ink); color:var(--paper); display:flex; flex-direction:column; padding:24px 16px; position:sticky; top:0; height:100vh; overflow-y:auto;}
+.brand{display:flex; align-items:center; gap:10px; padding:0 8px 14px 8px; border-bottom:1px solid rgba(255,255,255,0.12); margin-bottom:8px;}
+.seal{width:34px; height:34px; border-radius:50%; border:2px solid var(--selo); display:flex; align-items:center; justify-content:center; color:#E8C9C9; font-family:'Source Serif 4',serif; font-weight:700; font-size:15px; flex-shrink:0;}
+.brand-text{line-height:1.15;}
+.brand-text .t1{font-family:'Source Serif 4', serif; font-size:15.5px; font-weight:600; color:#F6F3EC;}
+.brand-text .t2{font-size:10px; letter-spacing:.04em; color:#8FA0BC; text-transform:uppercase;}
+.tagline{font-size:10.5px; color:#7C8CA8; line-height:1.5; padding:10px 8px 16px 8px; border-bottom:1px solid rgba(255,255,255,0.12); margin-bottom:8px;}
+.tagline b{color:#C9A8AC;}
+
+.nav{display:flex; flex-direction:column; gap:2px; flex:1;}
+.nav-label{font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:#5F7093; padding:12px 12px 4px 12px;}
+.nav button{all:unset; cursor:pointer; display:flex; align-items:center; gap:11px; padding:9px 12px; border-radius:8px; font-size:13px; color:#B7C2D6; font-weight:500; transition:background .15s, color .15s;}
+.nav button:hover{background:rgba(255,255,255,0.06); color:#F6F3EC;}
+.nav button.active{background:var(--selo); color:#fff;}
+.nav button .ic{width:16px; text-align:center; opacity:.9;}
+.nav .badge{margin-left:auto; background:rgba(255,255,255,0.14); color:#fff; font-size:10px; font-family:'IBM Plex Mono',monospace; padding:1px 6px; border-radius:20px;}
+.nav button.active .badge{background:rgba(255,255,255,0.28);}
+.nav .badge.crit{background:var(--vermelho); color:#fff;}
+.sidebar-foot{border-top:1px solid rgba(255,255,255,0.12); padding-top:12px; font-size:10px; color:#6C7C99; margin-top:8px;}
+
+.main{flex:1; min-width:0; display:flex; flex-direction:column;}
+.topbar{padding:22px 36px 18px 36px; display:flex; align-items:flex-end; justify-content:space-between; border-bottom:1px solid var(--line); background:var(--white);}
+.topbar h1{font-family:'Source Serif 4', serif; font-size:22px; font-weight:600;}
+.topbar .sub{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
+.topbar-actions{display:flex; gap:8px;}
+.content{padding:28px 36px 60px 36px; flex:1;}
+
+.btn{font-family:'IBM Plex Sans', sans-serif; font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:7px; border:1px solid var(--line); background:var(--white); color:var(--ink); cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all .12s;}
+.btn:hover{border-color:var(--ink-soft); background:var(--paper-2);}
+.btn.primary{background:var(--selo); border-color:var(--selo); color:#fff;}
+.btn.primary:hover{background:#661C29;}
+.btn.azul{background:var(--azul); border-color:var(--azul); color:#fff;}
+.btn.azul:hover{background:#234A70;}
+.btn.ghost{border-color:transparent; background:transparent;}
+.btn.small{padding:5px 10px; font-size:11.5px;}
+.btn.danger{color:var(--vermelho);}
+
+.grid-cards{display:grid; grid-template-columns:repeat(auto-fit, minmax(155px,1fr)); gap:12px; margin-bottom:26px;}
+.card{background:var(--white); border:1px solid var(--line); border-radius:10px; padding:16px 16px 14px 16px; box-shadow:var(--shadow); cursor:pointer; transition:transform .12s;}
+.card:hover{transform:translateY(-2px);}
+.card .num{font-family:'Source Serif 4', serif; font-size:28px; font-weight:600; line-height:1;}
+.card .lbl{font-size:11px; color:var(--ink-soft); margin-top:6px; font-weight:500;}
+.card.c-vermelho .num{color:var(--vermelho);} .card.c-laranja .num{color:var(--laranja);}
+.card.c-amarelo .num{color:var(--amarelo);} .card.c-verde .num{color:var(--verde);}
+.card.c-ink .num{color:var(--ink);} .card.c-azul .num{color:var(--azul);}
+
+.section-title{font-family:'Source Serif 4', serif; font-size:16px; font-weight:600; margin:26px 0 12px 0; display:flex; align-items:center; gap:8px;}
+.section-title .cnt{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); background:var(--paper-2); padding:2px 8px; border-radius:20px;}
+
+.selo-ring{position:relative; width:44px; height:44px; flex-shrink:0;}
+.selo-ring svg{transform:rotate(-90deg);}
+.selo-ring .bg{fill:none; stroke:var(--line); stroke-width:4;}
+.selo-ring .fg{fill:none; stroke-width:4; stroke-linecap:round; transition:stroke-dashoffset .3s;}
+.selo-ring .num{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px;}
+.ring-vermelho .fg{stroke:var(--vermelho);} .ring-vermelho .num{color:var(--vermelho);}
+.ring-laranja .fg{stroke:var(--laranja);} .ring-laranja .num{color:var(--laranja);}
+.ring-amarelo .fg{stroke:var(--amarelo);} .ring-amarelo .num{color:var(--amarelo);}
+.ring-verde .fg{stroke:var(--verde);} .ring-verde .num{color:var(--verde);}
+.ring-cinza .fg{stroke:var(--cinza);} .ring-cinza .num{color:var(--cinza);}
+
+.plist{display:flex; flex-direction:column; gap:8px;}
+.prow{background:var(--white); border:1px solid var(--line); border-left:4px solid var(--cinza); border-radius:8px; padding:11px 14px; display:flex; align-items:center; gap:14px; box-shadow:var(--shadow);}
+.prow.b-vermelho{border-left-color:var(--vermelho);} .prow.b-laranja{border-left-color:var(--laranja);}
+.prow.b-amarelo{border-left-color:var(--amarelo);} .prow.b-verde{border-left-color:var(--verde);}
+.prow.b-cinza{border-left-color:var(--cinza); opacity:.7;} .prow.b-azul{border-left-color:var(--azul);}
+.prow .info{flex:1; min-width:0;}
+.prow .top-line{display:flex; gap:8px; align-items:baseline; flex-wrap:wrap;}
+.prow .cliente{font-weight:600; font-size:13.5px;}
+.prow .proc{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);}
+.prow .desc{font-size:12px; color:var(--ink-soft); margin-top:2px;}
+.tribunal-tag{font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600; color:var(--ink-2); background:var(--paper-2); border:1px solid var(--line); padding:1px 6px; border-radius:4px;}
+.empty{padding:30px; text-align:center; color:var(--ink-soft); font-size:13px; background:var(--white); border:1px dashed var(--line); border-radius:10px;}
+
+.filters{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center;}
+.filters select, .filters input[type=text]{font-family:'IBM Plex Sans'; font-size:12.5px; padding:7px 10px; border-radius:7px; border:1px solid var(--line); background:var(--white); color:var(--ink);}
+.filters input[type=text]{min-width:190px;}
+.chk{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); cursor:pointer; padding:7px 4px;}
+.table-wrap{background:var(--white); border:1px solid var(--line); border-radius:10px; overflow:auto; box-shadow:var(--shadow);}
+table{width:100%; border-collapse:collapse; font-size:12.5px; min-width:900px;}
+thead th{text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); padding:10px 12px; border-bottom:1px solid var(--line); background:var(--paper-2); white-space:nowrap; cursor:pointer; position:sticky; top:0;}
+thead th:hover{color:var(--ink);}
+tbody td{padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:#FBFAF6;}
+tbody tr.archived{opacity:.55;}
+td.proc{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
+td.cliente{font-weight:600;}
+td.texto{max-width:220px; font-size:11.5px; color:var(--ink-soft);}
+.row-actions{display:flex; gap:4px;}
+a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
+a.link-audi:hover{text-decoration:underline;}
+
+.pill{display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px; white-space:nowrap;}
+.pill .dot{width:6px; height:6px; border-radius:50%;}
+.pill.st-vermelho{background:#F5E2E0; color:var(--vermelho);} .pill.st-vermelho .dot{background:var(--vermelho);}
+.pill.st-laranja{background:#F6E8DA; color:var(--laranja);} .pill.st-laranja .dot{background:var(--laranja);}
+.pill.st-amarelo{background:#F3EDD6; color:var(--amarelo);} .pill.st-amarelo .dot{background:var(--amarelo);}
+.pill.st-verde{background:#E1EEE4; color:var(--verde);} .pill.st-verde .dot{background:var(--verde);}
+.pill.st-cinza{background:#E9E9E7; color:var(--cinza);} .pill.st-cinza .dot{background:var(--cinza);}
+.pill.st-ink{background:#E4E9F0; color:var(--ink-2);} .pill.st-ink .dot{background:var(--ink-2);}
+.pill.st-azul{background:#E1EAF2; color:var(--azul);} .pill.st-azul .dot{background:var(--azul);}
+
+select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:600; padding:4px 8px; border-radius:20px; border:1px solid var(--line); background:var(--paper-2); color:var(--ink);}
+.priority-tag{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
+.priority-alta{color:var(--vermelho);} .priority-media{color:var(--laranja);} .priority-baixa{color:var(--ink-soft);}
+
+.overlay{position:fixed; inset:0; background:rgba(22,35,58,0.45); display:none; align-items:center; justify-content:center; z-index:100; padding:20px;}
+.overlay.open{display:flex;}
+.modal{background:var(--white); border-radius:12px; width:100%; max-width:580px; max-height:88vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.25); border:1px solid var(--line);}
+.modal-head{padding:18px 22px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;}
+.modal-head h3{font-family:'Source Serif 4',serif; font-size:17px; font-weight:600;}
+.modal-body{padding:20px 22px; display:flex; flex-direction:column; gap:13px;}
+.modal-foot{padding:16px 22px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:8px;}
+.field{display:flex; flex-direction:column; gap:5px;}
+.field label{font-size:11.5px; font-weight:600; color:var(--ink-2);}
+.field input, .field select, .field textarea{font-family:'IBM Plex Sans'; font-size:13px; padding:8px 10px; border-radius:7px; border:1px solid var(--line); background:var(--paper); color:var(--ink);}
+.field textarea{resize:vertical; min-height:60px;}
+.field-row{display:flex; gap:10px;}
+.field-row .field{flex:1;}
+.close-x{all:unset; cursor:pointer; font-size:18px; color:var(--ink-soft); padding:4px;}
+
+.alert-group{margin-bottom:22px;}
+.alert-head{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+.alert-head .swatch{width:10px; height:10px; border-radius:3px;}
+.alert-head h4{font-size:13.5px; font-weight:700;}
+
+.toast{position:fixed; bottom:22px; right:22px; background:var(--ink); color:#fff; padding:11px 18px; border-radius:8px; font-size:12.5px; box-shadow:var(--shadow); z-index:200; opacity:0; transform:translateY(8px); transition:all .25s; pointer-events:none;}
+.toast.show{opacity:1; transform:translateY(0);}
+
+.hist-item{display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:12px;}
+.hist-item:last-child{border-bottom:none;}
+.hist-item .t{color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:10.5px; white-space:nowrap;}
+
+/* Integração / roadmap tab */
+.roadmap-hero{background:var(--ink); color:var(--paper); border-radius:12px; padding:26px 28px; margin-bottom:24px;}
+.roadmap-hero .eyebrow{font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:#9AAAC6; margin-bottom:8px;}
+.roadmap-hero .frase{font-family:'Source Serif 4', serif; font-size:19px; line-height:1.45; max-width:640px;}
+.roadmap-hero .frase b{color:#E8C9C9;}
+.steps{display:flex; flex-direction:column; gap:0; margin-bottom:28px;}
+.step{display:flex; gap:16px; padding:18px 0; border-bottom:1px solid var(--line);}
+.step:last-child{border-bottom:none;}
+.step-num{width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Source Serif 4',serif; font-weight:700; font-size:14px; flex-shrink:0;}
+.step.done .step-num{background:var(--verde); color:#fff;}
+.step.wip .step-num{background:var(--laranja); color:#fff;}
+.step.todo .step-num{background:var(--paper-2); color:var(--ink-soft); border:1px solid var(--line);}
+.step h4{font-size:14.5px; font-weight:700; margin-bottom:3px;}
+.step .tag{font-size:10px; text-transform:uppercase; letter-spacing:.04em; font-weight:700; padding:2px 8px; border-radius:20px; margin-left:8px;}
+.step.done .tag{background:#E1EEE4; color:var(--verde);}
+.step.wip .tag{background:#F6E8DA; color:var(--laranja);}
+.step.todo .tag{background:var(--paper-2); color:var(--ink-soft);}
+.step p{font-size:12.5px; color:var(--ink-soft); line-height:1.5; max-width:640px;}
+.path-cards{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:28px;}
+.path-card{background:var(--white); border:1px solid var(--line); border-radius:10px; padding:18px 20px; box-shadow:var(--shadow);}
+.path-card .path-tag{font-size:10px; text-transform:uppercase; font-weight:700; letter-spacing:.05em; color:var(--selo);}
+.path-card h4{font-family:'Source Serif 4',serif; font-size:15.5px; margin:6px 0 8px 0;}
+.path-card p{font-size:12.5px; color:var(--ink-soft); line-height:1.55;}
+.checklist{display:flex; flex-direction:column; gap:2px;}
+.check-item{display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--line); font-size:13px;}
+.check-item:last-child{border-bottom:none;}
+.check-item input{width:16px; height:16px; accent-color:var(--verde);}
+.check-item.checked span{text-decoration:line-through; color:var(--ink-soft);}
+@media (max-width: 860px){ .path-cards{grid-template-columns:1fr;} }
+
+@media (max-width: 860px){
+  .sidebar{position:fixed; left:0; top:0; z-index:90; transform:translateX(-100%); transition:transform .2s; box-shadow:0 0 30px rgba(0,0,0,0.3);}
+  .sidebar.open{transform:translateX(0);}
+  .content{padding:20px 16px 60px 16px;}
+  .topbar{padding:16px;}
+  .menu-btn{display:flex !important;}
+}
+.menu-btn{display:none; align-items:center; justify-content:center; width:34px; height:34px; border-radius:8px; border:1px solid var(--line); background:var(--white); cursor:pointer; margin-right:10px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="seal">§</div>
+      <div class="brand-text"><div class="t1">LexFlow</div><div class="t2">Prazos, Audiências & Publicações</div></div>
+    </div>
+    <div class="tagline">O <b>ControlJus</b> informa. O <b>LexFlow</b> cobra, organiza e evita perda de prazo.</div>
+    <div class="nav" id="nav"></div>
+    <div class="sidebar-foot">Painel de comando jurídico<br>MVP · dados locais deste navegador</div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex; align-items:center;">
+        <button class="menu-btn" id="menuBtn">☰</button>
+        <div><h1 id="pageTitle">Dashboard</h1><div class="sub" id="pageSub"></div></div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn" id="importBtn">⇪ Conectar ControlJus</button>
+        <button class="btn" id="exportBtn">⇩ Exportar CSV</button>
+      </div>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modalBox"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===================== HELPERS ===================== */
+const uid = () => Math.random().toString(36).slice(2,10);
+const MONTHS = {'janeiro':0,'fevereiro':1,'março':2,'abril':3,'maio':4,'junho':5,'julho':6,'agosto':7,'setembro':8,'outubro':9,'novembro':10,'dezembro':11};
+function parsePtDate(str){
+  if(!str) return null;
+  const m = str.toLowerCase().match(/(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/);
+  if(!m) return null;
+  const monthIdx = MONTHS[m[2]];
+  if(monthIdx === undefined) return null;
+  return new Date(parseInt(m[3]), monthIdx, parseInt(m[1]));
+}
+function fmtDate(d){ if(!d) return '—'; const dt=(d instanceof Date)?d:new Date(d); if(isNaN(dt)) return '—'; return dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); if(isNaN(dt)) return '—'; return dt.toLocaleString('pt-BR'); }
+function isoOf(d){ if(!d) return ''; const dt=(d instanceof Date)?d:new Date(d); return isNaN(dt)?'':dt.toISOString().slice(0,10); }
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+function diasRestantes(dateVal){
+  const dt = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
+  if(isNaN(dt)) return null;
+  const d = new Date(dt); d.setHours(0,0,0,0);
+  return Math.round((d - TODAY) / 86400000);
+}
+function riskColor(dias, done){
+  if(done) return 'cinza';
+  if(dias === null) return 'cinza';
+  if(dias <= 0) return 'vermelho';
+  if(dias <= 3) return 'laranja';
+  if(dias <= 7) return 'amarelo';
+  return 'verde';
+}
+
+const PRAZO_STATUSES = ['Novo','Em análise','Em elaboração','Aguardando revisão','Protocolar','Concluído','Vencido','Arquivado'];
+const PRAZO_DONE = ['Concluído','Arquivado'];
+const PRAZO_ARCHIVED = ['Arquivado'];
+const AUDI_STATUSES = ['Agendada','Preparar documentos','Confirmar cliente','Confirmar link','Realizada','Remarcada','Cancelada','Arquivado'];
+const AUDI_DONE = ['Realizada','Cancelada','Arquivado'];
+const AUDI_ARCHIVED = ['Arquivado'];
+const TAREFA_STATUSES = ['Aberta','Em andamento','Aguardando terceiro','Concluída','Atrasada','Arquivado'];
+const TAREFA_DONE = ['Concluída','Arquivado'];
+const TAREFA_ARCHIVED = ['Arquivado'];
+const PUB_STATUSES = ['Novo','Em análise','Gerou prazo','Não gera prazo','Tarefa criada','Concluído','Arquivado'];
+const PUB_UNTREATED = ['Novo','Em análise'];
+const PUB_ARCHIVED = ['Arquivado'];
+const PUB_DONE = ['Concluído','Arquivado','Não gera prazo'];
+
+/* ===================== SEED DATA ===================== */
+function seedData(){
+  const prazosRaw = [
+["0039538-04.2025.8.17.8201 TJPE","THAISA ALBUQUERQUE BARROS DA SILVA E ULISSES GOMES DE PAULA JUNIOR","15 de junho de 2026","COMPROVAR CUMPRIMENTO DE SENTENÇA","06 de julho de 2026"],
+["5511728-03.2026.8.09.0051 TJGO","CARLOS FERNANDO BATISTA","16 de junho de 2026","EMENDA À INICIAL","07 de julho de 2026"],
+["5018621-35.2025.8.13.0134 TJMG","NATHALIA LOPES RODRIGUES","17 de junho de 2026","CONTRARRAZÕES A APELAÇÃO","08 de julho de 2026"],
+["5506938-73.2026.8.09.0051 TJGO","ODILON ALVARENGA CARNEIRO E MARIA CRISTINA BORGES ALVARENGA CARNEIRO","22 de junho de 2026","RI","06 de julho de 2026"],
+["0069308-18.2025.8.17.2001 TJPE","MARIA LUIZA DE MELO COELHO DA COSTA","22 de junho de 2026","CONTRARRAZÕES A APELAÇÃO","13 de julho de 2026"],
+["0001647-45.2025.8.16.0127 TJPR","JOSIANE RUFINO BRUMATTI","22 de junho de 2026","MANIFESTAÇÃO","13 de julho de 2026"],
+["5002952-59.2025.8.21.0120 TJRS","DIEGO LOVATTO","23 de junho de 2026","APELAÇÃO","14 de julho de 2026"],
+["5489702-11.2026.8.09.0051 TJGO","RAFAEL VIEIRA DE QUEIROZ","26 de junho de 2026","RI","10 de julho de 2026"],
+["0801382-38.2025.8.15.0741 TJPB","EMERSON CAVALCANTE DOS SANTOS","29 de junho de 2026","ED","06 de julho de 2026"],
+["0801382-38.2025.8.15.0741 TJPB","EMERSON CAVALCANTE DOS SANTOS","29 de junho de 2026","APELAÇÃO","20 de julho de 2026"],
+["5456668-45.2026.8.09.0051 TJGO","LEILA DOS REIS RIBEIRO","30 de junho de 2026","IMPUGNAÇÃO À CONTESTAÇÃO","07 de julho de 2026"],
+["5744022-61.2025.8.09.0051 TJGO","ROBERTO MARCIO PINHEIRO MAIA FILHO","30 de junho de 2026","MANIFESTAÇÃO","07 de julho de 2026"],
+["5799590-62.2025.8.09.0051 TJGO","AUTO POSTO ACHAVE LTDA","30 de junho de 2026","MANIFESTAÇÃO","07 de julho de 2026"],
+["0079736-04.2018.8.09.0069 TJGO","ELIANE APARECIDA LOPES","02 de julho de 2026","MANIFESTAÇÃO","07 de julho de 2026"],
+["5645984-14.2025.8.09.0051 TJGO","GUSTAVO FERREIRA RIBEIRO","02 de julho de 2026","AGRAVO","07 de julho de 2026"],
+["5645984-14.2025.8.09.0051 TJGO","GUSTAVO FERREIRA RIBEIRO","02 de julho de 2026","ED","06 de julho de 2026"],
+["7000005-67.2026.8.09.0032 SEEU","LUIZ ANTONIO DA SILVA","02 de julho de 2026","MANIFESTAÇÃO","07 de julho de 2026"],
+["0192972-08.2025.8.05.0001 TJBA","JEDSON PEREIRA CUNHA","02 de julho de 2026","RI","16 de julho de 2026"],
+["5002952-59.2025.8.21.0120 TJRS","DIEGO LOVATTO","02 de julho de 2026","CONTRARRAZÕES AO ED","09 de julho de 2026"],
+["6099429-92.2024.8.09.0154 TJGO","DANYLO LEMES D ABADIA","03 de julho de 2026","MANIFESTAÇÃO","10 de julho de 2026"],
+["1026586-92.2024.8.11.0015 TJMT","ISAU DOS SANTOS MATOS","03 de julho de 2026","RAZÕES DE APELAÇÃO","13 de julho de 2026"],
+["5491698-44.2026.8.09.0051 TJGO","ODILON ALVARENGA CARNEIRO","06 de julho de 2026","AGRAVO DE INSTRUMENTO","27 de julho de 2026"],
+  ];
+  const prazos = prazosRaw.map(r=>{
+    const [procTrib, cliente, pub, pend, fatal] = r;
+    const parts = procTrib.split(' ');
+    const tribunal = parts.pop();
+    const processo = parts.join(' ');
+    return {
+      id:uid(), processo, cliente:cliente.trim(), tribunal,
+      dataPublicacao: isoOf(parsePtDate(pub)), prazoFatal: isoOf(parsePtDate(fatal)),
+      tipoPrazo:pend, origemPublicacaoId:'', responsavel:'', status:'Novo', prioridade:'Média', observacao:'', link:'', concluidoEm:''
+    };
+  });
+
+  const audiRaw = [
+    ["10/07/2026","14:00","CESAR AUGUSTO VALENTE","5633046-35.2025.8.09.0132","TJGO","Audiência de Conciliação CEJUSC Artigo 334 CPC","Semipresencial",""],
+    ["03/08/2026","19:10","BRENDHA DA SILVA BENEDETTE E RUDINEI BERTOLDO","5003962-66.2025.8.21.0144","TJRS","Audiência de conciliação designada","Virtual","https://eproc1g.tjrs.jus.br (Webex)"],
+    ["04/08/2026","13:36","MARCIO JOSÉ NERES DE JESUS","0043300-54.2025.8.16.0021","TJPR","Audiência do Art. 334 CPC designada — CEJUSC Cascavel","Semipresencial",""],
+    ["05/08/2026","18:50","NATALIA GOMES CARDOSO E SILVA","5002807-77.2025.8.21.0160","TJRS","Audiência de Conciliação (presencial ou virtual facultada)","Virtual","https://tjrs.webex.com/join/frveracruzjzvjud"],
+    ["12/08/2026","15:00","BEATRIZ MACHADO BEZERRA CARDOSO DA SILVA","5335876-22.2025.8.09.0011","TJGO","Audiência de Conciliação CEJUSC Artigo 334 CPC","Virtual","https://tjgo.zoom.us/j/86154157972 (ID 861 5415 7972)"],
+    ["17/08/2026","15:00","ADENITA DA COSTA VALE","5588081-07.2026.8.09.0012","TJGO","Audiência de Conciliação","Virtual","https://tjgo.zoom.us/j/3931464899 (ID 393 146 4899)"],
+    ["18/08/2026","16:30","MARCIO SILVA DA CRUZ","1503514-67.2021.8.26.0577","TJSP","Audiência VIRTUAL de instrução, debates e julgamento","Virtual",""],
+    ["30/06/2027","14:00","MARCELO HENRIQUE EVANGELISTA RODRIGUES","5003362-51.2026.8.09.0174","TJGO","Audiência de instrução e julgamento — oitiva testemunhas do MP","Presencial",""],
+    ["01/07/2027","14:00","MARCELO HENRIQUE EVANGELISTA RODRIGUES","5003362-51.2026.8.09.0174","TJGO","Audiência de instrução e julgamento — testemunhas da defesa e interrogatório","Presencial",""],
+  ];
+  const audiencias = audiRaw.map(r=>{
+    const [data,horario,cliente,processo,estado,tipo,modalidade,link] = r;
+    const [dd,mm,yy] = data.split('/');
+    return {id:uid(), data:`${yy}-${mm}-${dd}`, horario, cliente, processo, estado, tipo, modalidade, link, responsavel:'', preposto:'', status:'Agendada', observacoes:''};
+  });
+
+  // Recortes/publicações simulados do ControlJus — alguns já geraram os prazos acima, outros ainda não tratados
+  const pubsRaw = [
+    {data:"15 de junho de 2026", cliente:"THAISA ALBUQUERQUE BARROS DA SILVA E ULISSES GOMES DE PAULA JUNIOR", processo:"0039538-04.2025.8.17.8201", tribunal:"TJPE", tipo:"Decisão", texto:"Fica a parte intimada para comprovar o cumprimento integral da sentença no prazo legal, sob pena das medidas executivas cabíveis.", status:"Gerou prazo", prazoFatal:"06 de julho de 2026"},
+    {data:"16 de junho de 2026", cliente:"CARLOS FERNANDO BATISTA", processo:"5511728-03.2026.8.09.0051", tribunal:"TJGO", tipo:"Despacho", texto:"Determino a emenda à petição inicial, com indicação precisa dos pontos controvertidos, no prazo assinalado.", status:"Gerou prazo", prazoFatal:"07 de julho de 2026"},
+    {data:"17 de junho de 2026", cliente:"NATHALIA LOPES RODRIGUES", processo:"5018621-35.2025.8.13.0134", tribunal:"TJMG", tipo:"Acórdão", texto:"Recebido o recurso de apelação, abre-se vista à parte contrária para apresentação de contrarrazões.", status:"Gerou prazo", prazoFatal:"08 de julho de 2026"},
+    {data:"22 de junho de 2026", cliente:"ODILON ALVARENGA CARNEIRO E MARIA CRISTINA BORGES ALVARENGA CARNEIRO", processo:"5506938-73.2026.8.09.0051", tribunal:"TJGO", tipo:"Decisão interlocutória", texto:"Defiro em parte o pedido liminar. Intime-se a parte para manifestação sobre o laudo pericial no prazo legal.", status:"Gerou prazo", prazoFatal:"06 de julho de 2026"},
+    {data:"23 de junho de 2026", cliente:"DIEGO LOVATTO", processo:"5002952-59.2025.8.21.0120", tribunal:"TJRS", tipo:"Acórdão", texto:"Dá-se parcial provimento ao recurso, remetendo-se os autos à origem para prosseguimento do feito.", status:"Gerou prazo", prazoFatal:"14 de julho de 2026"},
+    {data:"04 de julho de 2026", cliente:"MARIA HELENA SANTOS FERREIRA", processo:"5012345-11.2026.8.09.0051", tribunal:"TJGO", tipo:"Intimação", texto:"Intimação da parte autora para manifestação sobre a contestação apresentada, no prazo legal.", status:"Novo", prazoFatal:""},
+    {data:"05 de julho de 2026", cliente:"JOÃO PEDRO ALMEIDA COSTA", processo:"0033221-55.2025.8.16.0021", tribunal:"TJPR", tipo:"Despacho", texto:"Vista às partes para especificação de provas que pretendem produzir em audiência de instrução.", status:"Em análise", prazoFatal:""},
+    {data:"05 de julho de 2026", cliente:"RAFAELA MENDES OLIVEIRA", processo:"5098765-22.2026.8.21.0120", tribunal:"TJRS", tipo:"Sentença", texto:"Julgo procedente o pedido, apenas para fins de registro, sem novas obrigações à parte patrocinada.", status:"Não gera prazo", prazoFatal:""},
+    {data:"20 de junho de 2026", cliente:"PEDRO HENRIQUE LIMA", processo:"0011223-90.2024.8.05.0001", tribunal:"TJBA", tipo:"Certidão", texto:"Certidão de decurso de prazo sem manifestação da parte contrária. Feito já regularizado e sem pendência.", status:"Arquivado", prazoFatal:""},
+    {data:"06 de julho de 2026", cliente:"SANDRA REGINA COSTA MOURA", processo:"5077889-33.2026.8.09.0051", tribunal:"TJGO", tipo:"Intimação eletrônica", texto:"Intimação eletrônica para ciência da decisão que designou perícia técnica no processo em curso.", status:"Novo", prazoFatal:""},
+  ];
+  const prazoIdByProcesso = {};
+  prazos.forEach(p=>{ prazoIdByProcesso[p.processo] = p.id; });
+  const publicacoes = pubsRaw.map(p=>{
+    const linkedPrazoId = p.status==='Gerou prazo' ? (prazoIdByProcesso[p.processo]||'') : '';
+    if(linkedPrazoId){
+      const pr = prazos.find(x=>x.id===linkedPrazoId);
+      if(pr) pr.origemPublicacaoId = 'PUB-'+p.processo;
+    }
+    return {
+      id:uid(), refId:'PUB-'+p.processo, dataPublicacao:isoOf(parsePtDate(p.data)), processo:p.processo, cliente:p.cliente,
+      tribunal:p.tribunal, tipoPublicacao:p.tipo, textoRecorte:p.texto, prazoIdentificado: p.prazoFatal?('Prazo fatal em '+p.prazoFatal):'', 
+      prazoFatal: isoOf(parsePtDate(p.prazoFatal)), status:p.status, responsavel:'', observacoes:'', linkOrigem:'https://app.controljus.com.br/publicacoes/recortes/arquivadas',
+      prazoGeradoId: linkedPrazoId
+    };
+  });
+
+  return {prazos, audiencias, tarefas:[], publicacoes, historico:[
+    {ts:new Date().toISOString(), texto:'Sistema iniciado. Prazos e audiências carregados dos arquivos; recortes simulados a partir do fluxo do ControlJus até a integração real ser configurada.'}
+  ], checklist:{exportBtn:false, tableCopy:false, apiEndpoints:false, webserviceContract:false}};
+}
+
+let DB = {prazos:[], audiencias:[], tarefas:[], publicacoes:[], historico:[], checklist:{}};
+
+async function loadDB(){
+  try{
+    const res = await window.storage.get('lc:data', false);
+    if(res && res.value){ DB = JSON.parse(res.value); if(!DB.publicacoes) DB.publicacoes=[]; if(!DB.checklist) DB.checklist={exportBtn:false,tableCopy:false,apiEndpoints:false,webserviceContract:false}; return; }
+  }catch(e){}
+  DB = seedData();
+  await saveDB();
+}
+async function saveDB(){ try{ await window.storage.set('lc:data', JSON.stringify(DB), false); }catch(e){ console.error('storage error', e); } }
+function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), texto}); if(DB.historico.length>250) DB.historico.length=250; }
+
+let toastTimer;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600); }
+
+/* ===================== NAV ===================== */
+const VIEWS = [
+  {id:'dashboard', label:'Dashboard', icon:'◆', group:'main'},
+  {id:'publicacoes', label:'Publicações', icon:'✉', group:'main'},
+  {id:'prazos', label:'Prazos', icon:'▤', group:'main'},
+  {id:'audiencias', label:'Audiências', icon:'◷', group:'main'},
+  {id:'tarefas', label:'Tarefas', icon:'☑', group:'main'},
+  {id:'alertas', label:'Alertas', icon:'▲', group:'main'},
+  {id:'historico', label:'Histórico', icon:'≡', group:'sec'},
+  {id:'integracao', label:'Integração ControlJus', icon:'⇄', group:'sec'},
+];
+let currentView = 'dashboard';
+
+function computeAlertCount(){
+  let crit = 0;
+  DB.prazos.forEach(p=>{ if(PRAZO_DONE.includes(p.status)) return; const dr=diasRestantes(p.prazoFatal); if(dr!==null && dr<=0) crit++; });
+  DB.audiencias.forEach(a=>{ if(AUDI_DONE.includes(a.status)) return; const dr=diasRestantes(a.data); if(dr!==null && dr>=0 && dr<=1) crit++; });
+  return crit;
+}
+
+function renderNav(){
+  const nav = document.getElementById('nav');
+  const critCount = computeAlertCount();
+  let html = '';
+  ['main','sec'].forEach((g,gi)=>{
+    if(gi===1) html += `<div class="nav-label">Sistema</div>`;
+    VIEWS.filter(v=>v.group===g).forEach(v=>{
+      let badge='';
+      if(v.id==='publicacoes'){ const n=DB.publicacoes.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${DB.publicacoes.length}</span>`; }
+      if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
+      if(v.id==='audiencias') badge = `<span class="badge">${DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status)).length}</span>`;
+      if(v.id==='tarefas') badge = `<span class="badge">${DB.tarefas.filter(t=>!TAREFA_DONE.includes(t.status)).length}</span>`;
+      if(v.id==='alertas' && critCount>0) badge = `<span class="badge crit">${critCount}</span>`;
+      html += `<button data-view="${v.id}" class="${v.id===currentView?'active':''}"><span class="ic">${v.icon}</span>${v.label}${badge}</button>`;
+    });
+  });
+  nav.innerHTML = html;
+  nav.querySelectorAll('button').forEach(b=>b.onclick = ()=>{ currentView=b.dataset.view; renderAll(); });
+}
+
+function ringHTML(dias, done){
+  const color = riskColor(dias, done);
+  const r = 18, C = 2*Math.PI*r;
+  let pct;
+  if(done) pct = 1; else if(dias===null) pct=0; else pct = Math.max(0, Math.min(1, 1 - (dias/14)));
+  if(dias!==null && dias<0) pct = 1;
+  const offset = C * (1-pct);
+  const label = done ? '✓' : (dias===null ? '—' : (dias<0 ? 'V' : dias));
+  return `<div class="selo-ring ring-${color}"><svg width="44" height="44"><circle class="bg" cx="22" cy="22" r="${r}"/><circle class="fg" cx="22" cy="22" r="${r}" stroke-dasharray="${C}" stroke-dashoffset="${offset}"/></svg><div class="num">${label}</div></div>`;
+}
+function pill(status, color){ return `<span class="pill st-${color}"><span class="dot"></span>${status}</span>`; }
+
+/* ===================== DASHBOARD EXECUTIVO ===================== */
+function renderDashboard(){
+  const activePrazos = DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
+  const activeAudi = DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status));
+  const activeTarefas = DB.tarefas.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
+  const activePubs = DB.publicacoes.filter(p=>!PUB_ARCHIVED.includes(p.status));
+
+  const vencidos = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)<0).length;
+  const hoje = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)===0).length;
+  const em3 = activePrazos.filter(p=>{if(PRAZO_DONE.includes(p.status))return false; const d=diasRestantes(p.prazoFatal); return d>0&&d<=3;}).length;
+  const em7 = activePrazos.filter(p=>{if(PRAZO_DONE.includes(p.status))return false; const d=diasRestantes(p.prazoFatal); return d>3&&d<=7;}).length;
+  const pubSemTratamento = activePubs.filter(p=>PUB_UNTREATED.includes(p.status)).length;
+  const tarefasSemResp = activeTarefas.filter(t=>!TAREFA_DONE.includes(t.status) && !t.responsavel).length;
+  const audiProximas = activeAudi.filter(a=>{if(AUDI_DONE.includes(a.status))return false; const d=diasRestantes(a.data); return d>=0&&d<=7;}).length;
+  const semRespTotal = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status)&&!p.responsavel).length + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&!a.responsavel).length;
+  const itensCriticos = vencidos + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&diasRestantes(a.data)===0).length + semRespTotal;
+
+  const cards = [
+    {n:vencidos, l:'Prazos vencidos', c:'vermelho', go:'prazos'},
+    {n:hoje, l:'Vencem hoje', c:'vermelho', go:'prazos'},
+    {n:em3, l:'Próximos 3 dias', c:'laranja', go:'prazos'},
+    {n:em7, l:'Próximos 7 dias', c:'amarelo', go:'prazos'},
+    {n:pubSemTratamento, l:'Publicações sem tratamento', c:'azul', go:'publicacoes'},
+    {n:tarefasSemResp, l:'Tarefas sem responsável', c:'ink', go:'tarefas'},
+    {n:audiProximas, l:'Audiências próximas (7d)', c:'ink', go:'audiencias'},
+    {n:itensCriticos, l:'Itens críticos', c:'vermelho', go:'alertas'},
+  ];
+
+  let html = `<div class="grid-cards">${cards.map(c=>`<div class="card c-${c.c}" data-go="${c.go}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('')}</div>`;
+
+  const items = [];
+  activePrazos.filter(p=>!PRAZO_DONE.includes(p.status)).forEach(p=>{
+    const dr = diasRestantes(p.prazoFatal);
+    items.push({tipo:'Prazo', dr, cliente:p.cliente, processo:p.processo, tribunal:p.tribunal, desc:p.tipoPrazo, color:riskColor(dr,false), done:false});
+  });
+  activeAudi.filter(a=>!AUDI_DONE.includes(a.status)).forEach(a=>{
+    const dr = diasRestantes(a.data);
+    items.push({tipo:'Audiência', dr, cliente:a.cliente, processo:a.processo, tribunal:a.estado, desc:`${a.tipo} · ${a.horario}`, color:riskColor(dr,false), done:false, dataRaw:a.data});
+  });
+  items.sort((a,b)=> (a.dr??9999) - (b.dr??9999));
+  const top = items.slice(0,10);
+
+  html += `<div class="section-title">Fila de prioridade crítica <span class="cnt">${items.length} itens ativos</span></div>`;
+  if(top.length===0){ html += `<div class="empty">Nenhum prazo ou audiência pendente. Tudo em dia.</div>`; }
+  else{
+    html += `<div class="plist">${top.map(it=>`
+      <div class="prow b-${it.color}">
+        ${ringHTML(it.dr, it.done)}
+        <div class="info">
+          <div class="top-line"><span class="cliente">${it.cliente}</span><span class="tribunal-tag">${it.tribunal}</span><span style="color:var(--ink-soft); font-weight:600; font-size:11px;">${it.tipo}</span></div>
+          <div class="proc">${it.processo}</div>
+          <div class="desc">${it.desc}</div>
+        </div>
+        <div style="text-align:right; font-size:11.5px; color:var(--ink-soft); white-space:nowrap;">${it.tipo==='Prazo'? fmtDate(items.find(x=>x===it).dataRaw||null) : ''}</div>
+      </div>`).join('')}</div>`;
+  }
+  document.getElementById('content').innerHTML = html;
+  document.querySelectorAll('.card[data-go]').forEach(c=>c.onclick=()=>{currentView=c.dataset.go; renderAll();});
+}
+
+/* ===================== PUBLICAÇÕES / RECORTES ===================== */
+let pubFilters = {status:'', cliente:'', showArchived:false, sort:'dataPublicacao', dir:-1};
+
+function renderPublicacoes(){
+  let rows = DB.publicacoes.slice();
+  if(!pubFilters.showArchived) rows = rows.filter(p=>!PUB_ARCHIVED.includes(p.status));
+  if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
+  if(pubFilters.cliente) rows = rows.filter(p=>p.cliente.toLowerCase().includes(pubFilters.cliente.toLowerCase())||p.processo.toLowerCase().includes(pubFilters.cliente.toLowerCase()));
+  rows.sort((a,b)=>{ let va=new Date(a[pubFilters.sort]||0), vb=new Date(b[pubFilters.sort]||0); if(va<vb) return -1*pubFilters.dir; if(va>vb) return 1*pubFilters.dir; return 0; });
+
+  let html = `<div class="filters">
+    <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${pubFilters.cliente}">
+    <select id="fStatus"><option value="">Todos os status</option>${PUB_STATUSES.map(s=>`<option ${pubFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
+    <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
+    <button class="btn primary small" id="addPubBtn">+ Novo recorte</button>
+  </div>`;
+  html += `<div class="table-wrap"><table><thead><tr>
+    <th data-s="dataPublicacao">Publicação</th><th>Cliente</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
+  </tr></thead><tbody>`;
+  if(rows.length===0){ html += `<tr><td colspan="10"><div class="empty">Nenhum recorte encontrado. Assim que o ControlJus liberar API, exportação ou acesso autorizado, os recortes chegarão aqui automaticamente.</div></td></tr>`; }
+  rows.forEach(p=>{
+    const archived = PUB_ARCHIVED.includes(p.status);
+    const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
+    html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
+      <td>${fmtDate(p.dataPublicacao)}</td>
+      <td class="cliente">${p.cliente}</td>
+      <td class="proc">${p.processo}</td>
+      <td><span class="tribunal-tag">${p.tribunal}</span></td>
+      <td>${p.tipoPublicacao}</td>
+      <td class="texto">${p.textoRecorte}</td>
+      <td>${p.prazoIdentificado || '—'}</td>
+      <td><select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td>${p.responsavel || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
+      <td class="row-actions">
+        ${canGerarPrazo?`<button class="btn small azul" data-act="genprazo">Gerar prazo →</button>`:''}
+        <button class="btn small ghost" data-act="edit">✎</button>
+        ${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}
+      </td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  document.getElementById('content').innerHTML = html;
+
+  document.getElementById('fCliente').oninput = e=>{pubFilters.cliente=e.target.value; renderPublicacoes();};
+  document.getElementById('fStatus').onchange = e=>{pubFilters.status=e.target.value; renderPublicacoes();};
+  document.getElementById('fArch').onchange = e=>{pubFilters.showArchived=e.target.checked; renderPublicacoes();};
+  document.getElementById('addPubBtn').onclick = ()=>openPubModal(null);
+  document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(pubFilters.sort===s) pubFilters.dir*=-1; else {pubFilters.sort=s; pubFilters.dir=-1;} renderPublicacoes(); });
+  document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
+    const id=tr.dataset.id; const p = DB.publicacoes.find(x=>x.id===id);
+    const stSel = tr.querySelector('[data-act="status"]');
+    if(stSel) stSel.onchange = async e=>{ const old=p.status; p.status=e.target.value; logHist(`Publicação de ${p.cliente} (${p.processo}) alterada: ${old} → ${p.status}`); await saveDB(); renderAll(); toast('Status atualizado'); };
+    const genBtn = tr.querySelector('[data-act="genprazo"]');
+    if(genBtn) genBtn.onclick = ()=>openPrazoModal(null, p);
+    tr.querySelector('[data-act="edit"]').onclick = ()=>openPubModal(p);
+    const archBtn = tr.querySelector('[data-act="archive"]');
+    if(archBtn) archBtn.onclick = async ()=>{ p.status='Arquivado'; logHist(`Publicação de ${p.cliente} (${p.processo}) arquivada.`); await saveDB(); renderAll(); toast('Recorte arquivado'); };
+  });
+}
+
+function openPubModal(p){
+  const isNew = !p;
+  const d = p || {id:uid(), refId:'PUB-'+uid(), dataPublicacao:'', processo:'', cliente:'', tribunal:'', tipoPublicacao:'', textoRecorte:'', prazoIdentificado:'', prazoFatal:'', status:'Novo', responsavel:'', observacoes:'', linkOrigem:'https://app.controljus.com.br/publicacoes/recortes/arquivadas', prazoGeradoId:''};
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="modal-head"><h3>${isNew?'Novo recorte / publicação':'Editar recorte'}</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="field-row">
+        <div class="field"><label>Data da publicação</label><input type="date" id="mData" value="${d.dataPublicacao}"></div>
+        <div class="field"><label>Tribunal</label><input id="mTribunal" value="${d.tribunal}"></div>
+      </div>
+      <div class="field"><label>Cliente / parte</label><input id="mCliente" value="${d.cliente}"></div>
+      <div class="field-row">
+        <div class="field"><label>Nº do processo</label><input id="mProcesso" class="mono" value="${d.processo}"></div>
+        <div class="field"><label>Tipo de publicação</label><input id="mTipo" value="${d.tipoPublicacao}" placeholder="Decisão, despacho, sentença..."></div>
+      </div>
+      <div class="field"><label>Texto do recorte</label><textarea id="mTexto">${d.textoRecorte}</textarea></div>
+      <div class="field-row">
+        <div class="field"><label>Prazo identificado (texto livre)</label><input id="mPrazoId" value="${d.prazoIdentificado}"></div>
+        <div class="field"><label>Prazo fatal (se aplicável)</label><input type="date" id="mFatal" value="${d.prazoFatal}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Status de tratamento</label><select id="mStatus">${PUB_STATUSES.map(s=>`<option ${d.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Responsável</label><input id="mResp" value="${d.responsavel}"></div>
+      </div>
+      <div class="field"><label>Link para origem no ControlJus</label><input id="mLink" value="${d.linkOrigem}"></div>
+      <div class="field"><label>Observações</label><textarea id="mObs">${d.observacoes}</textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar recorte</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCancel').onclick = hideModal;
+  document.getElementById('mSave').onclick = async ()=>{
+    const cliente = document.getElementById('mCliente').value.trim();
+    const processo = document.getElementById('mProcesso').value.trim();
+    if(!cliente || !processo){ toast('Preencha cliente e processo'); return; }
+    const updated = {
+      ...d, cliente, processo,
+      dataPublicacao:document.getElementById('mData').value,
+      tribunal:document.getElementById('mTribunal').value.trim(),
+      tipoPublicacao:document.getElementById('mTipo').value.trim(),
+      textoRecorte:document.getElementById('mTexto').value.trim(),
+      prazoIdentificado:document.getElementById('mPrazoId').value.trim(),
+      prazoFatal:document.getElementById('mFatal').value,
+      status:document.getElementById('mStatus').value,
+      responsavel:document.getElementById('mResp').value.trim(),
+      linkOrigem:document.getElementById('mLink').value.trim(),
+      observacoes:document.getElementById('mObs').value.trim(),
+    };
+    if(isNew){ DB.publicacoes.push(updated); logHist(`Novo recorte cadastrado: ${cliente} (${processo})`); }
+    else{ const idx=DB.publicacoes.findIndex(x=>x.id===d.id); DB.publicacoes[idx]=updated; logHist(`Recorte de ${cliente} editado.`); }
+    await saveDB(); hideModal(); renderAll(); toast('Recorte salvo');
+  };
+}
+
+/* ===================== PRAZOS ===================== */
+let prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, sort:'prazoFatal', dir:1};
+
+function renderPrazos(){
+  const respSet = [...new Set(DB.prazos.map(p=>p.responsavel).filter(Boolean))];
+  let rows = DB.prazos.slice();
+  if(!prazoFilters.showArchived) rows = rows.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
+  if(prazoFilters.status) rows = rows.filter(p=>p.status===prazoFilters.status);
+  if(prazoFilters.responsavel) rows = rows.filter(p=>p.responsavel===prazoFilters.responsavel);
+  if(prazoFilters.cliente) rows = rows.filter(p=>p.cliente.toLowerCase().includes(prazoFilters.cliente.toLowerCase()) || p.processo.toLowerCase().includes(prazoFilters.cliente.toLowerCase()));
+  rows.sort((a,b)=>{ let va=a[prazoFilters.sort], vb=b[prazoFilters.sort]; if(prazoFilters.sort==='prazoFatal'||prazoFilters.sort==='dataPublicacao'){va=new Date(va);vb=new Date(vb);} if(va<vb) return -1*prazoFilters.dir; if(va>vb) return 1*prazoFilters.dir; return 0; });
+
+  let html = `<div class="filters">
+    <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${prazoFilters.cliente}">
+    <select id="fStatus"><option value="">Todos os status</option>${PRAZO_STATUSES.map(s=>`<option ${prazoFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
+    <select id="fResp"><option value="">Todos os responsáveis</option>${respSet.map(r=>`<option ${prazoFilters.responsavel===r?'selected':''}>${r}</option>`).join('')}</select>
+    <label class="chk"><input type="checkbox" id="fArch" ${prazoFilters.showArchived?'checked':''}> Mostrar arquivados</label>
+    <button class="btn primary small" id="addPrazoBtn">+ Novo prazo</button>
+  </div>`;
+
+  html += `<div class="table-wrap"><table><thead><tr>
+    <th data-s="cliente">Cliente</th><th data-s="processo">Processo</th><th>Tribunal</th><th>Origem</th>
+    <th data-s="dataPublicacao">Publicação</th><th>Tipo de prazo</th><th data-s="prazoFatal">Prazo fatal</th>
+    <th>Restam</th><th>Responsável</th><th>Status</th><th>Prioridade</th><th></th>
+  </tr></thead><tbody>`;
+  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhum prazo encontrado com esses filtros.</div></td></tr>`; }
+  rows.forEach(p=>{
+    const dr = diasRestantes(p.prazoFatal);
+    const done = PRAZO_DONE.includes(p.status);
+    const archived = PRAZO_ARCHIVED.includes(p.status);
+    const color = riskColor(dr,done);
+    html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
+      <td class="cliente">${p.cliente}</td>
+      <td class="proc">${p.processo}</td>
+      <td><span class="tribunal-tag">${p.tribunal}</span></td>
+      <td>${p.origemPublicacaoId?`<span class="pill st-azul"><span class="dot"></span>ControlJus</span>`:'<span style="color:var(--ink-soft); font-size:11px;">manual</span>'}</td>
+      <td>${fmtDate(p.dataPublicacao)}</td>
+      <td>${p.tipoPrazo}</td>
+      <td>${fmtDate(p.prazoFatal)}</td>
+      <td>${pill(done?'Concluído':(dr<0?'Vencido':dr===0?'Hoje':dr+'d'), color)}</td>
+      <td>${p.responsavel || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
+      <td><select class="status-select" data-act="status">${PRAZO_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td><span class="priority-tag priority-${p.prioridade==='Alta'?'alta':p.prioridade==='Baixa'?'baixa':'media'}">${p.prioridade}</span></td>
+      <td class="row-actions">
+        <button class="btn small ghost" data-act="edit">✎</button>
+        ${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}
+      </td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  document.getElementById('content').innerHTML = html;
+
+  document.getElementById('fCliente').oninput = e=>{prazoFilters.cliente=e.target.value; renderPrazos();};
+  document.getElementById('fStatus').onchange = e=>{prazoFilters.status=e.target.value; renderPrazos();};
+  document.getElementById('fResp').onchange = e=>{prazoFilters.responsavel=e.target.value; renderPrazos();};
+  document.getElementById('fArch').onchange = e=>{prazoFilters.showArchived=e.target.checked; renderPrazos();};
+  document.getElementById('addPrazoBtn').onclick = ()=>openPrazoModal(null);
+  document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(prazoFilters.sort===s) prazoFilters.dir*=-1; else {prazoFilters.sort=s; prazoFilters.dir=1;} renderPrazos(); });
+  document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
+    const id = tr.dataset.id; const p = DB.prazos.find(x=>x.id===id);
+    tr.querySelector('[data-act="status"]').onchange = async e=>{
+      const old = p.status; p.status = e.target.value;
+      if(p.status==='Concluído' && old!=='Concluído') p.concluidoEm = new Date().toISOString();
+      logHist(`Prazo de ${p.cliente} (${p.processo}) alterado: ${old} → ${p.status}`);
+      await saveDB(); renderAll(); toast('Status atualizado');
+    };
+    tr.querySelector('[data-act="edit"]').onclick = ()=>openPrazoModal(p);
+    const archBtn = tr.querySelector('[data-act="archive"]');
+    if(archBtn) archBtn.onclick = async ()=>{
+      p.status='Arquivado'; logHist(`Prazo de ${p.cliente} (${p.processo}) arquivado (histórico preservado).`);
+      await saveDB(); renderAll(); toast('Prazo arquivado — nada é excluído');
+    };
+  });
+}
+
+function openPrazoModal(p, fromPub){
+  const isNew = !p;
+  const d = p || {id:uid(), processo:fromPub?fromPub.processo:'', cliente:fromPub?fromPub.cliente:'', tribunal:fromPub?fromPub.tribunal:'', dataPublicacao:fromPub?fromPub.dataPublicacao:'', tipoPrazo:fromPub?fromPub.tipoPublicacao:'', prazoFatal:fromPub?fromPub.prazoFatal:'', origemPublicacaoId:fromPub?fromPub.refId:'', responsavel:'', status:'Novo', prioridade:'Média', observacao:'', link:'', concluidoEm:''};
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="modal-head"><h3>${isNew?'Novo prazo':'Editar prazo'}</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      ${fromPub?`<div style="font-size:12px; background:#E1EAF2; color:var(--azul); padding:8px 10px; border-radius:7px;">Gerado a partir do recorte do ControlJus de ${fmtDate(fromPub.dataPublicacao)}.</div>`:''}
+      <div class="field-row">
+        <div class="field"><label>Cliente</label><input id="mCliente" value="${d.cliente}"></div>
+        <div class="field"><label>Tribunal</label><input id="mTribunal" value="${d.tribunal}"></div>
+      </div>
+      <div class="field"><label>Nº do processo</label><input id="mProcesso" class="mono" value="${d.processo}"></div>
+      <div class="field"><label>Tipo de prazo</label><input id="mPendencia" value="${d.tipoPrazo}"></div>
+      <div class="field-row">
+        <div class="field"><label>Data de publicação</label><input type="date" id="mPub" value="${d.dataPublicacao}"></div>
+        <div class="field"><label>Prazo fatal</label><input type="date" id="mFatal" value="${d.prazoFatal}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Responsável</label><input id="mResp" value="${d.responsavel}" placeholder="Nome do advogado"></div>
+        <div class="field"><label>Prioridade</label><select id="mPrio"><option ${d.prioridade==='Alta'?'selected':''}>Alta</option><option ${d.prioridade==='Média'?'selected':''}>Média</option><option ${d.prioridade==='Baixa'?'selected':''}>Baixa</option></select></div>
+      </div>
+      <div class="field"><label>Status</label><select id="mStatus">${PRAZO_STATUSES.map(s=>`<option ${d.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Link do processo</label><input id="mLink" value="${d.link}" placeholder="https://..."></div>
+      <div class="field"><label>Observações</label><textarea id="mObs">${d.observacao}</textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar prazo</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCancel').onclick = hideModal;
+  document.getElementById('mSave').onclick = async ()=>{
+    const cliente = document.getElementById('mCliente').value.trim();
+    const processo = document.getElementById('mProcesso').value.trim();
+    if(!cliente || !processo){ toast('Preencha cliente e processo'); return; }
+    const fatal = document.getElementById('mFatal').value;
+    if(!fatal){ toast('Prazo fatal é obrigatório'); return; }
+    const updated = {
+      ...d, cliente, processo,
+      tribunal:document.getElementById('mTribunal').value.trim(),
+      tipoPrazo:document.getElementById('mPendencia').value.trim(),
+      dataPublicacao:document.getElementById('mPub').value,
+      prazoFatal: fatal,
+      responsavel:document.getElementById('mResp').value.trim(),
+      prioridade:document.getElementById('mPrio').value,
+      status:document.getElementById('mStatus').value,
+      link:document.getElementById('mLink').value.trim(),
+      observacao:document.getElementById('mObs').value.trim(),
+    };
+    if(isNew){
+      DB.prazos.push(updated);
+      logHist(`Novo prazo cadastrado: ${cliente} (${processo})${fromPub?' — origem: recorte ControlJus':''}`);
+      if(fromPub){ fromPub.prazoGeradoId = updated.id; logHist(`Recorte de ${fromPub.cliente} vinculado ao novo prazo.`); }
+    } else { const idx=DB.prazos.findIndex(x=>x.id===d.id); DB.prazos[idx]=updated; logHist(`Prazo de ${cliente} (${processo}) editado.`); }
+    await saveDB(); hideModal(); renderAll(); toast('Prazo salvo');
+  };
+}
+
+/* ===================== AUDIÊNCIAS ===================== */
+let audiFilters = {status:'', cliente:'', showArchived:false, sort:'data', dir:1};
+
+function renderAudiencias(){
+  let rows = DB.audiencias.slice();
+  if(!audiFilters.showArchived) rows = rows.filter(a=>!AUDI_ARCHIVED.includes(a.status));
+  if(audiFilters.status) rows = rows.filter(a=>a.status===audiFilters.status);
+  if(audiFilters.cliente) rows = rows.filter(a=>a.cliente.toLowerCase().includes(audiFilters.cliente.toLowerCase()) || a.processo.toLowerCase().includes(audiFilters.cliente.toLowerCase()));
+  rows.sort((a,b)=>{ let va=a[audiFilters.sort], vb=b[audiFilters.sort]; if(audiFilters.sort==='data'){va=new Date(a.data+'T'+(a.horario||'00:00')); vb=new Date(b.data+'T'+(b.horario||'00:00'));} if(va<vb) return -1*audiFilters.dir; if(va>vb) return 1*audiFilters.dir; return 0; });
+
+  let html = `<div class="filters">
+    <input type="text" id="fAudCliente" placeholder="Buscar cliente ou processo..." value="${audiFilters.cliente}">
+    <select id="fAudStatus"><option value="">Todos os status</option>${AUDI_STATUSES.map(s=>`<option ${audiFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
+    <label class="chk"><input type="checkbox" id="fArch" ${audiFilters.showArchived?'checked':''}> Mostrar arquivados</label>
+    <button class="btn primary small" id="addAudiBtn">+ Nova audiência</button>
+  </div>`;
+  html += `<div class="table-wrap"><table><thead><tr>
+    <th data-s="data">Data</th><th>Horário</th><th>Cliente</th><th>Processo</th><th>Estado</th>
+    <th>Tipo</th><th>Modalidade</th><th>Link</th><th>Status</th><th>Restam</th><th></th>
+  </tr></thead><tbody>`;
+  if(rows.length===0){ html += `<tr><td colspan="11"><div class="empty">Nenhuma audiência encontrada com esses filtros.</div></td></tr>`; }
+  rows.forEach(a=>{
+    const dr = diasRestantes(a.data);
+    const done = AUDI_DONE.includes(a.status);
+    const archived = AUDI_ARCHIVED.includes(a.status);
+    const color = riskColor(dr, done);
+    html += `<tr data-id="${a.id}" class="${archived?'archived':''}">
+      <td>${fmtDate(a.data)}</td>
+      <td class="mono">${a.horario||'—'}</td>
+      <td class="cliente">${a.cliente}</td>
+      <td class="proc">${a.processo}</td>
+      <td><span class="tribunal-tag">${a.estado}</span></td>
+      <td>${a.tipo}</td>
+      <td>${a.modalidade||'—'}</td>
+      <td>${a.link?`<a class="link-audi" href="${a.link.split(' ')[0]}" target="_blank">acessar ↗</a>`:'—'}</td>
+      <td><select class="status-select" data-act="status">${AUDI_STATUSES.map(s=>`<option ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td>${pill(done?'—':(dr<0?'Passou':dr===0?'Hoje':dr+'d'), color)}</td>
+      <td class="row-actions"><button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  document.getElementById('content').innerHTML = html;
+
+  document.getElementById('fAudCliente').oninput = e=>{audiFilters.cliente=e.target.value; renderAudiencias();};
+  document.getElementById('fAudStatus').onchange = e=>{audiFilters.status=e.target.value; renderAudiencias();};
+  document.getElementById('fArch').onchange = e=>{audiFilters.showArchived=e.target.checked; renderAudiencias();};
+  document.getElementById('addAudiBtn').onclick = ()=>openAudiModal(null);
+  document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(audiFilters.sort===s) audiFilters.dir*=-1; else {audiFilters.sort=s; audiFilters.dir=1;} renderAudiencias(); });
+  document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
+    const id=tr.dataset.id; const a = DB.audiencias.find(x=>x.id===id);
+    tr.querySelector('[data-act="status"]').onchange = async e=>{
+      const old=a.status; a.status=e.target.value;
+      if(a.status==='Realizada' && old!=='Realizada') a.concluidoEm = new Date().toISOString();
+      logHist(`Audiência de ${a.cliente} (${a.processo}) alterada: ${old} → ${a.status}`);
+      await saveDB(); renderAll(); toast('Status atualizado');
+    };
+    tr.querySelector('[data-act="edit"]').onclick = ()=>openAudiModal(a);
+    const archBtn = tr.querySelector('[data-act="archive"]');
+    if(archBtn) archBtn.onclick = async ()=>{ a.status='Arquivado'; logHist(`Audiência de ${a.cliente} (${a.processo}) arquivada.`); await saveDB(); renderAll(); toast('Audiência arquivada'); };
+  });
+}
+
+function openAudiModal(a){
+  const isNew = !a;
+  const d = a || {id:uid(), data:'', horario:'', cliente:'', processo:'', estado:'', tipo:'', modalidade:'Virtual', link:'', responsavel:'', preposto:'', status:'Agendada', observacoes:''};
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="modal-head"><h3>${isNew?'Nova audiência':'Editar audiência'}</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="field-row"><div class="field"><label>Data</label><input type="date" id="mData" value="${d.data}"></div><div class="field"><label>Horário</label><input type="time" id="mHora" value="${d.horario}"></div></div>
+      <div class="field"><label>Cliente</label><input id="mCliente" value="${d.cliente}"></div>
+      <div class="field-row"><div class="field"><label>Nº do processo</label><input id="mProcesso" class="mono" value="${d.processo}"></div><div class="field"><label>Estado/Tribunal</label><input id="mEstado" value="${d.estado}"></div></div>
+      <div class="field"><label>Tipo de audiência</label><input id="mTipo" value="${d.tipo}"></div>
+      <div class="field-row">
+        <div class="field"><label>Modalidade</label><select id="mModal"><option ${d.modalidade==='Presencial'?'selected':''}>Presencial</option><option ${d.modalidade==='Virtual'?'selected':''}>Virtual</option><option ${d.modalidade==='Semipresencial'?'selected':''}>Semipresencial</option></select></div>
+        <div class="field"><label>Responsável</label><input id="mResp" value="${d.responsavel}"></div>
+      </div>
+      <div class="field"><label>Link da audiência</label><input id="mLink" value="${d.link}" placeholder="https://..."></div>
+      <div class="field"><label>Preposto / testemunha</label><input id="mPreposto" value="${d.preposto}"></div>
+      <div class="field"><label>Status</label><select id="mStatus">${AUDI_STATUSES.map(s=>`<option ${d.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Observações</label><textarea id="mObs">${d.observacoes}</textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar audiência</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCancel').onclick = hideModal;
+  document.getElementById('mSave').onclick = async ()=>{
+    const cliente = document.getElementById('mCliente').value.trim();
+    const data = document.getElementById('mData').value;
+    if(!cliente || !data){ toast('Preencha cliente e data'); return; }
+    const updated = {
+      ...d, cliente, data,
+      horario:document.getElementById('mHora').value,
+      processo:document.getElementById('mProcesso').value.trim(),
+      estado:document.getElementById('mEstado').value.trim(),
+      tipo:document.getElementById('mTipo').value.trim(),
+      modalidade:document.getElementById('mModal').value,
+      link:document.getElementById('mLink').value.trim(),
+      responsavel:document.getElementById('mResp').value.trim(),
+      preposto:document.getElementById('mPreposto').value.trim(),
+      status:document.getElementById('mStatus').value,
+      observacoes:document.getElementById('mObs').value.trim(),
+    };
+    if(isNew){ DB.audiencias.push(updated); logHist(`Nova audiência cadastrada: ${cliente} (${updated.processo})`); }
+    else{ const idx=DB.audiencias.findIndex(x=>x.id===d.id); DB.audiencias[idx]=updated; logHist(`Audiência de ${cliente} editada.`); }
+    await saveDB(); hideModal(); renderAll(); toast('Audiência salva');
+  };
+}
+
+/* ===================== TAREFAS ===================== */
+function renderTarefas(){
+  let html = `<div class="filters"><label class="chk" style="margin-left:auto;"><input type="checkbox" id="fArchT"> Mostrar arquivadas</label><button class="btn primary small" id="addTaskBtn">+ Nova tarefa</button></div>`;
+  html += `<div class="table-wrap"><table><thead><tr><th>Título</th><th>Processo / Cliente</th><th>Responsável</th><th>Data limite</th><th>Prioridade</th><th>Status</th><th></th></tr></thead><tbody>`;
+  const showArch = document.getElementById('fArchT')?.checked;
+  let rows = DB.tarefas.slice();
+  if(!showArch) rows = rows.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
+  rows.sort((a,b)=> new Date(a.dataLimite||'2999-01-01') - new Date(b.dataLimite||'2999-01-01'));
+  if(rows.length===0){ html += `<tr><td colspan="7"><div class="empty">Nenhuma tarefa cadastrada. Crie tarefas vinculadas a prazos, audiências ou publicações.</div></td></tr>`; }
+  rows.forEach(t=>{
+    const dr = t.dataLimite ? diasRestantes(t.dataLimite) : null;
+    const done = TAREFA_DONE.includes(t.status);
+    const archived = TAREFA_ARCHIVED.includes(t.status);
+    const color = riskColor(dr, done);
+    html += `<tr data-id="${t.id}" class="${archived?'archived':''}">
+      <td class="cliente">${t.titulo}</td>
+      <td><div class="proc">${t.processo||'—'}</div><div style="font-size:11px; color:var(--ink-soft);">${t.cliente||''}</div></td>
+      <td>${t.responsavel||'<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
+      <td>${t.dataLimite?fmtDate(t.dataLimite):'—'}</td>
+      <td><span class="priority-tag priority-${t.prioridade==='Alta'?'alta':t.prioridade==='Baixa'?'baixa':'media'}">${t.prioridade}</span></td>
+      <td><select class="status-select" data-act="status">${TAREFA_STATUSES.map(s=>`<option ${t.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+      <td class="row-actions"><button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  document.getElementById('content').innerHTML = html;
+  document.getElementById('addTaskBtn').onclick = ()=>openTaskModal(null);
+  const fArchT = document.getElementById('fArchT'); if(fArchT) fArchT.onchange = renderTarefas;
+  document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
+    const id=tr.dataset.id; const t = DB.tarefas.find(x=>x.id===id);
+    tr.querySelector('[data-act="status"]').onchange = async e=>{
+      const old=t.status; t.status = e.target.value;
+      if(t.status==='Concluída' && old!=='Concluída') t.concluidoEm = new Date().toISOString();
+      logHist(`Tarefa "${t.titulo}" alterada: ${old} → ${t.status}`);
+      await saveDB(); renderAll(); toast('Status atualizado');
+    };
+    tr.querySelector('[data-act="edit"]').onclick = ()=>openTaskModal(t);
+    const archBtn = tr.querySelector('[data-act="archive"]');
+    if(archBtn) archBtn.onclick = async ()=>{ t.status='Arquivado'; logHist(`Tarefa "${t.titulo}" arquivada.`); await saveDB(); renderAll(); toast('Tarefa arquivada'); };
+  });
+}
+
+function openTaskModal(t){
+  const isNew = !t;
+  const d = t || {id:uid(), titulo:'', processo:'', cliente:'', responsavel:'', dataLimite:'', status:'Aberta', prioridade:'Média', observacao:''};
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="modal-head"><h3>${isNew?'Nova tarefa':'Editar tarefa'}</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Título da tarefa</label><input id="mTitulo" value="${d.titulo}" placeholder="Ex.: Protocolar contrarrazões"></div>
+      <div class="field-row"><div class="field"><label>Processo vinculado</label><input id="mProcesso" class="mono" value="${d.processo}"></div><div class="field"><label>Cliente</label><input id="mCliente" value="${d.cliente}"></div></div>
+      <div class="field-row"><div class="field"><label>Responsável</label><input id="mResp" value="${d.responsavel}"></div><div class="field"><label>Data limite</label><input type="date" id="mData" value="${d.dataLimite}"></div></div>
+      <div class="field-row">
+        <div class="field"><label>Prioridade</label><select id="mPrio"><option ${d.prioridade==='Alta'?'selected':''}>Alta</option><option ${d.prioridade==='Média'?'selected':''}>Média</option><option ${d.prioridade==='Baixa'?'selected':''}>Baixa</option></select></div>
+        <div class="field"><label>Status</label><select id="mStatus">${TAREFA_STATUSES.map(s=>`<option ${d.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Observações</label><textarea id="mObs">${d.observacao}</textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar tarefa</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCancel').onclick = hideModal;
+  document.getElementById('mSave').onclick = async ()=>{
+    const titulo = document.getElementById('mTitulo').value.trim();
+    if(!titulo){ toast('Dê um título à tarefa'); return; }
+    const updated = {
+      ...d, titulo,
+      processo:document.getElementById('mProcesso').value.trim(),
+      cliente:document.getElementById('mCliente').value.trim(),
+      responsavel:document.getElementById('mResp').value.trim(),
+      dataLimite:document.getElementById('mData').value,
+      prioridade:document.getElementById('mPrio').value,
+      status:document.getElementById('mStatus').value,
+      observacao:document.getElementById('mObs').value.trim(),
+    };
+    if(isNew){ DB.tarefas.push(updated); logHist(`Nova tarefa criada: "${titulo}"`); }
+    else{ const idx=DB.tarefas.findIndex(x=>x.id===d.id); DB.tarefas[idx]=updated; logHist(`Tarefa "${titulo}" editada.`); }
+    await saveDB(); hideModal(); renderAll(); toast('Tarefa salva');
+  };
+}
+
+/* ===================== ALERTAS ===================== */
+function renderAlertas(){
+  const activePrazos = DB.prazos.filter(p=>!PRAZO_DONE.includes(p.status));
+  const activeAudi = DB.audiencias.filter(a=>!AUDI_DONE.includes(a.status));
+  const activePubs = DB.publicacoes.filter(p=>!PUB_ARCHIVED.includes(p.status));
+
+  const groups = [
+    {label:'Prazos vencidos', color:'vermelho', items: activePrazos.filter(p=>diasRestantes(p.prazoFatal)<0), type:'prazo'},
+    {label:'Prazos que vencem hoje', color:'vermelho', items: activePrazos.filter(p=>diasRestantes(p.prazoFatal)===0), type:'prazo'},
+    {label:'Prazos próximos (até 7 dias)', color:'laranja', items: activePrazos.filter(p=>{const d=diasRestantes(p.prazoFatal); return d>0&&d<=7;}), type:'prazo'},
+    {label:'Publicações sem análise', color:'azul', items: activePubs.filter(p=>PUB_UNTREATED.includes(p.status)), type:'pub'},
+    {label:'Audiências de hoje', color:'vermelho', items: activeAudi.filter(a=>diasRestantes(a.data)===0), type:'audi'},
+    {label:'Audiências amanhã', color:'laranja', items: activeAudi.filter(a=>diasRestantes(a.data)===1), type:'audi'},
+    {label:'Itens sem responsável', color:'cinza', items: [...activePrazos.filter(p=>!p.responsavel), ...activeAudi.filter(a=>!a.responsavel)], type:'mixed'},
+  ];
+  const colorHex = {vermelho:'var(--vermelho)', laranja:'var(--laranja)', amarelo:'var(--amarelo)', verde:'var(--verde)', cinza:'var(--cinza)', azul:'var(--azul)'};
+  let html = '';
+  groups.forEach(g=>{
+    html += `<div class="alert-group"><div class="alert-head"><span class="swatch" style="background:${colorHex[g.color]}"></span><h4>${g.label}</h4><span class="cnt" style="font-family:'IBM Plex Mono'; font-size:11px; color:var(--ink-soft); background:var(--paper-2); padding:2px 8px; border-radius:20px;">${g.items.length}</span></div>`;
+    if(g.items.length===0){ html += `<div class="empty">Nenhum item nesta categoria.</div>`; }
+    else{
+      html += `<div class="plist">${g.items.map(it=>{
+        const isAudi = it.hasOwnProperty('data') && it.hasOwnProperty('tipo') && it.hasOwnProperty('horario');
+        const isPub = it.hasOwnProperty('textoRecorte');
+        const dr = isAudi ? diasRestantes(it.data) : diasRestantes(it.prazoFatal||it.dataPublicacao);
+        return `<div class="prow b-${g.color}">
+          ${ringHTML(dr, false)}
+          <div class="info">
+            <div class="top-line"><span class="cliente">${it.cliente}</span><span class="tribunal-tag">${isAudi?it.estado:it.tribunal}</span></div>
+            <div class="proc">${it.processo}</div>
+            <div class="desc">${isPub?it.textoRecorte:(isAudi?it.tipo:it.tipoPrazo)}</div>
+          </div>
+          <div style="text-align:right; font-size:11.5px; color:var(--ink-soft); white-space:nowrap;">${fmtDate(isAudi?it.data:(it.prazoFatal||it.dataPublicacao))}</div>
+        </div>`;
+      }).join('')}</div>`;
+    }
+    html += `</div>`;
+  });
+  document.getElementById('content').innerHTML = html;
+}
+
+/* ===================== HISTÓRICO ===================== */
+function renderHistorico(){
+  let html = `<div class="table-wrap" style="padding:8px 18px;">`;
+  if(DB.historico.length===0){ html += `<div class="empty">Sem alterações registradas ainda.</div>`; }
+  else{ html += DB.historico.map(h=>`<div class="hist-item"><span class="t">${new Date(h.ts).toLocaleString('pt-BR')}</span><span>${h.texto}</span></div>`).join(''); }
+  html += `</div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+/* ===================== INTEGRAÇÃO / ROADMAP ===================== */
+function renderIntegracao(){
+  const cl = DB.checklist;
+  const checklistItems = [
+    {key:'exportBtn', label:'Existe botão "Exportar" na tela de recortes arquivados (Excel/CSV)?'},
+    {key:'tableCopy', label:'A tabela de recortes permite selecionar/copiar os dados?'},
+    {key:'apiEndpoints', label:'Há chamadas de API visíveis no navegador (DevTools → Network) ao carregar a tela?'},
+    {key:'webserviceContract', label:'O escritório já tem ou pode contratar um webservice/API oficial do ControlJus?'},
+  ];
+  let html = `
+    <div class="roadmap-hero">
+      <div class="eyebrow">Frase-chave do projeto</div>
+      <div class="frase">O <b>ControlJus</b> informa; o <b>LexFlow</b> cobra, organiza e evita perda de prazo. Este painel não substitui o ControlJus — ele é a camada de execução em cima dele.</div>
+    </div>
+
+    <div class="section-title">Roteiro de integração</div>
+    <div class="steps">
+      <div class="step done"><div class="step-num">1</div><div><h4>Protótipo <span class="tag">concluído</span></h4><p>Dados mockados a partir dos seus arquivos (PRAZOS_IGOR.xlsx e AUDIÊNCIAS_IGOR.pdf), com dashboard, prazos, audiências, tarefas, publicações e alertas — já funcionando e salvando dados neste navegador.</p></div></div>
+      <div class="step wip"><div class="step-num">2</div><div><h4>Testar o ControlJus logado <span class="tag">em andamento</span></h4><p>Entrar em <span class="mono">app.controljus.com.br/publicacoes/recortes/arquivadas</span> autenticado e verificar: botão de exportação, se a tabela permite copiar, se existem endpoints de API visíveis no navegador, e se há webservice contratado ou liberável. Use o checklist abaixo para registrar o que encontrar.</p></div></div>
+      <div class="step todo"><div class="step-num">3</div><div><h4>Conectar de verdade <span class="tag">planejado</span></h4><p>Ligar o LexFlow ao ControlJus pelo caminho que a etapa 2 revelar: API oficial, exportação CSV/Excel programada, automação autorizada, ou uma planilha intermediária no Google Sheets alimentada manualmente enquanto isso.</p></div></div>
+    </div>
+
+    <div class="section-title">Dois caminhos possíveis</div>
+    <div class="path-cards">
+      <div class="path-card"><div class="path-tag">Caminho 1 · Ideal</div><h4>Pedir acesso à API/webservice</h4><p>Falar diretamente com o ControlJus sobre documentação de API ou webservice de publicações. É o caminho mais robusto e sustentável a longo prazo, com dados chegando automaticamente e sem risco de quebra por mudança na tela.</p></div>
+      <div class="path-card"><div class="path-tag">Caminho 2 · MVP rápido</div><h4>Login autorizado + rotina manual/semiautomática</h4><p>Entrar com login autorizado, exportar ou copiar os dados se a tela permitir, e alimentar o LexFlow por uma rotina intermediária enquanto o Caminho 1 não se confirma. Mais rápido de validar, exige mais disciplina operacional.</p></div>
+    </div>
+
+    <div class="section-title">Checklist de teste no ControlJus <span class="cnt">marque conforme for verificando, logado</span></div>
+    <div class="table-wrap" style="padding:6px 18px;">
+      <div class="checklist">
+        ${checklistItems.map(c=>`<label class="check-item ${cl[c.key]?'checked':''}"><input type="checkbox" data-k="${c.key}" ${cl[c.key]?'checked':''}><span>${c.label}</span></label>`).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+  document.querySelectorAll('.check-item input').forEach(cb=>{
+    cb.onchange = async e=>{
+      DB.checklist[e.target.dataset.k] = e.target.checked;
+      logHist(`Checklist de integração ControlJus atualizado: "${checklistItems.find(c=>c.key===e.target.dataset.k).label}" → ${e.target.checked?'sim':'não'}`);
+      await saveDB(); renderIntegracao(); toast('Checklist salvo');
+    };
+  });
+}
+
+/* ===================== MODAL HELPERS ===================== */
+function showModal(){ document.getElementById('overlay').classList.add('open'); }
+function hideModal(){ document.getElementById('overlay').classList.remove('open'); }
+document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') hideModal(); });
+
+/* ===================== IMPORT / EXPORT ===================== */
+document.getElementById('importBtn').onclick = ()=>{
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="modal-head"><h3>Conectar ao ControlJus</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">A conexão automática com o ControlJus (API, exportação ou automação) ainda não está confirmada — veja a aba <b>Integração ControlJus</b> para o roteiro e o checklist de teste. Por enquanto, os recortes chegam por cadastro manual na aba <b>Publicações</b>, e os dados iniciais já foram carregados a partir dos seus arquivos.</p>
+    </div>
+    <div class="modal-foot"><button class="btn" id="mGo">Ver roteiro de integração</button><button class="btn primary" id="mOk">Entendi</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mOk').onclick = hideModal;
+  document.getElementById('mGo').onclick = ()=>{ hideModal(); currentView='integracao'; renderAll(); };
+};
+
+function toCSV(rows, headers){
+  const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
+  const lines = [headers.map(esc).join(',')];
+  rows.forEach(r=>lines.push(headers.map(h=>esc(r[h])).join(',')));
+  return lines.join('\n');
+}
+document.getElementById('exportBtn').onclick = ()=>{
+  let csv, filename;
+  if(currentView==='audiencias'){ csv = toCSV(DB.audiencias, ['data','horario','cliente','processo','estado','tipo','modalidade','link','responsavel','status','observacoes']); filename='audiencias.csv'; }
+  else if(currentView==='tarefas'){ csv = toCSV(DB.tarefas, ['titulo','processo','cliente','responsavel','dataLimite','prioridade','status','observacao','concluidoEm']); filename='tarefas.csv'; }
+  else if(currentView==='publicacoes'){ csv = toCSV(DB.publicacoes, ['dataPublicacao','cliente','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
+  else { csv = toCSV(DB.prazos, ['processo','cliente','tribunal','origemPublicacaoId','dataPublicacao','tipoPrazo','prazoFatal','responsavel','status','prioridade','observacao','concluidoEm']); filename='prazos.csv'; }
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+  toast('Exportado: '+filename);
+};
+
+/* ===================== ROUTER ===================== */
+const TITLES = {
+  dashboard:['Dashboard Executivo', 'Visão geral de hoje, próximos 7 dias e itens de risco'],
+  publicacoes:['Publicações / Recortes', 'Fonte: ControlJus — recortes que ainda não viraram prazo ou tarefa'],
+  prazos:['Prazos', 'Controle de prazos processuais e pendências'],
+  audiencias:['Audiências', 'Agenda de audiências por cliente, tribunal e modalidade'],
+  tarefas:['Tarefas', 'Itens operacionais vinculados a processos, prazos e publicações'],
+  alertas:['Central de Alertas', 'Tudo que exige atenção imediata, agrupado por urgência'],
+  historico:['Histórico de alterações', 'Registro de tudo que foi criado, editado, concluído ou arquivado'],
+  integracao:['Integração ControlJus', 'Roteiro para conectar de verdade o LexFlow ao ControlJus'],
+};
+function renderAll(){
+  renderNav();
+  const [title, sub] = TITLES[currentView];
+  document.getElementById('pageTitle').textContent = title;
+  document.getElementById('pageSub').textContent = sub;
+  if(currentView==='dashboard') renderDashboard();
+  else if(currentView==='publicacoes') renderPublicacoes();
+  else if(currentView==='prazos') renderPrazos();
+  else if(currentView==='audiencias') renderAudiencias();
+  else if(currentView==='tarefas') renderTarefas();
+  else if(currentView==='alertas') renderAlertas();
+  else if(currentView==='historico') renderHistorico();
+  else if(currentView==='integracao') renderIntegracao();
+  document.getElementById('sidebar').classList.remove('open');
+}
+document.getElementById('menuBtn').onclick = ()=>document.getElementById('sidebar').classList.toggle('open');
+
+/* ===================== INIT ===================== */
+(async function init(){ await loadDB(); renderAll(); })();
+</script>
+</body>
+</html>
