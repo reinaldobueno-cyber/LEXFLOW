@@ -1171,7 +1171,10 @@ async function importControlJusText(text, sourceName){
 }
 
 function defaultControlJusApiUrl(){
-  return localStorage.getItem('lexflow:controljusApiUrl') || (location.protocol.startsWith('http') ? `${location.origin}/api/controljus/publicacoes` : 'http://localhost:8787/api/controljus/publicacoes');
+  const saved = localStorage.getItem('lexflow:controljusApiUrl');
+  if(saved) return saved;
+  if(location.hostname.endsWith('github.io')) return 'http://localhost:8787/api/controljus/publicacoes';
+  return location.protocol.startsWith('http') ? `${location.origin}/api/controljus/publicacoes` : 'http://localhost:8787/api/controljus/publicacoes';
 }
 
 async function syncControlJusDirect(){
@@ -1191,7 +1194,7 @@ async function syncControlJusDirect(){
   }catch(e){
     toast('API ControlJus indisponivel');
     const hint = document.getElementById('cjSyncHint');
-    if(hint) hint.textContent = `Nao consegui sincronizar direto: ${e.message}. Rode o backend privado ou confira a URL da API.`;
+    if(hint) hint.textContent = `Nao consegui sincronizar direto: ${e.message}. Se voce esta no GitHub Pages, rode npm run dev e use http://localhost:8787, ou informe a URL de um backend privado publicado.`;
   }finally{
     if(btn){ btn.disabled = false; btn.textContent = 'Sincronizar agora'; }
   }
@@ -1204,7 +1207,7 @@ document.getElementById('importBtn').onclick = ()=>{
     <div class="modal-body">
       <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">O consumo direto precisa de uma API privada do LexFlow rodando com o .env. O site publicado chama essa API, e a API faz o login no ControlJus sem expor usuario e senha no navegador.</p>
       <div class="field"><label>Endpoint privado da API LexFlow</label><input id="cjApiUrl" value="${defaultControlJusApiUrl()}" placeholder="http://localhost:8787/api/controljus/publicacoes"></div>
-      <p id="cjSyncHint" style="font-size:12px; color:var(--ink-soft); line-height:1.45;">Para testar direto nesta maquina, rode <span class="mono">npm run dev</span> e acesse <span class="mono">http://localhost:8787</span>. No GitHub Pages, informe a URL de um backend privado publicado.</p>
+      <p id="cjSyncHint" style="font-size:12px; color:var(--ink-soft); line-height:1.45;">Para testar direto, rode <span class="mono">npm run dev</span> e acesse <span class="mono">http://localhost:8787</span>. O GitHub Pages sozinho nao executa a API do ControlJus.</p>
       <div class="field"><label>Fallback manual (.json ou .csv)</label><input type="file" id="cjFile" accept=".json,.csv,text/csv,application/json"></div>
       <div class="field"><label>Ou cole JSON/CSV</label><textarea id="cjPaste" placeholder="Opcional, apenas se a API direta nao estiver disponivel"></textarea></div>
     </div>
