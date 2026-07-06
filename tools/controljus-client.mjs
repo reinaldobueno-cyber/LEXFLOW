@@ -44,7 +44,8 @@ function normalizeRecorte(item, sourceUrl){
 }
 
 export async function fetchControlJusPublicacoes(options = {}){
-  const env = options.env || await loadEnv(options.envFile || '.env');
+  const fileEnv = await loadEnv(options.envFile || '.env');
+  const env = options.env || {...fileEnv, ...process.env};
   const cfg = {
     url: env.CONTROLJUS_URL || 'https://app.controljus.com.br/publicacoes/recortes/arquivadas',
     user: env.CONTROLJUS_USER,
