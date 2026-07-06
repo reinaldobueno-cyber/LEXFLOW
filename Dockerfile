@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/playwright:v1.61.1-noble
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev=false
+RUN npm ci
 
 COPY . .
 
