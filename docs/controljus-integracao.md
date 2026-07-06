@@ -10,7 +10,44 @@ Nao coloque usuario e senha do ControlJus no `index.html`, no GitHub Pages ou em
 
 O LexFlow publicado e um frontend estatico. Ele deve receber os recortes por importacao de JSON/CSV ou por uma API propria no futuro. A coleta autenticada deve rodar localmente ou em backend privado.
 
-## Fluxo atual
+## Fluxo direto com API privada
+
+O consumo direto nao pode acontecer apenas no GitHub Pages, porque o GitHub Pages nao executa backend e nao pode guardar credenciais.
+
+Para testar direto nesta maquina:
+
+1. Crie um arquivo `.env` a partir de `.env.example`.
+2. Preencha `CONTROLJUS_USER` e `CONTROLJUS_PASSWORD` no `.env`.
+3. Instale as dependencias:
+
+```bash
+npm install
+npx playwright install chromium
+```
+
+4. Suba o LexFlow com API:
+
+```bash
+npm run dev
+```
+
+5. Acesse:
+
+```text
+http://localhost:8787
+```
+
+6. Clique em `Conectar ControlJus` e depois em `Sincronizar agora`.
+
+A rota usada pelo painel e:
+
+```text
+http://localhost:8787/api/controljus/publicacoes
+```
+
+Em producao, essa mesma API deve ser publicada em um backend privado, por exemplo Render, Railway, VPS, servidor do escritorio ou outro ambiente com variaveis de ambiente seguras.
+
+## Fluxo por arquivo, fallback
 
 1. Crie um arquivo `.env` a partir de `.env.example`.
 2. Preencha `CONTROLJUS_USER` e `CONTROLJUS_PASSWORD` no `.env`.
@@ -39,4 +76,4 @@ O primeiro acesso real deve confirmar:
 - se existe exportacao CSV/Excel oficial no ControlJus;
 - se ha paginacao/filtros de data que precisam ser percorridos.
 
-Depois dessa validacao, o coletor deve ser ajustado para transformar a resposta do ControlJus diretamente no formato de publicacoes do LexFlow.
+Depois dessa validacao, o backend deve ser publicado em ambiente privado e configurado no modal `Conectar ControlJus`.

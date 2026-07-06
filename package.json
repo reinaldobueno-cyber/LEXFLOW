@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "dev": "node server.mjs",
     "controljus:fetch": "node tools/controljus-fetch.mjs"
   },
   "devDependencies": {
