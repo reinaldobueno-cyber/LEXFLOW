@@ -357,15 +357,30 @@ function seedData(){
 
 let DB = {prazos:[], audiencias:[], tarefas:[], publicacoes:[], historico:[], checklist:{}};
 
+const STORAGE_KEY = 'lexflow:data';
+const storageApi = {
+  async get(){
+    if(window.storage?.get){
+      const res = await window.storage.get('lc:data', false);
+      return res?.value || '';
+    }
+    return localStorage.getItem(STORAGE_KEY) || '';
+  },
+  async set(value){
+    if(window.storage?.set) return window.storage.set('lc:data', value, false);
+    localStorage.setItem(STORAGE_KEY, value);
+  }
+};
+
 async function loadDB(){
   try{
-    const res = await window.storage.get('lc:data', false);
-    if(res && res.value){ DB = JSON.parse(res.value); if(!DB.publicacoes) DB.publicacoes=[]; if(!DB.checklist) DB.checklist={exportBtn:false,tableCopy:false,apiEndpoints:false,webserviceContract:false}; return; }
+    const saved = await storageApi.get();
+    if(saved){ DB = JSON.parse(saved); if(!DB.publicacoes) DB.publicacoes=[]; if(!DB.checklist) DB.checklist={exportBtn:false,tableCopy:false,apiEndpoints:false,webserviceContract:false}; return; }
   }catch(e){}
   DB = seedData();
   await saveDB();
 }
-async function saveDB(){ try{ await window.storage.set('lc:data', JSON.stringify(DB), false); }catch(e){ console.error('storage error', e); } }
+async function saveDB(){ try{ await storageApi.set(JSON.stringify(DB)); }catch(e){ console.error('storage error', e); } }
 function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), texto}); if(DB.historico.length>250) DB.historico.length=250; }
 
 let toastTimer;
@@ -1025,19 +1040,153 @@ function hideModal(){ document.getElementById('overlay').classList.remove('open'
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') hideModal(); });
 
 /* ===================== IMPORT / EXPORT ===================== */
+function parseCSV(text){
+  const rows = [];
+  let row = [], cell = '', quoted = false;
+  const src = text.replace(/^\uFEFF/, '');
+  for(let i=0;i<src.length;i++){
+    const ch = src[i], next = src[i+1];
+    if(ch === '"' && quoted && next === '"'){ cell += '"'; i++; continue; }
+    if(ch === '"'){ quoted = !quoted; continue; }
+    if(ch === ',' && !quoted){ row.push(cell); cell=''; continue; }
+    if((ch === '\n' || ch === '\r') && !quoted){
+      if(ch === '\r' && next === '\n') i++;
+      row.push(cell); cell='';
+      if(row.some(v=>v.trim())) rows.push(row);
+      row=[];
+      continue;
+    }
+    cell += ch;
+  }
+  row.push(cell);
+  if(row.some(v=>v.trim())) rows.push(row);
+  if(rows.length < 2) return [];
+  const headers = rows.shift().map(h=>h.trim());
+  return rows.map(cols=>{
+    const obj = {};
+    headers.forEach((h,i)=>obj[h]=cols[i]??'');
+    return obj;
+  });
+}
+
+function extractRowsFromJson(value){
+  if(Array.isArray(value)) return value.filter(item=>item && typeof item === 'object');
+  if(!value || typeof value !== 'object') return [];
+  const direct = value.recortes || value.publicacoes || value.publications || value.items || value.results || value.data;
+  if(Array.isArray(direct)) return direct;
+  const fromCaptured = Array.isArray(value.captured)
+    ? value.captured.flatMap(entry=>extractRowsFromJson(entry.body))
+    : [];
+  if(fromCaptured.length) return fromCaptured;
+  return Object.values(value).flatMap(v=>{
+    if(Array.isArray(v) && v.some(item=>item && typeof item === 'object')) return v;
+    return [];
+  });
+}
+
+function pick(row, names){
+  const keys = Object.keys(row);
+  for(const name of names){
+    const found = keys.find(k=>k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'') === name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+    if(found && String(row[found]??'').trim()) return String(row[found]).trim();
+  }
+  return '';
+}
+
+function toISODate(value){
+  if(!value) return '';
+  const raw = String(value).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0,10);
+  const br = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(br) return `${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}`;
+  const pt = parsePtDate(raw);
+  if(pt) return isoOf(pt);
+  const dt = new Date(raw);
+  return isNaN(dt) ? '' : isoOf(dt);
+}
+
+function normalizeControlJusRows(rows){
+  return rows.map(row=>{
+    const processo = pick(row, ['processo','numeroProcesso','numero_processo','nProcesso','Nº do processo','N do processo']);
+    const cliente = pick(row, ['cliente','parte','nome','parteCliente','parte_cliente','interessado']);
+    const dataPublicacao = toISODate(pick(row, ['dataPublicacao','data_publicacao','publicacao','data','Data da publicacao','Data publicação']));
+    const textoRecorte = pick(row, ['textoRecorte','texto_recorte','recorte','texto','conteudo','publicacaoTexto','teor']);
+    return {
+      id:uid(),
+      refId:pick(row, ['id','refId','codigo','cod']) || `CJ-${processo || uid()}-${dataPublicacao || uid()}`,
+      dataPublicacao,
+      processo,
+      cliente,
+      tribunal:pick(row, ['tribunal','uf','orgao','estado']),
+      tipoPublicacao:pick(row, ['tipoPublicacao','tipo_publicacao','tipo','classe','categoria']) || 'Recorte ControlJus',
+      textoRecorte,
+      prazoIdentificado:pick(row, ['prazoIdentificado','prazo_identificado','prazo','pendencia']),
+      prazoFatal:toISODate(pick(row, ['prazoFatal','prazo_fatal','fatal','dataPrazo'])),
+      status:pick(row, ['status','situacao']) || 'Novo',
+      responsavel:pick(row, ['responsavel','usuario']),
+      observacoes:pick(row, ['observacoes','observacao','obs']),
+      linkOrigem:pick(row, ['linkOrigem','link_origem','url','link']) || 'https://app.controljus.com.br/publicacoes/recortes/arquivadas',
+      prazoGeradoId:''
+    };
+  }).filter(p=>p.processo || p.cliente || p.textoRecorte);
+}
+
+async function importControlJusText(text, sourceName){
+  let rows;
+  const trimmed = text.trim();
+  if(!trimmed){ toast('Arquivo vazio'); return; }
+  try{
+    if(trimmed[0] === '[' || trimmed[0] === '{'){
+      const parsed = JSON.parse(trimmed);
+      rows = extractRowsFromJson(parsed);
+    }else{
+      rows = parseCSV(text);
+    }
+  }catch(e){
+    toast('Nao consegui ler este arquivo');
+    return;
+  }
+  const incoming = normalizeControlJusRows(rows);
+  let added = 0, updated = 0;
+  incoming.forEach(pub=>{
+    const key = [pub.processo, pub.dataPublicacao, pub.textoRecorte.slice(0,80)].join('|').toLowerCase();
+    const idx = DB.publicacoes.findIndex(x=>[x.processo, x.dataPublicacao, (x.textoRecorte||'').slice(0,80)].join('|').toLowerCase() === key);
+    if(idx >= 0){
+      DB.publicacoes[idx] = {...DB.publicacoes[idx], ...pub, id:DB.publicacoes[idx].id, prazoGeradoId:DB.publicacoes[idx].prazoGeradoId || pub.prazoGeradoId};
+      updated++;
+    }else{
+      DB.publicacoes.push(pub);
+      added++;
+    }
+  });
+  logHist(`Importacao ControlJus (${sourceName}): ${added} recortes novos, ${updated} atualizados.`);
+  await saveDB();
+  hideModal();
+  currentView = 'publicacoes';
+  renderAll();
+  toast(`ControlJus importado: ${added} novos, ${updated} atualizados`);
+}
+
 document.getElementById('importBtn').onclick = ()=>{
   const box = document.getElementById('modalBox');
   box.innerHTML = `
     <div class="modal-head"><h3>Conectar ao ControlJus</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
-      <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">A conexão automática com o ControlJus (API, exportação ou automação) ainda não está confirmada — veja a aba <b>Integração ControlJus</b> para o roteiro e o checklist de teste. Por enquanto, os recortes chegam por cadastro manual na aba <b>Publicações</b>, e os dados iniciais já foram carregados a partir dos seus arquivos.</p>
+      <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">Credenciais do ControlJus nao devem ficar no site publicado. Use o coletor local/backend para gerar um arquivo JSON/CSV autorizado e importe aqui. O LexFlow junta os recortes novos sem apagar o que ja foi tratado.</p>
+      <div class="field"><label>Arquivo ControlJus (.json ou .csv)</label><input type="file" id="cjFile" accept=".json,.csv,text/csv,application/json"></div>
+      <div class="field"><label>Ou cole JSON/CSV exportado</label><textarea id="cjPaste" placeholder="Cole aqui os recortes exportados do ControlJus"></textarea></div>
     </div>
-    <div class="modal-foot"><button class="btn" id="mGo">Ver roteiro de integração</button><button class="btn primary" id="mOk">Entendi</button></div>
+    <div class="modal-foot"><button class="btn" id="mGo">Ver roteiro</button><button class="btn primary" id="mImport">Importar recortes</button></div>
   `;
   showModal();
   document.getElementById('mClose').onclick = hideModal;
-  document.getElementById('mOk').onclick = hideModal;
   document.getElementById('mGo').onclick = ()=>{ hideModal(); currentView='integracao'; renderAll(); };
+  document.getElementById('mImport').onclick = async ()=>{
+    const file = document.getElementById('cjFile').files[0];
+    if(file) return importControlJusText(await file.text(), file.name);
+    const pasted = document.getElementById('cjPaste').value;
+    return importControlJusText(pasted, 'texto colado');
+  };
 };
 
 function toCSV(rows, headers){

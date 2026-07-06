@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+controljus-session.json
+data/controljus-*.json
+data/controljus-*.csv
+node_modules/
