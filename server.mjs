@@ -39,7 +39,8 @@ const server = http.createServer(async (req, res) => {
         source:result.source,
         url:result.url,
         collectedAt:result.collectedAt,
-        publicacoes:result.publicacoes
+        publicacoes:result.publicacoes,
+        diagnostics:result.diagnostics
       }), {'Content-Type':'application/json; charset=utf-8'});
     }
 

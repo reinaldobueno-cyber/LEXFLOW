@@ -102,8 +102,13 @@ export async function fetchControlJusPublicacoes(options = {}){
       }
     }
 
-    await page.goto(cfg.url, {waitUntil:'networkidle'});
-    await page.waitForTimeout(2500);
+    await page.goto(cfg.url, {waitUntil:'domcontentloaded'});
+    await page.waitForResponse(response =>
+      response.url().includes('/api/recortes/pesquisar') && response.status() === 200,
+      {timeout:45000}
+    ).catch(() => {});
+    await page.waitForLoadState('networkidle', {timeout:30000}).catch(() => {});
+    await page.waitForTimeout(5000);
 
     const tableRows = await page.locator('table tbody tr').evaluateAll(rows => rows.map(row => {
       const cells = [...row.querySelectorAll('th,td')].map(cell => cell.innerText.trim());
@@ -121,6 +126,12 @@ export async function fetchControlJusPublicacoes(options = {}){
       url:cfg.url,
       collectedAt:new Date().toISOString(),
       publicacoes,
+      diagnostics:{
+        capturedJson:captured.length,
+        recortesResponses:captured.filter(entry => entry.url.includes('/api/recortes/pesquisar')).length,
+        rawRecortes:recortes.length,
+        tableRows:tableRows.length
+      },
       captured,
       tableRows
     };
