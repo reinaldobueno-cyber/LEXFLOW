@@ -77,6 +77,18 @@ export async function fetchControlJusPublicacoes(options = {}){
     ]
   });
   const page = await browser.newPage();
+  const diagnostics = {
+    capturedJson:0,
+    recortesResponses:0,
+    rawRecortes:0,
+    tableRows:0,
+    needsLogin:false,
+    loginSubmitted:false,
+    passwordVisibleAfterLogin:false,
+    finalUrl:'',
+    title:'',
+    bodyLength:0
+  };
   await page.route('**/*', route => {
     const type = route.request().resourceType();
     if(['image','media','font'].includes(type)) return route.abort();
@@ -98,6 +110,7 @@ export async function fetchControlJusPublicacoes(options = {}){
     await page.goto(cfg.url, {waitUntil:'domcontentloaded'});
 
     const needsLogin = await page.locator(cfg.passwordSelector).first().isVisible().catch(() => false);
+    diagnostics.needsLogin = needsLogin;
     if(needsLogin){
       await page.locator(cfg.userSelector).first().fill(cfg.user);
       await page.locator(cfg.passwordSelector).first().fill(cfg.password);
@@ -113,6 +126,8 @@ export async function fetchControlJusPublicacoes(options = {}){
           page.locator(cfg.passwordSelector).first().press('Enter')
         ]);
       }
+      diagnostics.loginSubmitted = true;
+      await page.waitForTimeout(2500);
     }
 
     await page.goto(cfg.url, {waitUntil:'domcontentloaded'});
@@ -127,6 +142,10 @@ export async function fetchControlJusPublicacoes(options = {}){
       const cells = [...row.querySelectorAll('th,td')].map(cell => cell.innerText.trim());
       return {cells};
     })).catch(() => []);
+    diagnostics.passwordVisibleAfterLogin = await page.locator(cfg.passwordSelector).first().isVisible().catch(() => false);
+    diagnostics.finalUrl = page.url();
+    diagnostics.title = await page.title().catch(() => '');
+    diagnostics.bodyLength = await page.locator('body').innerText({timeout:3000}).then(text => text.length).catch(() => 0);
 
     const recortes = captured
       .filter(entry => entry.url.includes('/api/recortes/pesquisar'))
@@ -140,6 +159,7 @@ export async function fetchControlJusPublicacoes(options = {}){
       collectedAt:new Date().toISOString(),
       publicacoes,
       diagnostics:{
+        ...diagnostics,
         capturedJson:captured.length,
         recortesResponses:captured.filter(entry => entry.url.includes('/api/recortes/pesquisar')).length,
         rawRecortes:recortes.length,
