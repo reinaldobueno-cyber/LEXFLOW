@@ -67,8 +67,21 @@ export async function fetchControlJusPublicacoes(options = {}){
     throw new Error('Playwright nao esta instalado. Rode: npm install.');
   }
 
-  const browser = await chromium.launch({headless:cfg.headless});
+  const browser = await chromium.launch({
+    headless:cfg.headless,
+    args:[
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--disable-setuid-sandbox'
+    ]
+  });
   const page = await browser.newPage();
+  await page.route('**/*', route => {
+    const type = route.request().resourceType();
+    if(['image','media','font'].includes(type)) return route.abort();
+    return route.continue();
+  });
   const captured = [];
 
   page.on('response', async response => {
@@ -105,10 +118,10 @@ export async function fetchControlJusPublicacoes(options = {}){
     await page.goto(cfg.url, {waitUntil:'domcontentloaded'});
     await page.waitForResponse(response =>
       response.url().includes('/api/recortes/pesquisar') && response.status() === 200,
-      {timeout:45000}
+      {timeout:25000}
     ).catch(() => {});
-    await page.waitForLoadState('networkidle', {timeout:30000}).catch(() => {});
-    await page.waitForTimeout(5000);
+    await page.waitForLoadState('networkidle', {timeout:10000}).catch(() => {});
+    await page.waitForTimeout(1500);
 
     const tableRows = await page.locator('table tbody tr').evaluateAll(rows => rows.map(row => {
       const cells = [...row.querySelectorAll('th,td')].map(cell => cell.innerText.trim());

@@ -1185,8 +1185,14 @@ async function syncControlJusDirect(){
   if(btn){ btn.disabled = true; btn.textContent = 'Sincronizando...'; }
   try{
     const res = await fetch(apiUrl, {headers:{'Accept':'application/json'}});
-    if(!res.ok) throw new Error(`API respondeu ${res.status}`);
+    if(!res.ok && res.status !== 202) throw new Error(`API respondeu ${res.status}`);
     const payload = await res.json();
+    if(payload.sync?.status === 'processing'){
+      const hint = document.getElementById('cjSyncHint');
+      if(hint) hint.textContent = 'A API ja iniciou a sincronizacao. Aguarde alguns segundos e clique em Sincronizar agora novamente.';
+      toast('Sincronizacao em andamento');
+      return;
+    }
     const rows = extractRowsFromJson(payload);
     const incoming = normalizeControlJusRows(rows);
     if(!incoming.length) throw new Error('Nenhuma publicacao retornada pela API');

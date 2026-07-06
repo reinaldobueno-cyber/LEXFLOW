@@ -5,6 +5,8 @@ import {fetchControlJusPublicacoes} from './tools/controljus-client.mjs';
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 8787);
+let controlJusCache = null;
+let controlJusRefresh = null;
 
 function send(res, status, body, headers = {}){
   res.writeHead(status, {
@@ -24,6 +26,29 @@ function contentType(file){
   return 'text/plain; charset=utf-8';
 }
 
+function timeout(ms){
+  return new Promise(resolve => setTimeout(() => resolve({timedOut:true}), ms));
+}
+
+async function refreshControlJus(){
+  if(controlJusRefresh) return controlJusRefresh;
+  controlJusRefresh = fetchControlJusPublicacoes()
+    .then(result => {
+      controlJusCache = {
+        source:result.source,
+        url:result.url,
+        collectedAt:result.collectedAt,
+        publicacoes:result.publicacoes,
+        diagnostics:result.diagnostics
+      };
+      return controlJusCache;
+    })
+    .finally(() => {
+      controlJusRefresh = null;
+    });
+  return controlJusRefresh;
+}
+
 const server = http.createServer(async (req, res) => {
   try{
     if(req.method === 'OPTIONS') return send(res, 204, '');
@@ -34,14 +59,23 @@ const server = http.createServer(async (req, res) => {
     }
 
     if(url.pathname === '/api/controljus/publicacoes'){
-      const result = await fetchControlJusPublicacoes();
-      return send(res, 200, JSON.stringify({
-        source:result.source,
-        url:result.url,
-        collectedAt:result.collectedAt,
-        publicacoes:result.publicacoes,
-        diagnostics:result.diagnostics
-      }), {'Content-Type':'application/json; charset=utf-8'});
+      const force = url.searchParams.get('refresh') === '1';
+      if(controlJusCache && !force){
+        return send(res, 200, JSON.stringify({...controlJusCache, sync:{status:'cached'}}), {'Content-Type':'application/json; charset=utf-8'});
+      }
+
+      const result = await Promise.race([refreshControlJus(), timeout(25000)]);
+      if(result?.timedOut){
+        return send(res, 202, JSON.stringify({
+          source:'ControlJus',
+          collectedAt:new Date().toISOString(),
+          publicacoes:controlJusCache?.publicacoes || [],
+          diagnostics:controlJusCache?.diagnostics || null,
+          sync:{status:'processing', message:'A sincronizacao ainda esta em andamento. Tente novamente em alguns segundos.'}
+        }), {'Content-Type':'application/json; charset=utf-8'});
+      }
+
+      return send(res, 200, JSON.stringify({...result, sync:{status:'fresh'}}), {'Content-Type':'application/json; charset=utf-8'});
     }
 
     const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
