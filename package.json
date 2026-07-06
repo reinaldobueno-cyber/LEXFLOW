@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "start": "node server.mjs",
     "dev": "node server.mjs",
     "controljus:fetch": "node tools/controljus-fetch.mjs"
   },

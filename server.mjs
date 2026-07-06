@@ -29,6 +29,10 @@ const server = http.createServer(async (req, res) => {
     if(req.method === 'OPTIONS') return send(res, 204, '');
 
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if(url.pathname === '/api/health'){
+      return send(res, 200, JSON.stringify({ok:true, service:'lexflow-controljus', time:new Date().toISOString()}), {'Content-Type':'application/json; charset=utf-8'});
+    }
+
     if(url.pathname === '/api/controljus/publicacoes'){
       const result = await fetchControlJusPublicacoes();
       return send(res, 200, JSON.stringify({

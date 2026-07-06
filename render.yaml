@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: lexflow-controljus
+    runtime: docker
+    healthCheckPath: /api/health
+    envVars:
+      - key: CONTROLJUS_URL
+        value: https://app.controljus.com.br/publicacoes/recortes/arquivadas
+      - key: CONTROLJUS_HEADLESS
+        value: true
+      - key: CONTROLJUS_USER
+        sync: false
+      - key: CONTROLJUS_PASSWORD
+        sync: false
+      - key: CONTROLJUS_USER_SELECTOR
+        value: input[type="email"], input[name="email"], input[name="usuario"], input[name="login"], input[type="text"]
+      - key: CONTROLJUS_PASSWORD_SELECTOR
+        value: input[type="password"]
+      - key: CONTROLJUS_SUBMIT_SELECTOR
+        value: button[type="submit"], input[type="submit"], button:has-text("Entrar"), button:has-text("Login"), button:has-text("Acessar")
