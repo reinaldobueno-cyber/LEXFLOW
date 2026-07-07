@@ -8,9 +8,13 @@ services:
         value: https://app.controljus.com.br/publicacoes/recortes/arquivadas
       - key: CONTROLJUS_HEADLESS
         value: true
+      - key: CONTROLJUS_CACHE_TTL_MS
+        value: 900000
       - key: CONTROLJUS_USER
         sync: false
       - key: CONTROLJUS_PASSWORD
+        sync: false
+      - key: CONTROLJUS_API_TOKEN
         sync: false
       - key: CONTROLJUS_USER_SELECTOR
         value: input[type="email"], input[name="email"], input[name="usuario"], input[name="login"], input[type="text"]

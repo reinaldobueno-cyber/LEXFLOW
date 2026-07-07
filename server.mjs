@@ -5,14 +5,16 @@ import {fetchControlJusPublicacoes} from './tools/controljus-client.mjs';
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 8787);
+const cacheTtlMs = Number(process.env.CONTROLJUS_CACHE_TTL_MS || 15 * 60 * 1000);
 let controlJusCache = null;
 let controlJusRefresh = null;
+let lastControlJusError = null;
 
 function send(res, status, body, headers = {}){
   res.writeHead(status, {
     'Access-Control-Allow-Origin':'*',
-    'Access-Control-Allow-Methods':'GET, OPTIONS',
-    'Access-Control-Allow-Headers':'Content-Type',
+    'Access-Control-Allow-Methods':'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers':'Content-Type, Authorization',
     ...headers
   });
   res.end(body);
@@ -30,8 +32,22 @@ function timeout(ms){
   return new Promise(resolve => setTimeout(() => resolve({timedOut:true}), ms));
 }
 
+function isAuthorized(req){
+  const token = process.env.CONTROLJUS_API_TOKEN;
+  if(!token) return true;
+  const header = req.headers.authorization || '';
+  return header === `Bearer ${token}`;
+}
+
+function cacheIsFresh(){
+  if(!controlJusCache?.collectedAt) return false;
+  const age = Date.now() - new Date(controlJusCache.collectedAt).getTime();
+  return age >= 0 && age < cacheTtlMs;
+}
+
 async function refreshControlJus(){
   if(controlJusRefresh) return controlJusRefresh;
+  lastControlJusError = null;
   controlJusRefresh = fetchControlJusPublicacoes()
     .then(result => {
       controlJusCache = {
@@ -42,6 +58,13 @@ async function refreshControlJus(){
         diagnostics:result.diagnostics
       };
       return controlJusCache;
+    })
+    .catch(error => {
+      lastControlJusError = {
+        message:error.message || 'Erro ao sincronizar ControlJus',
+        at:new Date().toISOString()
+      };
+      throw error;
     })
     .finally(() => {
       controlJusRefresh = null;
@@ -55,13 +78,29 @@ const server = http.createServer(async (req, res) => {
 
     const url = new URL(req.url, `http://${req.headers.host}`);
     if(url.pathname === '/api/health'){
-      return send(res, 200, JSON.stringify({ok:true, service:'lexflow-controljus', commit:process.env.RENDER_GIT_COMMIT || '', time:new Date().toISOString()}), {'Content-Type':'application/json; charset=utf-8'});
+      return send(res, 200, JSON.stringify({
+        ok:true,
+        service:'lexflow-controljus',
+        commit:process.env.RENDER_GIT_COMMIT || '',
+        time:new Date().toISOString(),
+        cache:{
+          hasData:Boolean(controlJusCache),
+          collectedAt:controlJusCache?.collectedAt || null,
+          ttlMs:cacheTtlMs,
+          refreshing:Boolean(controlJusRefresh)
+        },
+        lastError:lastControlJusError
+      }), {'Content-Type':'application/json; charset=utf-8'});
     }
 
     if(url.pathname === '/api/controljus/publicacoes'){
+      if(!isAuthorized(req)){
+        return send(res, 401, JSON.stringify({error:'unauthorized'}), {'Content-Type':'application/json; charset=utf-8'});
+      }
+
       const force = url.searchParams.get('refresh') === '1';
-      if(controlJusCache && !force){
-        return send(res, 200, JSON.stringify({...controlJusCache, sync:{status:'cached'}}), {'Content-Type':'application/json; charset=utf-8'});
+      if(controlJusCache && !force && cacheIsFresh()){
+        return send(res, 200, JSON.stringify({...controlJusCache, sync:{status:'cached', cacheTtlMs}}), {'Content-Type':'application/json; charset=utf-8'});
       }
 
       const result = await Promise.race([refreshControlJus(), timeout(25000)]);
@@ -75,7 +114,25 @@ const server = http.createServer(async (req, res) => {
         }), {'Content-Type':'application/json; charset=utf-8'});
       }
 
-      return send(res, 200, JSON.stringify({...result, sync:{status:'fresh'}}), {'Content-Type':'application/json; charset=utf-8'});
+      return send(res, 200, JSON.stringify({...result, sync:{status:'fresh', cacheTtlMs}}), {'Content-Type':'application/json; charset=utf-8'});
+    }
+
+    if(url.pathname === '/api/controljus/status'){
+      if(!isAuthorized(req)){
+        return send(res, 401, JSON.stringify({error:'unauthorized'}), {'Content-Type':'application/json; charset=utf-8'});
+      }
+      return send(res, 200, JSON.stringify({
+        source:'ControlJus',
+        cache:{
+          hasData:Boolean(controlJusCache),
+          collectedAt:controlJusCache?.collectedAt || null,
+          publicacoes:controlJusCache?.publicacoes?.length || 0,
+          fresh:cacheIsFresh(),
+          refreshing:Boolean(controlJusRefresh),
+          ttlMs:cacheTtlMs
+        },
+        lastError:lastControlJusError
+      }), {'Content-Type':'application/json; charset=utf-8'});
     }
 
     const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);

@@ -62,3 +62,13 @@ npx wrangler secret put CONTROLJUS_BACKEND_TOKEN
 ```
 
 Enquanto `CONTROLJUS_BACKEND_URL` nao estiver configurado, a rota `/api/controljus/publicacoes` responde `503 backend_not_configured`, sem quebrar o frontend.
+
+## Sincronizacao
+
+O botao `Sincronizar ControlJus` do LexFlow chama:
+
+```text
+https://lexflow.reinaldo-bueno.workers.dev/api/controljus/publicacoes?refresh=1
+```
+
+O Worker encaminha para o backend privado. O frontend faz merge por `controlJusId`, `refId` ou processo/data/texto, preservando status, responsavel e prazos ja tratados pelo usuario.

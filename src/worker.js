@@ -55,6 +55,34 @@ async function proxyControlJus(request, env){
   });
 }
 
+async function proxyControlJusStatus(request, env){
+  const backend = (env.CONTROLJUS_BACKEND_URL || '').trim();
+  if(!backend){
+    return json({
+      source: 'ControlJus',
+      cache: {hasData: false, collectedAt: null, publicacoes: 0, fresh: false, refreshing: false},
+      lastError: {message: 'Backend autenticado ainda nao configurado.', at: new Date().toISOString()}
+    }, 503);
+  }
+
+  const backendUrl = new URL(backend);
+  const origin = backendUrl.origin;
+  const endpoint = `${origin}/api/controljus/status`;
+  const headers = new Headers();
+  headers.set('Accept', 'application/json');
+  if(env.CONTROLJUS_BACKEND_TOKEN){
+    headers.set('Authorization', `Bearer ${env.CONTROLJUS_BACKEND_TOKEN}`);
+  }
+
+  const response = await fetch(withQuery(endpoint, request.url), {method: 'GET', headers});
+  const proxiedHeaders = new Headers(response.headers);
+  Object.entries(jsonHeaders).forEach(([key, value]) => proxiedHeaders.set(key, value));
+  return new Response(response.body, {
+    status: response.status,
+    headers: proxiedHeaders
+  });
+}
+
 export default {
   async fetch(request, env){
     if(request.method === 'OPTIONS') return new Response(null, {status: 204, headers: jsonHeaders});
@@ -71,6 +99,10 @@ export default {
 
     if(url.pathname === '/api/controljus/publicacoes'){
       return proxyControlJus(request, env);
+    }
+
+    if(url.pathname === '/api/controljus/status'){
+      return proxyControlJusStatus(request, env);
     }
 
     return env.ASSETS.fetch(request);

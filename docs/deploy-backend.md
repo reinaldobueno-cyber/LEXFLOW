@@ -25,6 +25,8 @@ CONTROLJUS_URL=https://app.controljus.com.br/publicacoes/recortes/arquivadas
 CONTROLJUS_USER=seu_usuario_real
 CONTROLJUS_PASSWORD=sua_senha_real
 CONTROLJUS_HEADLESS=true
+CONTROLJUS_CACHE_TTL_MS=900000
+CONTROLJUS_API_TOKEN=um_token_longo_para_proteger_a_api
 ```
 
 Os seletores podem ficar com os valores de `.env.example`.
@@ -34,15 +36,26 @@ Os seletores podem ficar com os valores de `.env.example`.
 ```text
 https://SEU-BACKEND.onrender.com/api/health
 https://SEU-BACKEND.onrender.com/api/controljus/publicacoes
+https://SEU-BACKEND.onrender.com/api/controljus/publicacoes?refresh=1
+https://SEU-BACKEND.onrender.com/api/controljus/status
 ```
 
-6. No LexFlow publicado no GitHub Pages, clique em `Conectar ControlJus` e coloque:
+Se `CONTROLJUS_API_TOKEN` estiver definido, envie:
 
 ```text
-https://SEU-BACKEND.onrender.com/api/controljus/publicacoes
+Authorization: Bearer SEU_TOKEN
 ```
 
-Depois clique em `Sincronizar agora`.
+6. No Cloudflare Worker, configure:
+
+```bash
+npx wrangler secret put CONTROLJUS_BACKEND_URL
+npx wrangler secret put CONTROLJUS_BACKEND_TOKEN
+```
+
+`CONTROLJUS_BACKEND_URL` pode ser a base do backend ou a rota completa `/api/controljus/publicacoes`.
+
+Depois, no LexFlow, clique em `Sincronizar ControlJus`.
 
 ## Local
 

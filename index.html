@@ -210,7 +210,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
         <div><h1 id="pageTitle">Dashboard</h1><div class="sub" id="pageSub"></div></div>
       </div>
       <div class="topbar-actions">
-        <button class="btn" id="importBtn">Endpoint ControlJus</button>
+        <button class="btn" id="importBtn">Sincronizar ControlJus</button>
         <button class="btn" id="exportBtn">⇩ Exportar CSV</button>
       </div>
     </div>
@@ -552,6 +552,81 @@ function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), text
 
 let toastTimer;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600); }
+
+function controlJusPublicacaoKey(p){
+  if(p.controlJusId) return `controljus:${p.controlJusId}`;
+  if(p.refId) return `ref:${p.refId}`;
+  const processo = String(p.processo||'').replace(/\D/g,'');
+  const texto = String(p.textoRecorte||'').replace(/\s+/g,' ').trim().slice(0,120);
+  return `fallback:${processo}:${p.dataPublicacao||''}:${texto}`;
+}
+
+function normalizeControlJusPublicacao(p){
+  return {
+    id:p.id || uid(),
+    refId:p.refId || `CJ-${uid()}`,
+    dataPublicacao:p.dataPublicacao || '',
+    processo:p.processo || '',
+    cliente:p.cliente || '',
+    tribunal:p.tribunal || '',
+    tipoPublicacao:p.tipoPublicacao || 'Recorte ControlJus',
+    textoRecorte:p.textoRecorte || '',
+    prazoIdentificado:p.prazoIdentificado || '',
+    prazoFatal:p.prazoFatal || '',
+    status:p.status || 'Novo',
+    responsavel:p.responsavel || '',
+    observacoes:p.observacoes || '',
+    linkOrigem:p.linkOrigem || DB.config?.controlJusEndpoint || CONTROLJUS_PRIVATE_ENDPOINT,
+    controlJusId:p.controlJusId || '',
+    prazoGeradoId:p.prazoGeradoId || ''
+  };
+}
+
+async function syncControlJusPublicacoes(force = true){
+  ensureFixedConfig();
+  toast('Sincronizando ControlJus...');
+  const url = new URL(DB.config.controlJusEndpoint);
+  if(force) url.searchParams.set('refresh', '1');
+  const res = await fetch(url.toString(), {headers:{'Accept':'application/json'}});
+  const payload = await res.json().catch(()=>({}));
+  if(!res.ok && res.status !== 202){
+    throw new Error(payload?.sync?.message || payload?.error || payload?.lastError?.message || 'Falha ao sincronizar ControlJus');
+  }
+
+  const incoming = Array.isArray(payload.publicacoes) ? payload.publicacoes.map(normalizeControlJusPublicacao) : [];
+  const byKey = new Map(DB.publicacoes.map(p=>[controlJusPublicacaoKey(p), p]));
+  let created = 0;
+  let updated = 0;
+
+  incoming.forEach(pub=>{
+    const key = controlJusPublicacaoKey(pub);
+    const existing = byKey.get(key);
+    if(!existing){
+      DB.publicacoes.push(pub);
+      byKey.set(key, pub);
+      created++;
+      return;
+    }
+
+    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','prazoFatal','observacoes','linkOrigem','controlJusId'].forEach(field=>{
+      if(pub[field] && existing[field] !== pub[field]){
+        existing[field] = pub[field];
+        updated++;
+      }
+    });
+  });
+
+  DB.config.lastControlJusSyncAt = payload.collectedAt || new Date().toISOString();
+  DB.config.lastControlJusSyncStatus = payload.sync?.status || (res.status === 202 ? 'processing' : 'fresh');
+  DB.config.lastControlJusSyncCount = incoming.length;
+  logHist(`Sincronização ControlJus concluída: ${created} novos recortes, ${updated} campos atualizados, ${incoming.length} recebidos.`);
+  await saveDB();
+  currentView = 'publicacoes';
+  dashboardFilter = null;
+  renderAll();
+  toast(created ? `${created} novos recortes importados` : 'ControlJus sincronizado');
+  return {created, updated, total:incoming.length, status:DB.config.lastControlJusSyncStatus};
+}
 
 /* ===================== NAV ===================== */
 const VIEWS = [
@@ -1216,6 +1291,16 @@ function renderIntegracao(){
       <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Endpoint público oficial validado para consulta DJEN/CNJ. Fica gravado para a fase de substituição gradual do ControlJus.</p></div>
     </div>
 
+    <div class="section-title">Sincronização ControlJus</div>
+    <div class="path-cards">
+      <div class="path-card">
+        <div class="path-tag">Status</div>
+        <h4>${DB.config.lastControlJusSyncAt ? `Última sincronização: ${fmtDateTime(DB.config.lastControlJusSyncAt)}` : 'Aguardando primeira sincronização'}</h4>
+        <p>Último estado: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Recortes recebidos: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
+        <p><button class="btn primary small" id="syncControlJusBtn">Sincronizar agora</button></p>
+      </div>
+    </div>
+
     <div class="section-title">Checklist de conexão <span class="cnt">sem importação por arquivo</span></div>
     <div class="table-wrap" style="padding:6px 18px;">
       <div class="checklist">
@@ -1224,6 +1309,13 @@ function renderIntegracao(){
     </div>
   `;
   document.getElementById('content').innerHTML = html;
+  document.getElementById('syncControlJusBtn').onclick = async ()=>{
+    const btn = document.getElementById('syncControlJusBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sincronizando...';
+    try{ await syncControlJusPublicacoes(true); }
+    catch(e){ toast(e.message || 'Falha na sincronização'); renderIntegracao(); }
+  };
   document.querySelectorAll('.check-item input').forEach(cb=>{
     cb.onchange = async e=>{
       DB.checklist[e.target.dataset.k] = e.target.checked;
@@ -1243,7 +1335,7 @@ document.getElementById('importBtn').onclick = ()=>{
   ensureFixedConfig();
   const box = document.getElementById('modalBox');
   box.innerHTML = `
-    <div class="modal-head"><h3>Endpoint ControlJus</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-head"><h3>Sincronizar ControlJus</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
       <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">O LexFlow usa endpoint fixo gravado. Não haverá escolha de arquivo, importação manual ou cópia e cola de endereço.</p>
       <div class="path-card" style="box-shadow:none;">
@@ -1252,17 +1344,28 @@ document.getElementById('importBtn').onclick = ()=>{
         <p><span class="mono">${DB.config.controlJusEndpoint}</span></p>
       </div>
       <div class="path-card" style="box-shadow:none;">
+        <div class="path-tag">Última sincronização</div>
+        <h4>${DB.config.lastControlJusSyncAt ? fmtDateTime(DB.config.lastControlJusSyncAt) : 'Ainda não executada'}</h4>
+        <p>Status: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Recortes: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
+      </div>
+      <div class="path-card" style="box-shadow:none;">
         <div class="path-tag">CNJ · público oficial</div>
         <h4>DJEN / Comunicações Processuais</h4>
         <p><span class="mono">${DB.config.djenEndpoint}</span></p>
       </div>
     </div>
-    <div class="modal-foot"><button class="btn" id="mGo">Ver integração</button><button class="btn primary" id="mOk">Entendi</button></div>
+    <div class="modal-foot"><button class="btn" id="mGo">Ver integração</button><button class="btn primary" id="mSync">Sincronizar agora</button></div>
   `;
   showModal();
   document.getElementById('mClose').onclick = hideModal;
-  document.getElementById('mOk').onclick = hideModal;
   document.getElementById('mGo').onclick = ()=>{ hideModal(); currentView='integracao'; renderAll(); };
+  document.getElementById('mSync').onclick = async ()=>{
+    const btn = document.getElementById('mSync');
+    btn.disabled = true;
+    btn.textContent = 'Sincronizando...';
+    try{ await syncControlJusPublicacoes(true); hideModal(); }
+    catch(e){ toast(e.message || 'Falha na sincronização'); btn.disabled = false; btn.textContent = 'Tentar novamente'; }
+  };
 };
 
 function toCSV(rows, headers){

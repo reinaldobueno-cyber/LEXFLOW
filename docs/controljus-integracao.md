@@ -42,10 +42,14 @@ http://localhost:8787
 A rota usada pelo painel e:
 
 ```text
-http://localhost:8787/api/controljus/publicacoes
+http://localhost:8787/api/controljus/publicacoes?refresh=1
 ```
 
-Em producao, essa mesma API deve ser publicada em um backend privado, por exemplo Render, Railway, VPS, servidor do escritorio ou outro ambiente com variaveis de ambiente seguras.
+Em producao, essa API deve ser publicada em um backend privado, por exemplo Render, Railway, VPS, servidor do escritorio ou outro ambiente com variaveis de ambiente seguras. O Cloudflare Worker do LexFlow passa a ser a porta fixa:
+
+```text
+https://lexflow.reinaldo-bueno.workers.dev/api/controljus/publicacoes
+```
 
 ## Fluxo por arquivo, fallback
 
