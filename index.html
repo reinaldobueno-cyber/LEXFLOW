@@ -105,13 +105,7 @@ tbody tr:hover{background:#FBFAF6;}
 tbody tr.archived{opacity:.55;}
 td.proc{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
 td.cliente{font-weight:600;}
-td.texto{width:340px; max-width:340px; font-size:11.5px; color:var(--ink-soft);}
-.recorte-preview{max-height:78px; overflow:hidden; line-height:1.35;}
-.recorte-preview.fade{position:relative;}
-.recorte-preview.fade:after{content:''; position:absolute; left:0; right:0; bottom:0; height:22px; background:linear-gradient(transparent, var(--white));}
-.prazo-hint{font-size:11px; line-height:1.35; color:var(--ink-2); max-width:190px;}
-.prazo-hint b{color:var(--selo);}
-.muted-cell{color:var(--ink-soft); font-size:11px;}
+td.texto{max-width:220px; font-size:11.5px; color:var(--ink-soft);}
 .row-actions{display:flex; gap:4px;}
 a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
 a.link-audi:hover{text-decoration:underline;}
@@ -216,7 +210,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
         <div><h1 id="pageTitle">Dashboard</h1><div class="sub" id="pageSub"></div></div>
       </div>
       <div class="topbar-actions">
-        <button class="btn" id="importBtn">⇪ Conectar ControlJus</button>
+        <button class="btn" id="importBtn">Endpoint ControlJus</button>
         <button class="btn" id="exportBtn">⇩ Exportar CSV</button>
       </div>
     </div>
@@ -243,33 +237,6 @@ function fmtDate(d){ if(!d) return '—'; const dt=(d instanceof Date)?d:new Dat
 function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); if(isNaN(dt)) return '—'; return dt.toLocaleString('pt-BR'); }
 function isoOf(d){ if(!d) return ''; const dt=(d instanceof Date)?d:new Date(d); return isNaN(dt)?'':dt.toISOString().slice(0,10); }
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
-function esc(v){ return String(v??'').replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-function compactText(v, max=520){
-  const text = String(v??'').replace(/\s+/g,' ').trim();
-  return text.length > max ? text.slice(0,max).trim() + '...' : text;
-}
-function detectPrazoText(text){
-  const raw = String(text??'').replace(/\s+/g,' ').trim();
-  if(!raw) return '';
-  const normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  const words = {um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,vinte:20,trinta:30};
-  const matches = [];
-  const re = /prazo\s+(?:legal\s+)?(?:de|por|para|no prazo de)\s+(\d+|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|catorze|quinze|vinte|trinta)\s+dias?/g;
-  let m;
-  while((m = re.exec(normalized))){
-    const n = /^\d+$/.test(m[1]) ? Number(m[1]) : words[m[1]];
-    if(n && !matches.includes(n)) matches.push(n);
-  }
-  if(!matches.length){
-    const simple = normalized.match(/em\s+(\d+|cinco|dez|quinze|trinta)\s+dias?/);
-    if(simple){
-      const n = /^\d+$/.test(simple[1]) ? Number(simple[1]) : words[simple[1]];
-      if(n) matches.push(n);
-    }
-  }
-  if(!matches.length) return '';
-  return matches.length === 1 ? `Prazo mencionado: ${matches[0]} dias` : `Prazos mencionados: ${matches.join(', ')} dias`;
-}
 function diasRestantes(dateVal){
   const dt = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
   if(isNaN(dt)) return null;
@@ -298,6 +265,9 @@ const PUB_STATUSES = ['Novo','Em análise','Gerou prazo','Não gera prazo','Tare
 const PUB_UNTREATED = ['Novo','Em análise'];
 const PUB_ARCHIVED = ['Arquivado'];
 const PUB_DONE = ['Concluído','Arquivado','Não gera prazo'];
+const CONTROLJUS_PRIVATE_ENDPOINT = 'https://app.controljus.com.br/publicacoes/recortes/arquivadas';
+const CONTROLJUS_ENDPOINT_MODE = 'controljus_authenticated_private_route';
+const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 
 /* ===================== SEED DATA ===================== */
 function seedData(){
@@ -384,36 +354,168 @@ function seedData(){
   });
 
   return {prazos, audiencias, tarefas:[], publicacoes, historico:[
-    {ts:new Date().toISOString(), texto:'Sistema iniciado. Prazos e audiências carregados dos arquivos; recortes simulados a partir do fluxo do ControlJus até a integração real ser configurada.'}
-  ], checklist:{exportBtn:false, tableCopy:false, apiEndpoints:false, webserviceContract:false}};
+    {ts:new Date().toISOString(), texto:'Sistema iniciado. Prazos e audiências carregados; recortes simulados até a conexão autorizada com o endpoint fixo do ControlJus ser ativada.'}
+  ], checklist:{controlJusEndpoint:false, authenticatedSession:false, webserviceContract:false}, config:{
+    controlJusEndpoint: CONTROLJUS_PRIVATE_ENDPOINT,
+    controlJusMode: CONTROLJUS_ENDPOINT_MODE,
+    djenEndpoint: DJEN_PUBLIC_ENDPOINT
+  }};
 }
 
 let DB = {prazos:[], audiencias:[], tarefas:[], publicacoes:[], historico:[], checklist:{}};
 
-const STORAGE_KEY = 'lexflow:data';
-const storageApi = {
-  async get(){
-    if(window.storage?.get){
-      const res = await window.storage.get('lc:data', false);
-      return res?.value || '';
-    }
-    return localStorage.getItem(STORAGE_KEY) || '';
-  },
-  async set(value){
-    if(window.storage?.set) return window.storage.set('lc:data', value, false);
-    localStorage.setItem(STORAGE_KEY, value);
+function ensureFixedConfig(){
+  let changed = false;
+  if(!DB.config){ DB.config = {}; changed = true; }
+  if(DB.config.controlJusEndpoint !== CONTROLJUS_PRIVATE_ENDPOINT){ DB.config.controlJusEndpoint = CONTROLJUS_PRIVATE_ENDPOINT; changed = true; }
+  if(DB.config.controlJusMode !== CONTROLJUS_ENDPOINT_MODE){ DB.config.controlJusMode = CONTROLJUS_ENDPOINT_MODE; changed = true; }
+  if(DB.config.djenEndpoint !== DJEN_PUBLIC_ENDPOINT){ DB.config.djenEndpoint = DJEN_PUBLIC_ENDPOINT; changed = true; }
+  if(!DB.checklist){ DB.checklist = {}; changed = true; }
+  ['exportBtn','tableCopy','apiEndpoints'].forEach(k=>{
+    if(Object.prototype.hasOwnProperty.call(DB.checklist,k)){ delete DB.checklist[k]; changed = true; }
+  });
+  if(DB.checklist.controlJusEndpoint !== true){ DB.checklist.controlJusEndpoint = true; changed = true; }
+  ['authenticatedSession','webserviceContract'].forEach(k=>{
+    if(typeof DB.checklist[k] !== 'boolean'){ DB.checklist[k] = false; changed = true; }
+  });
+  return changed;
+}
+
+function applyDataMigrations(){
+  let changed = false;
+  if(!DB.migrations) DB.migrations = {};
+  const onlyDigits = v => String(v||'').replace(/\D/g,'');
+
+  if(!DB.migrations.nathaliaPrazoPublicacao202607){
+    const processo = '5018621-35.2025.8.13.0134';
+    const dataPublicacao = '2026-06-17';
+    const prazoFatal = '2026-07-08';
+    const nota = 'Correção: disponibilizado em 16/06/2026, publicado em 17/06/2026; contagem inicia em 18/06/2026.';
+
+    DB.prazos.filter(p=>p.processo===processo).forEach(p=>{
+      if(p.dataPublicacao !== dataPublicacao){ p.dataPublicacao = dataPublicacao; changed = true; }
+      if(p.prazoFatal !== prazoFatal){ p.prazoFatal = prazoFatal; changed = true; }
+      if((p.tipoPrazo||'').includes('CONTRARRAÕES')){ p.tipoPrazo = p.tipoPrazo.replace('CONTRARRAÕES','CONTRARRAZÕES'); changed = true; }
+      if(!(p.observacao||'').includes('disponibilizado em 16/06/2026')){
+        p.observacao = [p.observacao, nota].filter(Boolean).join(' ');
+        changed = true;
+      }
+    });
+
+    DB.publicacoes.filter(p=>p.processo===processo).forEach(p=>{
+      if(p.dataPublicacao !== dataPublicacao){ p.dataPublicacao = dataPublicacao; changed = true; }
+      if(p.prazoFatal !== prazoFatal){ p.prazoFatal = prazoFatal; changed = true; }
+      if(p.prazoIdentificado !== 'Prazo fatal em 08 de julho de 2026'){
+        p.prazoIdentificado = 'Prazo fatal em 08 de julho de 2026';
+        changed = true;
+      }
+      if(!(p.observacoes||'').includes('disponibilizado em 16/06/2026')){
+        p.observacoes = [p.observacoes, nota].filter(Boolean).join(' ');
+        changed = true;
+      }
+    });
+
+    DB.migrations.nathaliaPrazoPublicacao202607 = true;
+    DB.historico = DB.historico || [];
+    DB.historico.unshift({ts:new Date().toISOString(), texto:'Correção automática aplicada ao processo 5018621-35.2025.8.13.0134: publicação em 17/06/2026 e prazo fatal em 08/07/2026.'});
+    changed = true;
   }
-};
+
+  if(!DB.migrations.nathaliaPrazoPublicacao202607v2){
+    const processoDigits = '50186213520258130134';
+    const dataPublicacao = '2026-06-17';
+    const prazoFatal = '2026-07-08';
+    const prazoTexto = 'Prazo fatal em 08 de julho de 2026';
+    const nota = 'Correção: disponibilizado em 16/06/2026, publicado em 17/06/2026; contagem inicia em 18/06/2026.';
+    let corrigiuNathalia = false;
+
+    DB.prazos.filter(p=>onlyDigits(p.processo)===processoDigits).forEach(p=>{
+      if(p.dataPublicacao !== dataPublicacao){ p.dataPublicacao = dataPublicacao; changed = true; corrigiuNathalia = true; }
+      if(p.prazoFatal !== prazoFatal){ p.prazoFatal = prazoFatal; changed = true; corrigiuNathalia = true; }
+      if((p.tipoPrazo||'').includes('CONTRARRAÕES')){ p.tipoPrazo = p.tipoPrazo.replace('CONTRARRAÕES','CONTRARRAZÕES'); changed = true; corrigiuNathalia = true; }
+      if(!(p.observacao||'').includes('disponibilizado em 16/06/2026')){
+        p.observacao = [p.observacao, nota].filter(Boolean).join(' ');
+        changed = true;
+        corrigiuNathalia = true;
+      }
+    });
+
+    DB.publicacoes.filter(p=>onlyDigits(p.processo)===processoDigits).forEach(p=>{
+      if(p.dataPublicacao !== dataPublicacao){ p.dataPublicacao = dataPublicacao; changed = true; corrigiuNathalia = true; }
+      if(p.prazoFatal !== prazoFatal){ p.prazoFatal = prazoFatal; changed = true; corrigiuNathalia = true; }
+      if(p.prazoIdentificado !== prazoTexto){ p.prazoIdentificado = prazoTexto; changed = true; corrigiuNathalia = true; }
+      if(!(p.observacoes||'').includes('disponibilizado em 16/06/2026')){
+        p.observacoes = [p.observacoes, nota].filter(Boolean).join(' ');
+        changed = true;
+        corrigiuNathalia = true;
+      }
+    });
+
+    DB.migrations.nathaliaPrazoPublicacao202607v2 = true;
+    if(corrigiuNathalia){
+      DB.historico = DB.historico || [];
+      DB.historico.unshift({ts:new Date().toISOString(), texto:'Revisão aplicada ao processo 5018621-35.2025.8.13.0134: todas as telas usam publicação em 17/06/2026 e prazo fatal em 08/07/2026.'});
+    }
+    changed = true;
+  }
+
+  return changed;
+}
+
+function applyKnownCorrections(){
+  let changed = false;
+  const onlyDigits = v => String(v||'').replace(/\D/g,'');
+  const isNathalia = item => {
+    const processoDigits = onlyDigits(item && item.processo);
+    const cliente = String((item && item.cliente) || '').toUpperCase();
+    return processoDigits === '50186213520258130134' || (cliente.includes('NATHALIA LOPES RODRIGUES') && processoDigits.includes('5018621'));
+  };
+  const nota = 'Correção: disponibilizado em 16/06/2026, publicado em 17/06/2026; contagem inicia em 18/06/2026.';
+
+  (DB.prazos || []).filter(isNathalia).forEach(p=>{
+    if(p.dataPublicacao !== '2026-06-17'){ p.dataPublicacao = '2026-06-17'; changed = true; }
+    if(p.prazoFatal !== '2026-07-08'){ p.prazoFatal = '2026-07-08'; changed = true; }
+    if((p.tipoPrazo||'').includes('CONTRARRAÕES')){ p.tipoPrazo = p.tipoPrazo.replace('CONTRARRAÕES','CONTRARRAZÕES'); changed = true; }
+    if(!(p.observacao||'').includes('disponibilizado em 16/06/2026')){
+      p.observacao = [p.observacao, nota].filter(Boolean).join(' ');
+      changed = true;
+    }
+  });
+
+  (DB.publicacoes || []).filter(isNathalia).forEach(p=>{
+    if(p.dataPublicacao !== '2026-06-17'){ p.dataPublicacao = '2026-06-17'; changed = true; }
+    if(p.prazoFatal !== '2026-07-08'){ p.prazoFatal = '2026-07-08'; changed = true; }
+    if(p.prazoIdentificado !== 'Prazo fatal em 08 de julho de 2026'){
+      p.prazoIdentificado = 'Prazo fatal em 08 de julho de 2026';
+      changed = true;
+    }
+    if(!(p.observacoes||'').includes('disponibilizado em 16/06/2026')){
+      p.observacoes = [p.observacoes, nota].filter(Boolean).join(' ');
+      changed = true;
+    }
+  });
+
+  return changed;
+}
 
 async function loadDB(){
   try{
-    const saved = await storageApi.get();
-    if(saved){ DB = JSON.parse(saved); if(!DB.publicacoes) DB.publicacoes=[]; if(!DB.checklist) DB.checklist={exportBtn:false,tableCopy:false,apiEndpoints:false,webserviceContract:false}; return; }
+    const res = await window.storage.get('lc:data', false);
+    if(res && res.value){
+      DB = JSON.parse(res.value);
+      if(!DB.publicacoes) DB.publicacoes=[];
+      const changed = ensureFixedConfig() || applyDataMigrations() || applyKnownCorrections();
+      if(changed) await saveDB();
+      return;
+    }
   }catch(e){}
   DB = seedData();
+  ensureFixedConfig();
+  applyDataMigrations();
+  applyKnownCorrections();
   await saveDB();
 }
-async function saveDB(){ try{ await storageApi.set(JSON.stringify(DB)); }catch(e){ console.error('storage error', e); } }
+async function saveDB(){ try{ await window.storage.set('lc:data', JSON.stringify(DB), false); }catch(e){ console.error('storage error', e); } }
 function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), texto}); if(DB.historico.length>250) DB.historico.length=250; }
 
 let toastTimer;
@@ -470,65 +572,13 @@ function ringHTML(dias, done){
   return `<div class="selo-ring ring-${color}"><svg width="44" height="44"><circle class="bg" cx="22" cy="22" r="${r}"/><circle class="fg" cx="22" cy="22" r="${r}" stroke-dasharray="${C}" stroke-dashoffset="${offset}"/></svg><div class="num">${label}</div></div>`;
 }
 function pill(status, color){ return `<span class="pill st-${color}"><span class="dot"></span>${status}</span>`; }
-function isControlJusPub(p){
-  return String(p.refId||'').startsWith('CJ-') || !!p.controlJusId || String(p.linkOrigem||'').includes('controljus.com.br');
-}
 
 /* ===================== DASHBOARD EXECUTIVO ===================== */
-function renderDashboardControlJus(activePubs){
-  const todayIso = isoOf(TODAY);
-  const synced = activePubs.filter(isControlJusPub);
-  const semTratamento = synced.filter(p=>PUB_UNTREATED.includes(p.status)).length;
-  const hoje = synced.filter(p=>p.dataPublicacao===todayIso).length;
-  const comPrazo = synced.filter(p=>p.prazoIdentificado || detectPrazoText(p.textoRecorte)).length;
-  const semPrazo = synced.length - comPrazo;
-  const semResp = synced.filter(p=>PUB_UNTREATED.includes(p.status) && !p.responsavel).length;
-  const gerouPrazo = synced.filter(p=>p.status==='Gerou prazo' || p.prazoGeradoId).length;
-  const recentes = synced.slice().sort((a,b)=>new Date(b.dataPublicacao||0)-new Date(a.dataPublicacao||0)).slice(0,12);
-
-  const cards = [
-    {n:synced.length, l:'Publicações sincronizadas', c:'azul', go:'publicacoes'},
-    {n:hoje, l:'Publicadas hoje', c:'ink', go:'publicacoes'},
-    {n:semTratamento, l:'Sem tratamento', c:'vermelho', go:'publicacoes'},
-    {n:comPrazo, l:'Com prazo mencionado', c:'laranja', go:'publicacoes'},
-    {n:semPrazo, l:'Sem prazo identificado', c:'amarelo', go:'publicacoes'},
-    {n:gerouPrazo, l:'Já viraram prazo', c:'verde', go:'prazos'},
-    {n:semResp, l:'Sem responsável', c:'vermelho', go:'publicacoes'},
-    {n:DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status)).length, l:'Prazos cadastrados', c:'ink', go:'prazos'},
-  ];
-
-  let html = `<div class="grid-cards">${cards.map(c=>`<div class="card c-${c.c}" data-go="${c.go}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('')}</div>`;
-  html += `<div class="section-title">Fila ControlJus sincronizada <span class="cnt">${synced.length} recortes ativos</span></div>`;
-  if(recentes.length===0){
-    html += `<div class="empty">Nenhuma publicação sincronizada do ControlJus ainda.</div>`;
-  }else{
-    html += `<div class="plist">${recentes.map(p=>{
-      const prazoInfo = p.prazoIdentificado || detectPrazoText(p.textoRecorte);
-      const color = PUB_UNTREATED.includes(p.status) ? (prazoInfo ? 'laranja' : 'azul') : 'cinza';
-      return `
-        <div class="prow b-${color}">
-          ${ringHTML(null, !PUB_UNTREATED.includes(p.status))}
-          <div class="info">
-            <div class="top-line"><span class="cliente">${esc(p.cliente) || 'Cliente não identificado'}</span><span class="tribunal-tag">${esc(p.tribunal)||'CJ'}</span><span style="color:var(--ink-soft); font-weight:600; font-size:11px;">${esc(p.status)}</span></div>
-            <div class="proc">${esc(p.processo) || 'Processo não identificado'} · ${fmtDate(p.dataPublicacao)}</div>
-            <div class="desc">${prazoInfo ? esc(prazoInfo) + ' · ' : ''}${esc(compactText(p.textoRecorte, 210))}</div>
-          </div>
-          <div style="text-align:right; font-size:11.5px; color:var(--ink-soft); white-space:nowrap;">${p.responsavel ? esc(p.responsavel) : 'sem resp.'}</div>
-        </div>`;
-    }).join('')}</div>`;
-  }
-  html += `<div class="section-title">Prazos operacionais <span class="cnt">${DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status)).length} cadastrados</span></div>`;
-  html += `<div class="empty">Os números principais acima vêm da sincronização ControlJus. Para transformar recorte em prazo fatal, abra Publicações e use "Gerar prazo" no recorte tratado.</div>`;
-  document.getElementById('content').innerHTML = html;
-  document.querySelectorAll('.card[data-go]').forEach(c=>c.onclick=()=>{currentView=c.dataset.go; renderAll();});
-}
-
 function renderDashboard(){
   const activePrazos = DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
   const activeAudi = DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status));
   const activeTarefas = DB.tarefas.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
   const activePubs = DB.publicacoes.filter(p=>!PUB_ARCHIVED.includes(p.status));
-  if(activePubs.some(isControlJusPub)) return renderDashboardControlJus(activePubs);
 
   const vencidos = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)<0).length;
   const hoje = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)===0).length;
@@ -602,22 +652,20 @@ function renderPublicacoes(){
   html += `<div class="table-wrap"><table><thead><tr>
     <th data-s="dataPublicacao">Publicação</th><th>Cliente</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
   </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="10"><div class="empty">Nenhum recorte encontrado. Assim que o ControlJus liberar API, exportação ou acesso autorizado, os recortes chegarão aqui automaticamente.</div></td></tr>`; }
+  if(rows.length===0){ html += `<tr><td colspan="10"><div class="empty">Nenhum recorte encontrado. Assim que a conexão autorizada com o endpoint fixo do ControlJus estiver ativa, os recortes chegarão automaticamente.</div></td></tr>`; }
   rows.forEach(p=>{
     const archived = PUB_ARCHIVED.includes(p.status);
     const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
-    const prazoInfo = p.prazoIdentificado || detectPrazoText(p.textoRecorte);
-    const recorte = compactText(p.textoRecorte, 620);
     html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
       <td>${fmtDate(p.dataPublicacao)}</td>
-      <td class="cliente">${esc(p.cliente) || '<span class="muted-cell">sem cliente</span>'}</td>
-      <td class="proc">${esc(p.processo) || '<span class="muted-cell">sem processo</span>'}</td>
-      <td>${p.tribunal ? `<span class="tribunal-tag">${esc(p.tribunal)}</span>` : '<span class="muted-cell">—</span>'}</td>
-      <td>${esc(p.tipoPublicacao) || '<span class="muted-cell">—</span>'}</td>
-      <td class="texto"><div class="recorte-preview fade">${esc(recorte)}</div></td>
-      <td><div class="prazo-hint">${prazoInfo ? `<b>${esc(prazoInfo)}</b>` : '<span class="muted-cell">Sem prazo identificado</span>'}</div></td>
+      <td class="cliente">${p.cliente}</td>
+      <td class="proc">${p.processo}</td>
+      <td><span class="tribunal-tag">${p.tribunal}</span></td>
+      <td>${p.tipoPublicacao}</td>
+      <td class="texto">${p.textoRecorte}</td>
+      <td>${p.prazoIdentificado || '—'}</td>
       <td><select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td>${esc(p.responsavel) || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
+      <td>${p.responsavel || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
       <td class="row-actions">
         ${canGerarPrazo?`<button class="btn small azul" data-act="genprazo">Gerar prazo →</button>`:''}
         <button class="btn small ghost" data-act="edit">✎</button>
@@ -1078,12 +1126,12 @@ function renderHistorico(){
 
 /* ===================== INTEGRAÇÃO / ROADMAP ===================== */
 function renderIntegracao(){
+  ensureFixedConfig();
   const cl = DB.checklist;
   const checklistItems = [
-    {key:'exportBtn', label:'Existe botão "Exportar" na tela de recortes arquivados (Excel/CSV)?'},
-    {key:'tableCopy', label:'A tabela de recortes permite selecionar/copiar os dados?'},
-    {key:'apiEndpoints', label:'Há chamadas de API visíveis no navegador (DevTools → Network) ao carregar a tela?'},
-    {key:'webserviceContract', label:'O escritório já tem ou pode contratar um webservice/API oficial do ControlJus?'},
+    {key:'controlJusEndpoint', label:'Endpoint fixo do ControlJus gravado no LexFlow'},
+    {key:'authenticatedSession', label:'Sessão autorizada do escritório validada para consultar recortes'},
+    {key:'webserviceContract', label:'ControlJus confirmou API/webservice oficial para integração privada'},
   ];
   let html = `
     <div class="roadmap-hero">
@@ -1093,18 +1141,18 @@ function renderIntegracao(){
 
     <div class="section-title">Roteiro de integração</div>
     <div class="steps">
-      <div class="step done"><div class="step-num">1</div><div><h4>Protótipo <span class="tag">concluído</span></h4><p>Dados mockados a partir dos seus arquivos (PRAZOS_IGOR.xlsx e AUDIÊNCIAS_IGOR.pdf), com dashboard, prazos, audiências, tarefas, publicações e alertas — já funcionando e salvando dados neste navegador.</p></div></div>
-      <div class="step wip"><div class="step-num">2</div><div><h4>Testar o ControlJus logado <span class="tag">em andamento</span></h4><p>Entrar em <span class="mono">app.controljus.com.br/publicacoes/recortes/arquivadas</span> autenticado e verificar: botão de exportação, se a tabela permite copiar, se existem endpoints de API visíveis no navegador, e se há webservice contratado ou liberável. Use o checklist abaixo para registrar o que encontrar.</p></div></div>
-      <div class="step todo"><div class="step-num">3</div><div><h4>Conectar de verdade <span class="tag">planejado</span></h4><p>Ligar o LexFlow ao ControlJus pelo caminho que a etapa 2 revelar: API oficial, exportação CSV/Excel programada, automação autorizada, ou uma planilha intermediária no Google Sheets alimentada manualmente enquanto isso.</p></div></div>
+      <div class="step done"><div class="step-num">1</div><div><h4>Protótipo <span class="tag">concluído</span></h4><p>Dashboard, prazos, audiências, tarefas, publicações e alertas já funcionam com dados locais do navegador.</p></div></div>
+      <div class="step wip"><div class="step-num">2</div><div><h4>Endpoint fixo <span class="tag">em andamento</span></h4><p>O LexFlow usa uma rota fixa do ControlJus. O usuário não escolhe arquivo, não cola endpoint e não alimenta planilha intermediária.</p></div></div>
+      <div class="step todo"><div class="step-num">3</div><div><h4>Conexão privada <span class="tag">planejado</span></h4><p>Quando a API/webservice privada for confirmada pelo ControlJus, a integração usará o mesmo ponto de configuração gravado, sem alterar o fluxo do usuário.</p></div></div>
     </div>
 
-    <div class="section-title">Dois caminhos possíveis</div>
+    <div class="section-title">Endpoints gravados</div>
     <div class="path-cards">
-      <div class="path-card"><div class="path-tag">Caminho 1 · Ideal</div><h4>Pedir acesso à API/webservice</h4><p>Falar diretamente com o ControlJus sobre documentação de API ou webservice de publicações. É o caminho mais robusto e sustentável a longo prazo, com dados chegando automaticamente e sem risco de quebra por mudança na tela.</p></div>
-      <div class="path-card"><div class="path-tag">Caminho 2 · MVP rápido</div><h4>Login autorizado + rotina manual/semiautomática</h4><p>Entrar com login autorizado, exportar ou copiar os dados se a tela permitir, e alimentar o LexFlow por uma rotina intermediária enquanto o Caminho 1 não se confirma. Mais rápido de validar, exige mais disciplina operacional.</p></div>
+      <div class="path-card"><div class="path-tag">ControlJus · privado fixo</div><h4>Recortes arquivados autenticados</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Este é o endpoint operacional fixo do LexFlow para o ControlJus. Não haverá escolha de arquivo nem importação manual de dados.</p></div>
+      <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Endpoint público oficial validado para consulta DJEN/CNJ. Fica gravado para a fase de substituição gradual do ControlJus.</p></div>
     </div>
 
-    <div class="section-title">Checklist de teste no ControlJus <span class="cnt">marque conforme for verificando, logado</span></div>
+    <div class="section-title">Checklist de conexão <span class="cnt">sem importação por arquivo</span></div>
     <div class="table-wrap" style="padding:6px 18px;">
       <div class="checklist">
         ${checklistItems.map(c=>`<label class="check-item ${cl[c.key]?'checked':''}"><input type="checkbox" data-k="${c.key}" ${cl[c.key]?'checked':''}><span>${c.label}</span></label>`).join('')}
@@ -1126,204 +1174,31 @@ function showModal(){ document.getElementById('overlay').classList.add('open'); 
 function hideModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') hideModal(); });
 
-/* ===================== IMPORT / EXPORT ===================== */
-function parseCSV(text){
-  const rows = [];
-  let row = [], cell = '', quoted = false;
-  const src = text.replace(/^\uFEFF/, '');
-  for(let i=0;i<src.length;i++){
-    const ch = src[i], next = src[i+1];
-    if(ch === '"' && quoted && next === '"'){ cell += '"'; i++; continue; }
-    if(ch === '"'){ quoted = !quoted; continue; }
-    if(ch === ',' && !quoted){ row.push(cell); cell=''; continue; }
-    if((ch === '\n' || ch === '\r') && !quoted){
-      if(ch === '\r' && next === '\n') i++;
-      row.push(cell); cell='';
-      if(row.some(v=>v.trim())) rows.push(row);
-      row=[];
-      continue;
-    }
-    cell += ch;
-  }
-  row.push(cell);
-  if(row.some(v=>v.trim())) rows.push(row);
-  if(rows.length < 2) return [];
-  const headers = rows.shift().map(h=>h.trim());
-  return rows.map(cols=>{
-    const obj = {};
-    headers.forEach((h,i)=>obj[h]=cols[i]??'');
-    return obj;
-  });
-}
-
-function extractRowsFromJson(value){
-  if(Array.isArray(value)) return value.filter(item=>item && typeof item === 'object');
-  if(!value || typeof value !== 'object') return [];
-  const direct = value.recortes || value.publicacoes || value.publications || value.items || value.results || value.data;
-  if(Array.isArray(direct)) return direct;
-  const fromCaptured = Array.isArray(value.captured)
-    ? value.captured.flatMap(entry=>extractRowsFromJson(entry.body))
-    : [];
-  if(fromCaptured.length) return fromCaptured;
-  return Object.values(value).flatMap(v=>{
-    if(Array.isArray(v) && v.some(item=>item && typeof item === 'object')) return v;
-    return [];
-  });
-}
-
-function pick(row, names){
-  const keys = Object.keys(row);
-  for(const name of names){
-    const found = keys.find(k=>k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'') === name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
-    if(found && String(row[found]??'').trim()) return String(row[found]).trim();
-  }
-  return '';
-}
-
-function toISODate(value){
-  if(!value) return '';
-  const raw = String(value).trim();
-  if(/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0,10);
-  const br = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if(br) return `${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}`;
-  const pt = parsePtDate(raw);
-  if(pt) return isoOf(pt);
-  const dt = new Date(raw);
-  return isNaN(dt) ? '' : isoOf(dt);
-}
-
-function normalizeControlJusRows(rows){
-  return rows.map(row=>{
-    const processo = pick(row, ['processo','numeroProcesso','numero_processo','nProcesso','Nº do processo','N do processo']);
-    const cliente = pick(row, ['cliente','parte','nome','parteCliente','parte_cliente','interessado']);
-    const dataPublicacao = toISODate(pick(row, ['dataPublicacao','data_publicacao','publicacao','data','Data da publicacao','Data publicação']));
-    const textoRecorte = pick(row, ['textoRecorte','texto_recorte','recorte','texto','conteudo','publicacaoTexto','teor']);
-    const prazoDetectado = pick(row, ['prazoIdentificado','prazo_identificado','prazo','pendencia']) || detectPrazoText(textoRecorte);
-    return {
-      id:uid(),
-      refId:pick(row, ['refId','id','codigo','cod','controlJusId']) || `CJ-${processo || uid()}-${dataPublicacao || uid()}`,
-      dataPublicacao,
-      processo,
-      cliente,
-      tribunal:pick(row, ['tribunal','uf','orgao','estado']),
-      tipoPublicacao:pick(row, ['tipoPublicacao','tipo_publicacao','tipo','classe','categoria']) || 'Recorte ControlJus',
-      textoRecorte,
-      prazoIdentificado:prazoDetectado,
-      prazoFatal:toISODate(pick(row, ['prazoFatal','prazo_fatal','fatal','dataPrazo'])),
-      status:pick(row, ['status','situacao']) || 'Novo',
-      responsavel:pick(row, ['responsavel','usuario']),
-      observacoes:pick(row, ['observacoes','observacao','obs']),
-      linkOrigem:pick(row, ['linkOrigem','link_origem','url','link']) || 'https://app.controljus.com.br/publicacoes/recortes/arquivadas',
-      prazoGeradoId:''
-    };
-  }).filter(p=>p.processo || p.cliente || p.textoRecorte);
-}
-
-async function mergeControlJusPublicacoes(incoming, sourceName){
-  let added = 0, updated = 0;
-  incoming.forEach(pub=>{
-    const key = [pub.processo, pub.dataPublicacao, (pub.textoRecorte||'').slice(0,80)].join('|').toLowerCase();
-    const textKey = (pub.textoRecorte||'').slice(0,160).toLowerCase();
-    const idx = DB.publicacoes.findIndex(x=>{
-      const existingKey = [x.processo, x.dataPublicacao, (x.textoRecorte||'').slice(0,80)].join('|').toLowerCase();
-      const sameStructured = existingKey === key;
-      const sameRef = pub.refId && x.refId && pub.refId === x.refId;
-      const sameText = textKey && (x.textoRecorte||'').slice(0,160).toLowerCase() === textKey;
-      return sameStructured || sameRef || sameText;
-    });
-    if(idx >= 0){
-      DB.publicacoes[idx] = {...DB.publicacoes[idx], ...pub, id:DB.publicacoes[idx].id, status:DB.publicacoes[idx].status || pub.status, prazoGeradoId:DB.publicacoes[idx].prazoGeradoId || pub.prazoGeradoId};
-      updated++;
-    }else{
-      DB.publicacoes.push(pub);
-      added++;
-    }
-  });
-  logHist(`Sincronizacao ControlJus (${sourceName}): ${added} recortes novos, ${updated} atualizados.`);
-  await saveDB();
-  hideModal();
-  currentView = 'publicacoes';
-  renderAll();
-  toast(`ControlJus: ${added} novos, ${updated} atualizados`);
-}
-
-async function importControlJusText(text, sourceName){
-  let rows;
-  const trimmed = text.trim();
-  if(!trimmed){ toast('Arquivo vazio'); return; }
-  try{
-    if(trimmed[0] === '[' || trimmed[0] === '{'){
-      const parsed = JSON.parse(trimmed);
-      rows = extractRowsFromJson(parsed);
-    }else{
-      rows = parseCSV(text);
-    }
-  }catch(e){
-    toast('Nao consegui ler este arquivo');
-    return;
-  }
-  return mergeControlJusPublicacoes(normalizeControlJusRows(rows), sourceName);
-}
-
-function defaultControlJusApiUrl(){
-  const saved = localStorage.getItem('lexflow:controljusApiUrl');
-  if(saved) return saved;
-  if(location.hostname.endsWith('github.io')) return 'http://localhost:8787/api/controljus/publicacoes';
-  return location.protocol.startsWith('http') ? `${location.origin}/api/controljus/publicacoes` : 'http://localhost:8787/api/controljus/publicacoes';
-}
-
-async function syncControlJusDirect(){
-  const input = document.getElementById('cjApiUrl');
-  const apiUrl = (input?.value || '').trim() || defaultControlJusApiUrl();
-  localStorage.setItem('lexflow:controljusApiUrl', apiUrl);
-  const btn = document.getElementById('mSync');
-  if(btn){ btn.disabled = true; btn.textContent = 'Sincronizando...'; }
-  try{
-    const res = await fetch(apiUrl, {headers:{'Accept':'application/json'}});
-    if(!res.ok && res.status !== 202) throw new Error(`API respondeu ${res.status}`);
-    const payload = await res.json();
-    if(payload.sync?.status === 'processing'){
-      const hint = document.getElementById('cjSyncHint');
-      if(hint) hint.textContent = 'A API ja iniciou a sincronizacao. Aguarde alguns segundos e clique em Sincronizar agora novamente.';
-      toast('Sincronizacao em andamento');
-      return;
-    }
-    const rows = extractRowsFromJson(payload);
-    const incoming = normalizeControlJusRows(rows);
-    if(!incoming.length) throw new Error('Nenhuma publicacao retornada pela API');
-    await mergeControlJusPublicacoes(incoming, 'API direta');
-  }catch(e){
-    toast('API ControlJus indisponivel');
-    const hint = document.getElementById('cjSyncHint');
-    if(hint) hint.textContent = `Nao consegui sincronizar direto: ${e.message}. Se voce esta no GitHub Pages, rode npm run dev e use http://localhost:8787, ou informe a URL de um backend privado publicado.`;
-  }finally{
-    if(btn){ btn.disabled = false; btn.textContent = 'Sincronizar agora'; }
-  }
-}
-
+/* ===================== CONNECT / EXPORT ===================== */
 document.getElementById('importBtn').onclick = ()=>{
+  ensureFixedConfig();
   const box = document.getElementById('modalBox');
   box.innerHTML = `
-    <div class="modal-head"><h3>Conectar ao ControlJus</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-head"><h3>Endpoint ControlJus</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
-      <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">O consumo direto precisa de uma API privada do LexFlow rodando com o .env. O site publicado chama essa API, e a API faz o login no ControlJus sem expor usuario e senha no navegador.</p>
-      <div class="field"><label>Endpoint privado da API LexFlow</label><input id="cjApiUrl" value="${defaultControlJusApiUrl()}" placeholder="http://localhost:8787/api/controljus/publicacoes"></div>
-      <p id="cjSyncHint" style="font-size:12px; color:var(--ink-soft); line-height:1.45;">Para testar direto, rode <span class="mono">npm run dev</span> e acesse <span class="mono">http://localhost:8787</span>. O GitHub Pages sozinho nao executa a API do ControlJus.</p>
-      <div class="field"><label>Fallback manual (.json ou .csv)</label><input type="file" id="cjFile" accept=".json,.csv,text/csv,application/json"></div>
-      <div class="field"><label>Ou cole JSON/CSV</label><textarea id="cjPaste" placeholder="Opcional, apenas se a API direta nao estiver disponivel"></textarea></div>
+      <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">O LexFlow usa endpoint fixo gravado. Não haverá escolha de arquivo, importação manual ou cópia e cola de endereço.</p>
+      <div class="path-card" style="box-shadow:none;">
+        <div class="path-tag">ControlJus · privado fixo</div>
+        <h4>Recortes arquivados autenticados</h4>
+        <p><span class="mono">${DB.config.controlJusEndpoint}</span></p>
+      </div>
+      <div class="path-card" style="box-shadow:none;">
+        <div class="path-tag">CNJ · público oficial</div>
+        <h4>DJEN / Comunicações Processuais</h4>
+        <p><span class="mono">${DB.config.djenEndpoint}</span></p>
+      </div>
     </div>
-    <div class="modal-foot"><button class="btn" id="mGo">Ver roteiro</button><button class="btn" id="mImport">Importar arquivo</button><button class="btn primary" id="mSync">Sincronizar agora</button></div>
+    <div class="modal-foot"><button class="btn" id="mGo">Ver integração</button><button class="btn primary" id="mOk">Entendi</button></div>
   `;
   showModal();
   document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mOk').onclick = hideModal;
   document.getElementById('mGo').onclick = ()=>{ hideModal(); currentView='integracao'; renderAll(); };
-  document.getElementById('mSync').onclick = syncControlJusDirect;
-  document.getElementById('mImport').onclick = async ()=>{
-    const file = document.getElementById('cjFile').files[0];
-    if(file) return importControlJusText(await file.text(), file.name);
-    const pasted = document.getElementById('cjPaste').value;
-    return importControlJusText(pasted, 'texto colado');
-  };
 };
 
 function toCSV(rows, headers){
@@ -1357,6 +1232,7 @@ const TITLES = {
   integracao:['Integração ControlJus', 'Roteiro para conectar de verdade o LexFlow ao ControlJus'],
 };
 function renderAll(){
+  if(applyKnownCorrections()) saveDB();
   renderNav();
   const [title, sub] = TITLES[currentView];
   document.getElementById('pageTitle').textContent = title;
