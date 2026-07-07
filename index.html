@@ -268,6 +268,9 @@ const PUB_DONE = ['Concluído','Arquivado','Não gera prazo'];
 const CONTROLJUS_PRIVATE_ENDPOINT = 'https://app.controljus.com.br/publicacoes/recortes/arquivadas';
 const CONTROLJUS_ENDPOINT_MODE = 'controljus_authenticated_private_route';
 const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
+const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
+const isControlJusPrazo = p => Boolean(p && p.origemPublicacaoId);
+const isValidationPrazo = p => !isControlJusPrazo(p);
 
 /* ===================== SEED DATA ===================== */
 function seedData(){
@@ -353,7 +356,7 @@ function seedData(){
     };
   });
 
-  return {prazos, audiencias, tarefas:[], publicacoes, historico:[
+  return {dataVersion: APP_DATA_VERSION, prazos, audiencias, tarefas:[], publicacoes, historico:[
     {ts:new Date().toISOString(), texto:'Sistema iniciado. Prazos e audiências carregados; recortes simulados até a conexão autorizada com o endpoint fixo do ControlJus ser ativada.'}
   ], checklist:{controlJusEndpoint:false, authenticatedSession:false, webserviceContract:false}, config:{
     controlJusEndpoint: CONTROLJUS_PRIVATE_ENDPOINT,
@@ -503,13 +506,23 @@ async function loadDB(){
     const res = await window.storage.get('lc:data', false);
     if(res && res.value){
       DB = JSON.parse(res.value);
+      if(DB.dataVersion !== APP_DATA_VERSION){
+        DB = seedData();
+        DB.historico.unshift({ts:new Date().toISOString(), texto:'Base operacional recriada a partir da fonte oficial do LexFlow. Dados manuais antigos ficaram fora da operação e servem apenas para de-para/validação.'});
+        ensureFixedConfig();
+        applyKnownCorrections();
+        await saveDB();
+        return;
+      }
       if(!DB.publicacoes) DB.publicacoes=[];
+      DB.dataVersion = APP_DATA_VERSION;
       const changed = ensureFixedConfig() || applyDataMigrations() || applyKnownCorrections();
       if(changed) await saveDB();
       return;
     }
   }catch(e){}
   DB = seedData();
+  DB.dataVersion = APP_DATA_VERSION;
   ensureFixedConfig();
   applyDataMigrations();
   applyKnownCorrections();
@@ -536,7 +549,7 @@ let currentView = 'dashboard';
 
 function computeAlertCount(){
   let crit = 0;
-  DB.prazos.forEach(p=>{ if(PRAZO_DONE.includes(p.status)) return; const dr=diasRestantes(p.prazoFatal); if(dr!==null && dr<=0) crit++; });
+  DB.prazos.filter(isControlJusPrazo).forEach(p=>{ if(PRAZO_DONE.includes(p.status)) return; const dr=diasRestantes(p.prazoFatal); if(dr!==null && dr<=0) crit++; });
   DB.audiencias.forEach(a=>{ if(AUDI_DONE.includes(a.status)) return; const dr=diasRestantes(a.data); if(dr!==null && dr>=0 && dr<=1) crit++; });
   return crit;
 }
@@ -550,7 +563,7 @@ function renderNav(){
     VIEWS.filter(v=>v.group===g).forEach(v=>{
       let badge='';
       if(v.id==='publicacoes'){ const n=DB.publicacoes.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${DB.publicacoes.length}</span>`; }
-      if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
+      if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
       if(v.id==='audiencias') badge = `<span class="badge">${DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status)).length}</span>`;
       if(v.id==='tarefas') badge = `<span class="badge">${DB.tarefas.filter(t=>!TAREFA_DONE.includes(t.status)).length}</span>`;
       if(v.id==='alertas' && critCount>0) badge = `<span class="badge crit">${critCount}</span>`;
@@ -575,7 +588,7 @@ function pill(status, color){ return `<span class="pill st-${color}"><span class
 
 /* ===================== DASHBOARD EXECUTIVO ===================== */
 function renderDashboard(){
-  const activePrazos = DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
+  const activePrazos = DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status));
   const activeAudi = DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status));
   const activeTarefas = DB.tarefas.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
   const activePubs = DB.publicacoes.filter(p=>!PUB_ARCHIVED.includes(p.status));
@@ -647,7 +660,6 @@ function renderPublicacoes(){
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${pubFilters.cliente}">
     <select id="fStatus"><option value="">Todos os status</option>${PUB_STATUSES.map(s=>`<option ${pubFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
-    <button class="btn primary small" id="addPubBtn">+ Novo recorte</button>
   </div>`;
   html += `<div class="table-wrap"><table><thead><tr>
     <th data-s="dataPublicacao">Publicação</th><th>Cliente</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
@@ -679,7 +691,6 @@ function renderPublicacoes(){
   document.getElementById('fCliente').oninput = e=>{pubFilters.cliente=e.target.value; renderPublicacoes();};
   document.getElementById('fStatus').onchange = e=>{pubFilters.status=e.target.value; renderPublicacoes();};
   document.getElementById('fArch').onchange = e=>{pubFilters.showArchived=e.target.checked; renderPublicacoes();};
-  document.getElementById('addPubBtn').onclick = ()=>openPubModal(null);
   document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(pubFilters.sort===s) pubFilters.dir*=-1; else {pubFilters.sort=s; pubFilters.dir=-1;} renderPublicacoes(); });
   document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
     const id=tr.dataset.id; const p = DB.publicacoes.find(x=>x.id===id);
@@ -750,11 +761,12 @@ function openPubModal(p){
 }
 
 /* ===================== PRAZOS ===================== */
-let prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, sort:'prazoFatal', dir:1};
+let prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, showValidation:false, sort:'prazoFatal', dir:1};
 
 function renderPrazos(){
   const respSet = [...new Set(DB.prazos.map(p=>p.responsavel).filter(Boolean))];
   let rows = DB.prazos.slice();
+  if(!prazoFilters.showValidation) rows = rows.filter(isControlJusPrazo);
   if(!prazoFilters.showArchived) rows = rows.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
   if(prazoFilters.status) rows = rows.filter(p=>p.status===prazoFilters.status);
   if(prazoFilters.responsavel) rows = rows.filter(p=>p.responsavel===prazoFilters.responsavel);
@@ -765,8 +777,8 @@ function renderPrazos(){
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${prazoFilters.cliente}">
     <select id="fStatus"><option value="">Todos os status</option>${PRAZO_STATUSES.map(s=>`<option ${prazoFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <select id="fResp"><option value="">Todos os responsáveis</option>${respSet.map(r=>`<option ${prazoFilters.responsavel===r?'selected':''}>${r}</option>`).join('')}</select>
+    <label class="chk"><input type="checkbox" id="fValidation" ${prazoFilters.showValidation?'checked':''}> Mostrar validação/de-para</label>
     <label class="chk"><input type="checkbox" id="fArch" ${prazoFilters.showArchived?'checked':''}> Mostrar arquivados</label>
-    <button class="btn primary small" id="addPrazoBtn">+ Novo prazo</button>
   </div>`;
 
   html += `<div class="table-wrap"><table><thead><tr>
@@ -774,7 +786,7 @@ function renderPrazos(){
     <th data-s="dataPublicacao">Publicação</th><th>Tipo de prazo</th><th data-s="prazoFatal">Prazo fatal</th>
     <th>Restam</th><th>Responsável</th><th>Status</th><th>Prioridade</th><th></th>
   </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhum prazo encontrado com esses filtros.</div></td></tr>`; }
+  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhum prazo operacional encontrado. Dados manuais ficam ocultos por padrão e servem apenas para de-para/validação.</div></td></tr>`; }
   rows.forEach(p=>{
     const dr = diasRestantes(p.prazoFatal);
     const done = PRAZO_DONE.includes(p.status);
@@ -784,7 +796,7 @@ function renderPrazos(){
       <td class="cliente">${p.cliente}</td>
       <td class="proc">${p.processo}</td>
       <td><span class="tribunal-tag">${p.tribunal}</span></td>
-      <td>${p.origemPublicacaoId?`<span class="pill st-azul"><span class="dot"></span>ControlJus</span>`:'<span style="color:var(--ink-soft); font-size:11px;">manual</span>'}</td>
+      <td>${p.origemPublicacaoId?`<span class="pill st-azul"><span class="dot"></span>ControlJus</span>`:'<span class="pill st-cinza"><span class="dot"></span>Validação</span>'}</td>
       <td>${fmtDate(p.dataPublicacao)}</td>
       <td>${p.tipoPrazo}</td>
       <td>${fmtDate(p.prazoFatal)}</td>
@@ -804,8 +816,8 @@ function renderPrazos(){
   document.getElementById('fCliente').oninput = e=>{prazoFilters.cliente=e.target.value; renderPrazos();};
   document.getElementById('fStatus').onchange = e=>{prazoFilters.status=e.target.value; renderPrazos();};
   document.getElementById('fResp').onchange = e=>{prazoFilters.responsavel=e.target.value; renderPrazos();};
+  document.getElementById('fValidation').onchange = e=>{prazoFilters.showValidation=e.target.checked; renderPrazos();};
   document.getElementById('fArch').onchange = e=>{prazoFilters.showArchived=e.target.checked; renderPrazos();};
-  document.getElementById('addPrazoBtn').onclick = ()=>openPrazoModal(null);
   document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(prazoFilters.sort===s) prazoFilters.dir*=-1; else {prazoFilters.sort=s; prazoFilters.dir=1;} renderPrazos(); });
   document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
     const id = tr.dataset.id; const p = DB.prazos.find(x=>x.id===id);
@@ -1076,7 +1088,7 @@ function openTaskModal(t){
 
 /* ===================== ALERTAS ===================== */
 function renderAlertas(){
-  const activePrazos = DB.prazos.filter(p=>!PRAZO_DONE.includes(p.status));
+  const activePrazos = DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_DONE.includes(p.status));
   const activeAudi = DB.audiencias.filter(a=>!AUDI_DONE.includes(a.status));
   const activePubs = DB.publicacoes.filter(p=>!PUB_ARCHIVED.includes(p.status));
 
