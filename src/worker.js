@@ -2,7 +2,10 @@ import puppeteer from '@cloudflare/puppeteer';
 
 const CACHE_KEY = 'controljus:publicacoes:latest';
 const ERROR_KEY = 'controljus:last-error';
-const DEFAULT_CONTROLJUS_URL = 'https://app.controljus.com.br/publicacoes/recortes/arquivadas';
+const DEFAULT_CONTROLJUS_URLS = [
+  'https://app.controljus.com.br/publicacoes/recortes',
+  'https://app.controljus.com.br/publicacoes/recortes/arquivadas'
+];
 const DEFAULT_USER_SELECTOR = 'input[type="email"], input[name="email"], input[name="usuario"], input[name="login"], input[type="text"]';
 const DEFAULT_PASSWORD_SELECTOR = 'input[type="password"]';
 
@@ -49,6 +52,14 @@ function detectPrazoText(text){
   }
   if(!matches.length) return '';
   return matches.length === 1 ? `Prazo mencionado: ${matches[0]} dias` : `Prazos mencionados: ${matches.join(', ')} dias`;
+}
+
+function controlJusUrls(env){
+  const configured = (env.CONTROLJUS_URLS || env.CONTROLJUS_URL || '').trim();
+  const urls = configured
+    ? configured.split(',').map(url => url.trim()).filter(Boolean)
+    : DEFAULT_CONTROLJUS_URLS;
+  return [...new Set(urls)];
 }
 
 function normalizeRecorte(item, sourceUrl){
@@ -167,8 +178,8 @@ async function clickSubmit(page){
 
 async function fetchControlJusWithBrowser(env){
   assertNativeCollectorConfigured(env);
+  const urls = controlJusUrls(env);
   const cfg = {
-    url: env.CONTROLJUS_URL || DEFAULT_CONTROLJUS_URL,
     user: env.CONTROLJUS_USER,
     password: env.CONTROLJUS_PASSWORD,
     userSelector: env.CONTROLJUS_USER_SELECTOR || DEFAULT_USER_SELECTOR,
@@ -183,6 +194,7 @@ async function fetchControlJusWithBrowser(env){
     recortesResponses:0,
     rawRecortes:0,
     tableRows:0,
+    visitedUrls:[],
     needsLogin:false,
     loginSubmitted:false,
     passwordVisibleAfterLogin:false,
@@ -206,7 +218,7 @@ async function fetchControlJusWithBrowser(env){
   });
 
   try{
-    await page.goto(cfg.url, {waitUntil:'domcontentloaded', timeout:30000});
+    await page.goto(urls[0], {waitUntil:'domcontentloaded', timeout:30000});
     const passwordInput = await page.$(cfg.passwordSelector);
     diagnostics.needsLogin = Boolean(passwordInput);
     if(passwordInput){
@@ -236,19 +248,24 @@ async function fetchControlJusWithBrowser(env){
       diagnostics.loginSubmitted = true;
     }
 
-    await page.goto(cfg.url, {waitUntil:'domcontentloaded', timeout:30000});
-    await Promise.race([
-      new Promise(resolve => {
-        const tick = setInterval(() => {
-          if(captured.some(entry => entry.url.includes('/api/recortes/pesquisar'))){
-            clearInterval(tick);
-            resolve();
-          }
-        }, 500);
-      }),
-      sleep(25000)
-    ]);
-    await sleep(1500);
+    for(const targetUrl of urls){
+      const before = captured.filter(entry => entry.url.includes('/api/recortes/pesquisar')).length;
+      await page.goto(targetUrl, {waitUntil:'domcontentloaded', timeout:30000});
+      diagnostics.visitedUrls.push(targetUrl);
+      await Promise.race([
+        new Promise(resolve => {
+          const tick = setInterval(() => {
+            const current = captured.filter(entry => entry.url.includes('/api/recortes/pesquisar')).length;
+            if(current > before){
+              clearInterval(tick);
+              resolve();
+            }
+          }, 500);
+        }),
+        sleep(18000)
+      ]);
+      await sleep(1200);
+    }
 
     const tableRows = await page.$$eval('table tbody tr', rows => rows.map(row => ({
       cells:[...row.querySelectorAll('th,td')].map(cell => cell.innerText.trim())
@@ -262,14 +279,15 @@ async function fetchControlJusWithBrowser(env){
 
     const recortes = captured
       .filter(entry => entry.url.includes('/api/recortes/pesquisar'))
-      .flatMap(entry => Array.isArray(entry.body?.resultado) ? entry.body.resultado : []);
+      .flatMap(entry => Array.isArray(entry.body?.resultado) ? entry.body.resultado.map(item => ({...item, __sourceUrl:entry.url})) : []);
     const uniqueRecortes = [...new Map(recortes.map(item => [item.publicacaoId || item.id || JSON.stringify(item).slice(0, 100), item])).values()];
-    const publicacoes = uniqueRecortes.map(item => normalizeRecorte(item, cfg.url));
+    const publicacoes = uniqueRecortes.map(item => normalizeRecorte(item, item.__sourceUrl || urls[0]));
 
     return {
       source:'ControlJus',
       mode:'cloudflare_browser_run',
-      url:cfg.url,
+      url:urls[0],
+      urls,
       collectedAt:new Date().toISOString(),
       publicacoes,
       diagnostics:{
