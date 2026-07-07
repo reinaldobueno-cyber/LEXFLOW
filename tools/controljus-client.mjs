@@ -87,7 +87,10 @@ export async function fetchControlJusPublicacoes(options = {}){
     passwordVisibleAfterLogin:false,
     finalUrl:'',
     title:'',
-    bodyLength:0
+    bodyLength:0,
+    visibleInputs:0,
+    visibleButtons:0,
+    loginPageText:''
   };
   await page.route('**/*', route => {
     const type = route.request().resourceType();
@@ -112,22 +115,29 @@ export async function fetchControlJusPublicacoes(options = {}){
     const needsLogin = await page.locator(cfg.passwordSelector).first().isVisible().catch(() => false);
     diagnostics.needsLogin = needsLogin;
     if(needsLogin){
-      await page.locator(cfg.userSelector).first().fill(cfg.user);
-      await page.locator(cfg.passwordSelector).first().fill(cfg.password);
-      const submit = page.locator(cfg.submitSelector).first();
-      if(await submit.isVisible({timeout:5000}).catch(() => false)){
-        await Promise.all([
-          page.waitForLoadState('networkidle').catch(() => {}),
-          submit.click()
-        ]);
-      }else{
-        await Promise.all([
-          page.waitForLoadState('networkidle').catch(() => {}),
-          page.locator(cfg.passwordSelector).first().press('Enter')
-        ]);
+      const visibleInputs = page.locator('input:visible');
+      diagnostics.visibleInputs = await visibleInputs.count().catch(() => 0);
+      diagnostics.visibleButtons = await page.locator('button:visible, input[type="submit"]:visible').count().catch(() => 0);
+
+      const passwordInput = page.locator(cfg.passwordSelector).first();
+      const userInput = page.locator(cfg.userSelector).first();
+      await userInput.fill(cfg.user);
+      await passwordInput.fill(cfg.password);
+      await passwordInput.press('Enter').catch(() => {});
+      await page.waitForLoadState('networkidle', {timeout:8000}).catch(() => {});
+
+      if(await page.locator(cfg.passwordSelector).first().isVisible().catch(() => false)){
+        const submit = page.locator(cfg.submitSelector).first();
+        if(await submit.isVisible({timeout:5000}).catch(() => false)){
+          await Promise.all([
+            page.waitForLoadState('networkidle', {timeout:12000}).catch(() => {}),
+            submit.click({force:true})
+          ]);
+        }
       }
+
       diagnostics.loginSubmitted = true;
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(5000);
     }
 
     await page.goto(cfg.url, {waitUntil:'domcontentloaded'});
@@ -145,7 +155,9 @@ export async function fetchControlJusPublicacoes(options = {}){
     diagnostics.passwordVisibleAfterLogin = await page.locator(cfg.passwordSelector).first().isVisible().catch(() => false);
     diagnostics.finalUrl = page.url();
     diagnostics.title = await page.title().catch(() => '');
-    diagnostics.bodyLength = await page.locator('body').innerText({timeout:3000}).then(text => text.length).catch(() => 0);
+    const bodyText = await page.locator('body').innerText({timeout:3000}).catch(() => '');
+    diagnostics.bodyLength = bodyText.length;
+    diagnostics.loginPageText = diagnostics.passwordVisibleAfterLogin ? bodyText.slice(0, 240) : '';
 
     const recortes = captured
       .filter(entry => entry.url.includes('/api/recortes/pesquisar'))
