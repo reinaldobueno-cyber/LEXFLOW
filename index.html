@@ -285,7 +285,7 @@ const PUB_UNTREATED = ['Novo','Em análise'];
 const PUB_ARCHIVED = ['Arquivado'];
 const PUB_DONE = ['Concluído','Arquivado','Não gera prazo'];
 const CONTROLJUS_PRIVATE_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/controljus/publicacoes';
-const CONTROLJUS_ENDPOINT_MODE = 'lexflow_cloudflare_proxy_controljus';
+const CONTROLJUS_ENDPOINT_MODE = 'lexflow_cloudflare_browser_run_controljus';
 const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
 const isControlJusPrazo = p => Boolean(p && p.origemPublicacaoId);
@@ -1270,7 +1270,7 @@ function renderIntegracao(){
   const checklistItems = [
     {key:'controlJusEndpoint', label:'Endpoint fixo do ControlJus gravado no LexFlow'},
     {key:'authenticatedSession', label:'Sessão autorizada do escritório validada para consultar recortes'},
-    {key:'webserviceContract', label:'ControlJus confirmou API/webservice oficial para integração privada'},
+    {key:'webserviceContract', label:'Coletor Cloudflare Browser Run configurado com credenciais autorizadas'},
   ];
   let html = `
     <div class="roadmap-hero">
@@ -1281,13 +1281,13 @@ function renderIntegracao(){
     <div class="section-title">Roteiro de integração</div>
     <div class="steps">
       <div class="step done"><div class="step-num">1</div><div><h4>Protótipo <span class="tag">concluído</span></h4><p>Dashboard, prazos, audiências, tarefas, publicações e alertas já funcionam com dados locais do navegador.</p></div></div>
-      <div class="step wip"><div class="step-num">2</div><div><h4>Endpoint fixo <span class="tag">em andamento</span></h4><p>O LexFlow usa uma rota fixa do ControlJus. O usuário não escolhe arquivo, não cola endpoint e não alimenta planilha intermediária.</p></div></div>
-      <div class="step todo"><div class="step-num">3</div><div><h4>Conexão privada <span class="tag">planejado</span></h4><p>Quando a API/webservice privada for confirmada pelo ControlJus, a integração usará o mesmo ponto de configuração gravado, sem alterar o fluxo do usuário.</p></div></div>
+      <div class="step wip"><div class="step-num">2</div><div><h4>Endpoint fixo <span class="tag">em andamento</span></h4><p>O LexFlow usa uma rota fixa na Cloudflare. O usuário não escolhe arquivo, não cola endpoint e não alimenta planilha intermediária.</p></div></div>
+      <div class="step todo"><div class="step-num">3</div><div><h4>Credenciais autorizadas <span class="tag">próximo</span></h4><p>Ao configurar os secrets do ControlJus na Cloudflare, o coletor Browser Run passa a buscar os recortes automaticamente.</p></div></div>
     </div>
 
     <div class="section-title">Endpoints gravados</div>
     <div class="path-cards">
-      <div class="path-card"><div class="path-tag">LexFlow Cloudflare · rota fixa</div><h4>Proxy privado para recortes ControlJus</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Este é o endpoint operacional fixo do LexFlow. Ele fica no domínio Cloudflare do LexFlow e encaminha para o backend autenticado, sem escolha de arquivo nem importação manual.</p></div>
+      <div class="path-card"><div class="path-tag">LexFlow Cloudflare · rota fixa</div><h4>Coletor Browser Run para recortes ControlJus</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Este é o endpoint operacional fixo do LexFlow. Ele roda na Cloudflare, usa Browser Run para acessar o ControlJus com credenciais autorizadas e mantém cache em KV.</p></div>
       <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Endpoint público oficial validado para consulta DJEN/CNJ. Fica gravado para a fase de substituição gradual do ControlJus.</p></div>
     </div>
 
@@ -1340,7 +1340,7 @@ document.getElementById('importBtn').onclick = ()=>{
       <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">O LexFlow usa endpoint fixo gravado. Não haverá escolha de arquivo, importação manual ou cópia e cola de endereço.</p>
       <div class="path-card" style="box-shadow:none;">
         <div class="path-tag">LexFlow Cloudflare · rota fixa</div>
-        <h4>Proxy privado para recortes ControlJus</h4>
+        <h4>Coletor Browser Run para recortes ControlJus</h4>
         <p><span class="mono">${DB.config.controlJusEndpoint}</span></p>
       </div>
       <div class="path-card" style="box-shadow:none;">

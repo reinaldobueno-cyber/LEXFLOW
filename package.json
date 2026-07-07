@@ -8,6 +8,7 @@
     "deploy:cloudflare": "npm run build:cloudflare && wrangler deploy"
   },
   "devDependencies": {
+    "@cloudflare/puppeteer": "^1.1.0",
     "playwright": "^1.61.1",
     "wrangler": "^4.107.0"
   }

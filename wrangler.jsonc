@@ -3,9 +3,21 @@
   "name": "lexflow",
   "main": "src/worker.js",
   "compatibility_date": "2026-07-07",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "observability": {
     "enabled": true
   },
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "LEXFLOW_CACHE",
+      "id": "b0dad341d1bf4320bd7aa34e63eca2de"
+    }
+  ],
   "triggers": {
     "crons": [
       "*/30 11-23 * * mon-fri"
