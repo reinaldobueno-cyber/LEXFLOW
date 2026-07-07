@@ -105,7 +105,13 @@ tbody tr:hover{background:#FBFAF6;}
 tbody tr.archived{opacity:.55;}
 td.proc{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
 td.cliente{font-weight:600;}
-td.texto{max-width:220px; font-size:11.5px; color:var(--ink-soft);}
+td.texto{width:340px; max-width:340px; font-size:11.5px; color:var(--ink-soft);}
+.recorte-preview{max-height:78px; overflow:hidden; line-height:1.35;}
+.recorte-preview.fade{position:relative;}
+.recorte-preview.fade:after{content:''; position:absolute; left:0; right:0; bottom:0; height:22px; background:linear-gradient(transparent, var(--white));}
+.prazo-hint{font-size:11px; line-height:1.35; color:var(--ink-2); max-width:190px;}
+.prazo-hint b{color:var(--selo);}
+.muted-cell{color:var(--ink-soft); font-size:11px;}
 .row-actions{display:flex; gap:4px;}
 a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
 a.link-audi:hover{text-decoration:underline;}
@@ -237,6 +243,33 @@ function fmtDate(d){ if(!d) return '—'; const dt=(d instanceof Date)?d:new Dat
 function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); if(isNaN(dt)) return '—'; return dt.toLocaleString('pt-BR'); }
 function isoOf(d){ if(!d) return ''; const dt=(d instanceof Date)?d:new Date(d); return isNaN(dt)?'':dt.toISOString().slice(0,10); }
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+function esc(v){ return String(v??'').replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function compactText(v, max=520){
+  const text = String(v??'').replace(/\s+/g,' ').trim();
+  return text.length > max ? text.slice(0,max).trim() + '...' : text;
+}
+function detectPrazoText(text){
+  const raw = String(text??'').replace(/\s+/g,' ').trim();
+  if(!raw) return '';
+  const normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const words = {um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,vinte:20,trinta:30};
+  const matches = [];
+  const re = /prazo\s+(?:legal\s+)?(?:de|por|para|no prazo de)\s+(\d+|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|catorze|quinze|vinte|trinta)\s+dias?/g;
+  let m;
+  while((m = re.exec(normalized))){
+    const n = /^\d+$/.test(m[1]) ? Number(m[1]) : words[m[1]];
+    if(n && !matches.includes(n)) matches.push(n);
+  }
+  if(!matches.length){
+    const simple = normalized.match(/em\s+(\d+|cinco|dez|quinze|trinta)\s+dias?/);
+    if(simple){
+      const n = /^\d+$/.test(simple[1]) ? Number(simple[1]) : words[simple[1]];
+      if(n) matches.push(n);
+    }
+  }
+  if(!matches.length) return '';
+  return matches.length === 1 ? `Prazo mencionado: ${matches[0]} dias` : `Prazos mencionados: ${matches.join(', ')} dias`;
+}
 function diasRestantes(dateVal){
   const dt = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
   if(isNaN(dt)) return null;
@@ -521,16 +554,18 @@ function renderPublicacoes(){
   rows.forEach(p=>{
     const archived = PUB_ARCHIVED.includes(p.status);
     const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
+    const prazoInfo = p.prazoIdentificado || detectPrazoText(p.textoRecorte);
+    const recorte = compactText(p.textoRecorte, 620);
     html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
       <td>${fmtDate(p.dataPublicacao)}</td>
-      <td class="cliente">${p.cliente}</td>
-      <td class="proc">${p.processo}</td>
-      <td><span class="tribunal-tag">${p.tribunal}</span></td>
-      <td>${p.tipoPublicacao}</td>
-      <td class="texto">${p.textoRecorte}</td>
-      <td>${p.prazoIdentificado || '—'}</td>
+      <td class="cliente">${esc(p.cliente) || '<span class="muted-cell">sem cliente</span>'}</td>
+      <td class="proc">${esc(p.processo) || '<span class="muted-cell">sem processo</span>'}</td>
+      <td>${p.tribunal ? `<span class="tribunal-tag">${esc(p.tribunal)}</span>` : '<span class="muted-cell">—</span>'}</td>
+      <td>${esc(p.tipoPublicacao) || '<span class="muted-cell">—</span>'}</td>
+      <td class="texto"><div class="recorte-preview fade">${esc(recorte)}</div></td>
+      <td><div class="prazo-hint">${prazoInfo ? `<b>${esc(prazoInfo)}</b>` : '<span class="muted-cell">Sem prazo identificado</span>'}</div></td>
       <td><select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td>${p.responsavel || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
+      <td>${esc(p.responsavel) || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
       <td class="row-actions">
         ${canGerarPrazo?`<button class="btn small azul" data-act="genprazo">Gerar prazo →</button>`:''}
         <button class="btn small ghost" data-act="edit">✎</button>
@@ -1111,16 +1146,17 @@ function normalizeControlJusRows(rows){
     const cliente = pick(row, ['cliente','parte','nome','parteCliente','parte_cliente','interessado']);
     const dataPublicacao = toISODate(pick(row, ['dataPublicacao','data_publicacao','publicacao','data','Data da publicacao','Data publicação']));
     const textoRecorte = pick(row, ['textoRecorte','texto_recorte','recorte','texto','conteudo','publicacaoTexto','teor']);
+    const prazoDetectado = pick(row, ['prazoIdentificado','prazo_identificado','prazo','pendencia']) || detectPrazoText(textoRecorte);
     return {
       id:uid(),
-      refId:pick(row, ['id','refId','codigo','cod']) || `CJ-${processo || uid()}-${dataPublicacao || uid()}`,
+      refId:pick(row, ['refId','id','codigo','cod','controlJusId']) || `CJ-${processo || uid()}-${dataPublicacao || uid()}`,
       dataPublicacao,
       processo,
       cliente,
       tribunal:pick(row, ['tribunal','uf','orgao','estado']),
       tipoPublicacao:pick(row, ['tipoPublicacao','tipo_publicacao','tipo','classe','categoria']) || 'Recorte ControlJus',
       textoRecorte,
-      prazoIdentificado:pick(row, ['prazoIdentificado','prazo_identificado','prazo','pendencia']),
+      prazoIdentificado:prazoDetectado,
       prazoFatal:toISODate(pick(row, ['prazoFatal','prazo_fatal','fatal','dataPrazo'])),
       status:pick(row, ['status','situacao']) || 'Novo',
       responsavel:pick(row, ['responsavel','usuario']),
@@ -1135,9 +1171,16 @@ async function mergeControlJusPublicacoes(incoming, sourceName){
   let added = 0, updated = 0;
   incoming.forEach(pub=>{
     const key = [pub.processo, pub.dataPublicacao, (pub.textoRecorte||'').slice(0,80)].join('|').toLowerCase();
-    const idx = DB.publicacoes.findIndex(x=>[x.processo, x.dataPublicacao, (x.textoRecorte||'').slice(0,80)].join('|').toLowerCase() === key);
+    const textKey = (pub.textoRecorte||'').slice(0,160).toLowerCase();
+    const idx = DB.publicacoes.findIndex(x=>{
+      const existingKey = [x.processo, x.dataPublicacao, (x.textoRecorte||'').slice(0,80)].join('|').toLowerCase();
+      const sameStructured = existingKey === key;
+      const sameRef = pub.refId && x.refId && pub.refId === x.refId;
+      const sameText = textKey && (x.textoRecorte||'').slice(0,160).toLowerCase() === textKey;
+      return sameStructured || sameRef || sameText;
+    });
     if(idx >= 0){
-      DB.publicacoes[idx] = {...DB.publicacoes[idx], ...pub, id:DB.publicacoes[idx].id, prazoGeradoId:DB.publicacoes[idx].prazoGeradoId || pub.prazoGeradoId};
+      DB.publicacoes[idx] = {...DB.publicacoes[idx], ...pub, id:DB.publicacoes[idx].id, status:DB.publicacoes[idx].status || pub.status, prazoGeradoId:DB.publicacoes[idx].prazoGeradoId || pub.prazoGeradoId};
       updated++;
     }else{
       DB.publicacoes.push(pub);

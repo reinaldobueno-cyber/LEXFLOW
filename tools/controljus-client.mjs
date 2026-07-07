@@ -20,6 +20,29 @@ function isoDate(value){
   return dt.toISOString().slice(0, 10);
 }
 
+function detectPrazoText(text){
+  const raw = String(text??'').replace(/\s+/g,' ').trim();
+  if(!raw) return '';
+  const normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const words = {um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,vinte:20,trinta:30};
+  const matches = [];
+  const re = /prazo\s+(?:legal\s+)?(?:de|por|para|no prazo de)\s+(\d+|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|catorze|quinze|vinte|trinta)\s+dias?/g;
+  let m;
+  while((m = re.exec(normalized))){
+    const n = /^\d+$/.test(m[1]) ? Number(m[1]) : words[m[1]];
+    if(n && !matches.includes(n)) matches.push(n);
+  }
+  if(!matches.length){
+    const simple = normalized.match(/em\s+(\d+|cinco|dez|quinze|trinta)\s+dias?/);
+    if(simple){
+      const n = /^\d+$/.test(simple[1]) ? Number(simple[1]) : words[simple[1]];
+      if(n) matches.push(n);
+    }
+  }
+  if(!matches.length) return '';
+  return matches.length === 1 ? `Prazo mencionado: ${matches[0]} dias` : `Prazos mencionados: ${matches.join(', ')} dias`;
+}
+
 function normalizeRecorte(item, sourceUrl){
   const associado = Array.isArray(item.associadosEncontrados) ? item.associadosEncontrados[0] : null;
   const processo = item.processoEletronico || item.protocolo || item.publicacaoNumero || '';
@@ -33,7 +56,7 @@ function normalizeRecorte(item, sourceUrl){
     tribunal,
     tipoPublicacao: item.cadernoNome || item.diarioTipo || item.titulo || 'Recorte ControlJus',
     textoRecorte: texto,
-    prazoIdentificado: '',
+    prazoIdentificado: detectPrazoText(texto),
     prazoFatal: '',
     status: 'Novo',
     responsavel: '',
