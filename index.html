@@ -553,6 +553,14 @@ function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), text
 let toastTimer;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600); }
 
+function syncErrorMessage(payload){
+  const msg = payload?.sync?.message || payload?.error || payload?.lastError?.message || 'Falha ao sincronizar ControlJus';
+  if(/CONTROLJUS_USER|CONTROLJUS_PASSWORD|credenciais/i.test(msg)){
+    return 'Credenciais pendentes: configure CONTROLJUS_USER e CONTROLJUS_PASSWORD nos secrets da Cloudflare.';
+  }
+  return msg;
+}
+
 function controlJusPublicacaoKey(p){
   if(p.controlJusId) return `controljus:${p.controlJusId}`;
   if(p.refId) return `ref:${p.refId}`;
@@ -590,7 +598,13 @@ async function syncControlJusPublicacoes(force = true){
   const res = await fetch(url.toString(), {headers:{'Accept':'application/json'}});
   const payload = await res.json().catch(()=>({}));
   if(!res.ok && res.status !== 202){
-    throw new Error(payload?.sync?.message || payload?.error || payload?.lastError?.message || 'Falha ao sincronizar ControlJus');
+    const msg = syncErrorMessage(payload);
+    DB.config.lastControlJusSyncAt = new Date().toISOString();
+    DB.config.lastControlJusSyncStatus = /credenciais/i.test(msg) ? 'credenciais_pendentes' : 'erro';
+    DB.config.lastControlJusSyncError = msg;
+    logHist(`Sincronização ControlJus falhou: ${msg}`);
+    await saveDB();
+    throw new Error(msg);
   }
 
   const incoming = Array.isArray(payload.publicacoes) ? payload.publicacoes.map(normalizeControlJusPublicacao) : [];
@@ -619,6 +633,7 @@ async function syncControlJusPublicacoes(force = true){
   DB.config.lastControlJusSyncAt = payload.collectedAt || new Date().toISOString();
   DB.config.lastControlJusSyncStatus = payload.sync?.status || (res.status === 202 ? 'processing' : 'fresh');
   DB.config.lastControlJusSyncCount = incoming.length;
+  DB.config.lastControlJusSyncError = '';
   logHist(`Sincronização ControlJus concluída: ${created} novos recortes, ${updated} campos atualizados, ${incoming.length} recebidos.`);
   await saveDB();
   currentView = 'publicacoes';
@@ -1297,6 +1312,8 @@ function renderIntegracao(){
         <div class="path-tag">Status</div>
         <h4>${DB.config.lastControlJusSyncAt ? `Última sincronização: ${fmtDateTime(DB.config.lastControlJusSyncAt)}` : 'Aguardando primeira sincronização'}</h4>
         <p>Último estado: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Recortes recebidos: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
+        ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${DB.config.lastControlJusSyncError}</p>` : ''}
+        <p class="mono" style="font-size:11px; color:var(--ink-soft);">Secrets necessários: CONTROLJUS_USER e CONTROLJUS_PASSWORD</p>
         <p><button class="btn primary small" id="syncControlJusBtn">Sincronizar agora</button></p>
       </div>
     </div>
@@ -1347,6 +1364,7 @@ document.getElementById('importBtn').onclick = ()=>{
         <div class="path-tag">Última sincronização</div>
         <h4>${DB.config.lastControlJusSyncAt ? fmtDateTime(DB.config.lastControlJusSyncAt) : 'Ainda não executada'}</h4>
         <p>Status: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Recortes: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
+        ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${DB.config.lastControlJusSyncError}</p>` : '<p class="mono" style="font-size:11px; color:var(--ink-soft);">Para ativar: configurar CONTROLJUS_USER e CONTROLJUS_PASSWORD nos secrets da Cloudflare.</p>'}
       </div>
       <div class="path-card" style="box-shadow:none;">
         <div class="path-tag">CNJ · público oficial</div>
