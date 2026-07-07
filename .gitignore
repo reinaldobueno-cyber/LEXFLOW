@@ -5,3 +5,5 @@ controljus-session.json
 data/controljus-*.json
 data/controljus-*.csv
 node_modules/
+dist/
+.wrangler/

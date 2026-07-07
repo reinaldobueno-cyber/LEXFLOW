@@ -284,8 +284,8 @@ const PUB_STATUSES = ['Novo','Em análise','Gerou prazo','Não gera prazo','Tare
 const PUB_UNTREATED = ['Novo','Em análise'];
 const PUB_ARCHIVED = ['Arquivado'];
 const PUB_DONE = ['Concluído','Arquivado','Não gera prazo'];
-const CONTROLJUS_PRIVATE_ENDPOINT = 'https://app.controljus.com.br/publicacoes/recortes/arquivadas';
-const CONTROLJUS_ENDPOINT_MODE = 'controljus_authenticated_private_route';
+const CONTROLJUS_PRIVATE_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/controljus/publicacoes';
+const CONTROLJUS_ENDPOINT_MODE = 'lexflow_cloudflare_proxy_controljus';
 const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
 const isControlJusPrazo = p => Boolean(p && p.origemPublicacaoId);
@@ -370,7 +370,7 @@ function seedData(){
     return {
       id:uid(), refId:'PUB-'+p.processo, dataPublicacao:isoOf(parsePtDate(p.data)), processo:p.processo, cliente:p.cliente,
       tribunal:p.tribunal, tipoPublicacao:p.tipo, textoRecorte:p.texto, prazoIdentificado: p.prazoFatal?('Prazo fatal em '+p.prazoFatal):'', 
-      prazoFatal: isoOf(parsePtDate(p.prazoFatal)), status:p.status, responsavel:'', observacoes:'', linkOrigem:'https://app.controljus.com.br/publicacoes/recortes/arquivadas',
+      prazoFatal: isoOf(parsePtDate(p.prazoFatal)), status:p.status, responsavel:'', observacoes:'', linkOrigem:CONTROLJUS_PRIVATE_ENDPOINT,
       prazoGeradoId: linkedPrazoId
     };
   });
@@ -743,7 +743,7 @@ function renderPublicacoes(){
 
 function openPubModal(p){
   const isNew = !p;
-  const d = p || {id:uid(), refId:'PUB-'+uid(), dataPublicacao:'', processo:'', cliente:'', tribunal:'', tipoPublicacao:'', textoRecorte:'', prazoIdentificado:'', prazoFatal:'', status:'Novo', responsavel:'', observacoes:'', linkOrigem:'https://app.controljus.com.br/publicacoes/recortes/arquivadas', prazoGeradoId:''};
+  const d = p || {id:uid(), refId:'PUB-'+uid(), dataPublicacao:'', processo:'', cliente:'', tribunal:'', tipoPublicacao:'', textoRecorte:'', prazoIdentificado:'', prazoFatal:'', status:'Novo', responsavel:'', observacoes:'', linkOrigem:CONTROLJUS_PRIVATE_ENDPOINT, prazoGeradoId:''};
   const box = document.getElementById('modalBox');
   box.innerHTML = `
     <div class="modal-head"><h3>${isNew?'Novo recorte / publicação':'Editar recorte'}</h3><button class="close-x" id="mClose">✕</button></div>
@@ -1212,7 +1212,7 @@ function renderIntegracao(){
 
     <div class="section-title">Endpoints gravados</div>
     <div class="path-cards">
-      <div class="path-card"><div class="path-tag">ControlJus · privado fixo</div><h4>Recortes arquivados autenticados</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Este é o endpoint operacional fixo do LexFlow para o ControlJus. Não haverá escolha de arquivo nem importação manual de dados.</p></div>
+      <div class="path-card"><div class="path-tag">LexFlow Cloudflare · rota fixa</div><h4>Proxy privado para recortes ControlJus</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Este é o endpoint operacional fixo do LexFlow. Ele fica no domínio Cloudflare do LexFlow e encaminha para o backend autenticado, sem escolha de arquivo nem importação manual.</p></div>
       <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Endpoint público oficial validado para consulta DJEN/CNJ. Fica gravado para a fase de substituição gradual do ControlJus.</p></div>
     </div>
 
@@ -1247,8 +1247,8 @@ document.getElementById('importBtn').onclick = ()=>{
     <div class="modal-body">
       <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">O LexFlow usa endpoint fixo gravado. Não haverá escolha de arquivo, importação manual ou cópia e cola de endereço.</p>
       <div class="path-card" style="box-shadow:none;">
-        <div class="path-tag">ControlJus · privado fixo</div>
-        <h4>Recortes arquivados autenticados</h4>
+        <div class="path-tag">LexFlow Cloudflare · rota fixa</div>
+        <h4>Proxy privado para recortes ControlJus</h4>
         <p><span class="mono">${DB.config.controlJusEndpoint}</span></p>
       </div>
       <div class="path-card" style="box-shadow:none;">

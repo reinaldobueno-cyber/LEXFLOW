@@ -2,9 +2,13 @@
   "scripts": {
     "start": "node server.mjs",
     "dev": "node server.mjs",
-    "controljus:fetch": "node tools/controljus-fetch.mjs"
+    "controljus:fetch": "node tools/controljus-fetch.mjs",
+    "build:cloudflare": "node tools/build-cloudflare.mjs",
+    "dev:cloudflare": "npm run build:cloudflare && wrangler dev",
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler deploy"
   },
   "devDependencies": {
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "wrangler": "^4.107.0"
   }
 }
