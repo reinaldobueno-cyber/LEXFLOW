@@ -105,7 +105,20 @@ tbody tr:hover{background:#FBFAF6;}
 tbody tr.archived{opacity:.55;}
 td.proc{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
 td.cliente{font-weight:600;}
-td.texto{max-width:220px; font-size:11.5px; color:var(--ink-soft);}
+td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
+.pub-table{table-layout:fixed; min-width:1280px;}
+.pub-table th:nth-child(1){width:92px;}
+.pub-table th:nth-child(2){width:210px;}
+.pub-table th:nth-child(3){width:150px;}
+.pub-table th:nth-child(4){width:84px;}
+.pub-table th:nth-child(5){width:120px;}
+.pub-table th:nth-child(6){width:330px;}
+.pub-table th:nth-child(7){width:150px;}
+.pub-table th:nth-child(8){width:145px;}
+.pub-table th:nth-child(9){width:105px;}
+.pub-table th:nth-child(10){width:92px;}
+.recorte-preview{display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; line-height:1.35;}
+.recorte-meta{display:block; margin-top:4px; font-size:10.5px; color:var(--azul); font-weight:600;}
 .row-actions{display:flex; gap:4px;}
 a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
 a.link-audi:hover{text-decoration:underline;}
@@ -552,6 +565,16 @@ function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), text
 
 let toastTimer;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600); }
+function cleanText(v){ return String(v??'').replace(/\u0000/g,' ').replace(/\s+/g,' ').trim(); }
+function esc(v){ return cleanText(v).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function recortePreview(text){
+  const cleaned = cleanText(text);
+  if(!cleaned) return '—';
+  return cleaned.length > 360 ? cleaned.slice(0,360).trim() + '...' : cleaned;
+}
+function controlJusSyncOk(){
+  return ['fresh','fresh_native','cached','cached_native','stale_after_error'].includes(DB.config?.lastControlJusSyncStatus);
+}
 
 function syncErrorMessage(payload){
   const msg = payload?.sync?.message || payload?.error || payload?.lastError?.message || 'Falha ao sincronizar ControlJus';
@@ -578,7 +601,7 @@ function normalizeControlJusPublicacao(p){
     cliente:p.cliente || '',
     tribunal:p.tribunal || '',
     tipoPublicacao:p.tipoPublicacao || 'Recorte ControlJus',
-    textoRecorte:p.textoRecorte || '',
+    textoRecorte:cleanText(p.textoRecorte || ''),
     prazoIdentificado:p.prazoIdentificado || '',
     prazoFatal:p.prazoFatal || '',
     status:p.status || 'Novo',
@@ -788,23 +811,25 @@ function renderPublicacoes(){
     <select id="fStatus"><option value="">Todos os status</option>${PUB_STATUSES.map(s=>`<option ${pubFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
   </div>`;
-  html += `<div class="table-wrap"><table><thead><tr>
+  html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
     <th data-s="dataPublicacao">Publicação</th><th>Cliente</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
   </tr></thead><tbody>`;
   if(rows.length===0){ html += `<tr><td colspan="10"><div class="empty">Nenhum recorte encontrado. Assim que a conexão autorizada com o endpoint fixo do ControlJus estiver ativa, os recortes chegarão automaticamente.</div></td></tr>`; }
   rows.forEach(p=>{
     const archived = PUB_ARCHIVED.includes(p.status);
     const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
+    const preview = recortePreview(p.textoRecorte);
+    const recorteLen = cleanText(p.textoRecorte).length;
     html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
-      <td>${fmtDate(p.dataPublicacao)}</td>
-      <td class="cliente">${p.cliente}</td>
-      <td class="proc">${p.processo}</td>
-      <td><span class="tribunal-tag">${p.tribunal}</span></td>
-      <td>${p.tipoPublicacao}</td>
-      <td class="texto">${p.textoRecorte}</td>
-      <td>${p.prazoIdentificado || '—'}</td>
+      <td>${esc(fmtDate(p.dataPublicacao))}</td>
+      <td class="cliente">${esc(p.cliente || '—')}</td>
+      <td class="proc">${esc(p.processo || '—')}</td>
+      <td><span class="tribunal-tag">${esc(p.tribunal || '—')}</span></td>
+      <td>${esc(p.tipoPublicacao || '—')}</td>
+      <td class="texto"><div class="recorte-preview">${esc(preview)}</div>${recorteLen>360?'<span class="recorte-meta">Texto completo no editar</span>':''}</td>
+      <td>${esc(p.prazoIdentificado || '—')}</td>
       <td><select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td>${p.responsavel || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
+      <td>${p.responsavel ? esc(p.responsavel) : '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
       <td class="row-actions">
         ${canGerarPrazo?`<button class="btn small azul" data-act="genprazo">Gerar prazo →</button>`:''}
         <button class="btn small ghost" data-act="edit">✎</button>
@@ -839,25 +864,25 @@ function openPubModal(p){
     <div class="modal-head"><h3>${isNew?'Novo recorte / publicação':'Editar recorte'}</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
       <div class="field-row">
-        <div class="field"><label>Data da publicação</label><input type="date" id="mData" value="${d.dataPublicacao}"></div>
-        <div class="field"><label>Tribunal</label><input id="mTribunal" value="${d.tribunal}"></div>
+        <div class="field"><label>Data da publicação</label><input type="date" id="mData" value="${esc(d.dataPublicacao)}"></div>
+        <div class="field"><label>Tribunal</label><input id="mTribunal" value="${esc(d.tribunal)}"></div>
       </div>
-      <div class="field"><label>Cliente / parte</label><input id="mCliente" value="${d.cliente}"></div>
+      <div class="field"><label>Cliente / parte</label><input id="mCliente" value="${esc(d.cliente)}"></div>
       <div class="field-row">
-        <div class="field"><label>Nº do processo</label><input id="mProcesso" class="mono" value="${d.processo}"></div>
-        <div class="field"><label>Tipo de publicação</label><input id="mTipo" value="${d.tipoPublicacao}" placeholder="Decisão, despacho, sentença..."></div>
+        <div class="field"><label>Nº do processo</label><input id="mProcesso" class="mono" value="${esc(d.processo)}"></div>
+        <div class="field"><label>Tipo de publicação</label><input id="mTipo" value="${esc(d.tipoPublicacao)}" placeholder="Decisão, despacho, sentença..."></div>
       </div>
-      <div class="field"><label>Texto do recorte</label><textarea id="mTexto">${d.textoRecorte}</textarea></div>
+      <div class="field"><label>Texto do recorte</label><textarea id="mTexto">${esc(d.textoRecorte)}</textarea></div>
       <div class="field-row">
-        <div class="field"><label>Prazo identificado (texto livre)</label><input id="mPrazoId" value="${d.prazoIdentificado}"></div>
-        <div class="field"><label>Prazo fatal (se aplicável)</label><input type="date" id="mFatal" value="${d.prazoFatal}"></div>
+        <div class="field"><label>Prazo identificado (texto livre)</label><input id="mPrazoId" value="${esc(d.prazoIdentificado)}"></div>
+        <div class="field"><label>Prazo fatal (se aplicável)</label><input type="date" id="mFatal" value="${esc(d.prazoFatal)}"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Status de tratamento</label><select id="mStatus">${PUB_STATUSES.map(s=>`<option ${d.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
-        <div class="field"><label>Responsável</label><input id="mResp" value="${d.responsavel}"></div>
+        <div class="field"><label>Responsável</label><input id="mResp" value="${esc(d.responsavel)}"></div>
       </div>
-      <div class="field"><label>Link para origem no ControlJus</label><input id="mLink" value="${d.linkOrigem}"></div>
-      <div class="field"><label>Observações</label><textarea id="mObs">${d.observacoes}</textarea></div>
+      <div class="field"><label>Link para origem no ControlJus</label><input id="mLink" value="${esc(d.linkOrigem)}"></div>
+      <div class="field"><label>Observações</label><textarea id="mObs">${esc(d.observacoes)}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar recorte</button></div>
   `;
@@ -1256,9 +1281,9 @@ function renderAlertas(){
         return `<div class="prow b-${g.color}">
           ${ringHTML(dr, false)}
           <div class="info">
-            <div class="top-line"><span class="cliente">${it.cliente}</span><span class="tribunal-tag">${isAudi?it.estado:it.tribunal}</span></div>
-            <div class="proc">${it.processo}</div>
-            <div class="desc">${isPub?it.textoRecorte:(isAudi?it.tipo:it.tipoPrazo)}</div>
+            <div class="top-line"><span class="cliente">${esc(it.cliente)}</span><span class="tribunal-tag">${esc(isAudi?it.estado:it.tribunal)}</span></div>
+            <div class="proc">${esc(it.processo)}</div>
+            <div class="desc">${esc(isPub?recortePreview(it.textoRecorte):(isAudi?it.tipo:it.tipoPrazo))}</div>
           </div>
           <div style="text-align:right; font-size:11.5px; color:var(--ink-soft); white-space:nowrap;">${fmtDate(isAudi?it.data:(it.prazoFatal||it.dataPublicacao))}</div>
         </div>`;
@@ -1312,8 +1337,8 @@ function renderIntegracao(){
         <div class="path-tag">Status</div>
         <h4>${DB.config.lastControlJusSyncAt ? `Última sincronização: ${fmtDateTime(DB.config.lastControlJusSyncAt)}` : 'Aguardando primeira sincronização'}</h4>
         <p>Último estado: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Recortes recebidos: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
-        ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${DB.config.lastControlJusSyncError}</p>` : ''}
-        <p class="mono" style="font-size:11px; color:var(--ink-soft);">Secrets necessários: CONTROLJUS_USER e CONTROLJUS_PASSWORD</p>
+        ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${esc(DB.config.lastControlJusSyncError)}</p>` : ''}
+        <p class="mono" style="font-size:11px; color:var(--ink-soft);">${controlJusSyncOk() ? 'Coletor ativo na Cloudflare. Recortes sincronizados via Browser Run.' : 'Secrets necessários: CONTROLJUS_USER e CONTROLJUS_PASSWORD'}</p>
         <p><button class="btn primary small" id="syncControlJusBtn">Sincronizar agora</button></p>
       </div>
     </div>
@@ -1364,7 +1389,7 @@ document.getElementById('importBtn').onclick = ()=>{
         <div class="path-tag">Última sincronização</div>
         <h4>${DB.config.lastControlJusSyncAt ? fmtDateTime(DB.config.lastControlJusSyncAt) : 'Ainda não executada'}</h4>
         <p>Status: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Recortes: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
-        ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${DB.config.lastControlJusSyncError}</p>` : '<p class="mono" style="font-size:11px; color:var(--ink-soft);">Para ativar: configurar CONTROLJUS_USER e CONTROLJUS_PASSWORD nos secrets da Cloudflare.</p>'}
+        ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${esc(DB.config.lastControlJusSyncError)}</p>` : `<p class="mono" style="font-size:11px; color:var(--ink-soft);">${controlJusSyncOk() ? 'Coletor ativo na Cloudflare. Recortes sincronizados via Browser Run.' : 'Para ativar: configurar CONTROLJUS_USER e CONTROLJUS_PASSWORD nos secrets da Cloudflare.'}</p>`}
       </div>
       <div class="path-card" style="box-shadow:none;">
         <div class="path-tag">CNJ · público oficial</div>
