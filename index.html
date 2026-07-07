@@ -470,13 +470,65 @@ function ringHTML(dias, done){
   return `<div class="selo-ring ring-${color}"><svg width="44" height="44"><circle class="bg" cx="22" cy="22" r="${r}"/><circle class="fg" cx="22" cy="22" r="${r}" stroke-dasharray="${C}" stroke-dashoffset="${offset}"/></svg><div class="num">${label}</div></div>`;
 }
 function pill(status, color){ return `<span class="pill st-${color}"><span class="dot"></span>${status}</span>`; }
+function isControlJusPub(p){
+  return String(p.refId||'').startsWith('CJ-') || !!p.controlJusId || String(p.linkOrigem||'').includes('controljus.com.br');
+}
 
 /* ===================== DASHBOARD EXECUTIVO ===================== */
+function renderDashboardControlJus(activePubs){
+  const todayIso = isoOf(TODAY);
+  const synced = activePubs.filter(isControlJusPub);
+  const semTratamento = synced.filter(p=>PUB_UNTREATED.includes(p.status)).length;
+  const hoje = synced.filter(p=>p.dataPublicacao===todayIso).length;
+  const comPrazo = synced.filter(p=>p.prazoIdentificado || detectPrazoText(p.textoRecorte)).length;
+  const semPrazo = synced.length - comPrazo;
+  const semResp = synced.filter(p=>PUB_UNTREATED.includes(p.status) && !p.responsavel).length;
+  const gerouPrazo = synced.filter(p=>p.status==='Gerou prazo' || p.prazoGeradoId).length;
+  const recentes = synced.slice().sort((a,b)=>new Date(b.dataPublicacao||0)-new Date(a.dataPublicacao||0)).slice(0,12);
+
+  const cards = [
+    {n:synced.length, l:'Publicações sincronizadas', c:'azul', go:'publicacoes'},
+    {n:hoje, l:'Publicadas hoje', c:'ink', go:'publicacoes'},
+    {n:semTratamento, l:'Sem tratamento', c:'vermelho', go:'publicacoes'},
+    {n:comPrazo, l:'Com prazo mencionado', c:'laranja', go:'publicacoes'},
+    {n:semPrazo, l:'Sem prazo identificado', c:'amarelo', go:'publicacoes'},
+    {n:gerouPrazo, l:'Já viraram prazo', c:'verde', go:'prazos'},
+    {n:semResp, l:'Sem responsável', c:'vermelho', go:'publicacoes'},
+    {n:DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status)).length, l:'Prazos cadastrados', c:'ink', go:'prazos'},
+  ];
+
+  let html = `<div class="grid-cards">${cards.map(c=>`<div class="card c-${c.c}" data-go="${c.go}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('')}</div>`;
+  html += `<div class="section-title">Fila ControlJus sincronizada <span class="cnt">${synced.length} recortes ativos</span></div>`;
+  if(recentes.length===0){
+    html += `<div class="empty">Nenhuma publicação sincronizada do ControlJus ainda.</div>`;
+  }else{
+    html += `<div class="plist">${recentes.map(p=>{
+      const prazoInfo = p.prazoIdentificado || detectPrazoText(p.textoRecorte);
+      const color = PUB_UNTREATED.includes(p.status) ? (prazoInfo ? 'laranja' : 'azul') : 'cinza';
+      return `
+        <div class="prow b-${color}">
+          ${ringHTML(null, !PUB_UNTREATED.includes(p.status))}
+          <div class="info">
+            <div class="top-line"><span class="cliente">${esc(p.cliente) || 'Cliente não identificado'}</span><span class="tribunal-tag">${esc(p.tribunal)||'CJ'}</span><span style="color:var(--ink-soft); font-weight:600; font-size:11px;">${esc(p.status)}</span></div>
+            <div class="proc">${esc(p.processo) || 'Processo não identificado'} · ${fmtDate(p.dataPublicacao)}</div>
+            <div class="desc">${prazoInfo ? esc(prazoInfo) + ' · ' : ''}${esc(compactText(p.textoRecorte, 210))}</div>
+          </div>
+          <div style="text-align:right; font-size:11.5px; color:var(--ink-soft); white-space:nowrap;">${p.responsavel ? esc(p.responsavel) : 'sem resp.'}</div>
+        </div>`;
+    }).join('')}</div>`;
+  }
+  html += `<div class="section-title">Prazos operacionais <span class="cnt">${DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status)).length} cadastrados</span></div>`;
+  html += `<div class="empty">Os números principais acima vêm da sincronização ControlJus. Para transformar recorte em prazo fatal, abra Publicações e use "Gerar prazo" no recorte tratado.</div>`;
+  document.getElementById('content').innerHTML = html;
+  document.querySelectorAll('.card[data-go]').forEach(c=>c.onclick=()=>{currentView=c.dataset.go; renderAll();});
+}
+
 function renderDashboard(){
   const activePrazos = DB.prazos.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
   const activeAudi = DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status));
   const activeTarefas = DB.tarefas.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
   const activePubs = DB.publicacoes.filter(p=>!PUB_ARCHIVED.includes(p.status));
+  if(activePubs.some(isControlJusPub)) return renderDashboardControlJus(activePubs);
 
   const vencidos = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)<0).length;
   const hoje = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)===0).length;
