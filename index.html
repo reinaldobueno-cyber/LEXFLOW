@@ -565,6 +565,7 @@ const VIEWS = [
   {id:'integracao', label:'Integração ControlJus', icon:'⇄', group:'sec'},
 ];
 let currentView = 'dashboard';
+let dashboardFilter = null;
 
 function computeAlertCount(){
   let crit = 0;
@@ -590,7 +591,22 @@ function renderNav(){
     });
   });
   nav.innerHTML = html;
-  nav.querySelectorAll('button').forEach(b=>b.onclick = ()=>{ currentView=b.dataset.view; renderAll(); });
+  nav.querySelectorAll('button').forEach(b=>b.onclick = ()=>{ dashboardFilter=null; currentView=b.dataset.view; renderAll(); });
+}
+
+function openDashboardFilter(view, filter){
+  dashboardFilter = filter;
+  currentView = view;
+  if(view==='prazos'){
+    prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, showValidation:false, sort:'prazoFatal', dir:1};
+  }
+  if(view==='publicacoes'){
+    pubFilters = {status:'', cliente:'', showArchived:false, sort:'dataPublicacao', dir:-1};
+  }
+  if(view==='audiencias'){
+    audiFilters = {status:'', cliente:'', showArchived:false, sort:'data', dir:1};
+  }
+  renderAll();
 }
 
 function ringHTML(dias, done){
@@ -623,17 +639,17 @@ function renderDashboard(){
   const itensCriticos = vencidos + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&diasRestantes(a.data)===0).length + semRespTotal;
 
   const cards = [
-    {n:vencidos, l:'Prazos vencidos', c:'vermelho', go:'prazos'},
-    {n:hoje, l:'Vencem hoje', c:'vermelho', go:'prazos'},
-    {n:em3, l:'Próximos 3 dias', c:'laranja', go:'prazos'},
-    {n:em7, l:'Próximos 7 dias', c:'amarelo', go:'prazos'},
-    {n:pubSemTratamento, l:'Publicações sem tratamento', c:'azul', go:'publicacoes'},
-    {n:tarefasSemResp, l:'Tarefas sem responsável', c:'ink', go:'tarefas'},
-    {n:audiProximas, l:'Audiências próximas (7d)', c:'ink', go:'audiencias'},
-    {n:itensCriticos, l:'Itens críticos', c:'vermelho', go:'alertas'},
+    {n:vencidos, l:'Prazos vencidos', c:'vermelho', go:'prazos', filter:'prazos_vencidos'},
+    {n:hoje, l:'Vencem hoje', c:'vermelho', go:'prazos', filter:'prazos_hoje'},
+    {n:em3, l:'Próximos 3 dias', c:'laranja', go:'prazos', filter:'prazos_3'},
+    {n:em7, l:'Próximos 7 dias', c:'amarelo', go:'prazos', filter:'prazos_7'},
+    {n:pubSemTratamento, l:'Publicações sem tratamento', c:'azul', go:'publicacoes', filter:'pub_sem_tratamento'},
+    {n:tarefasSemResp, l:'Tarefas sem responsável', c:'ink', go:'tarefas', filter:'tarefas_sem_resp'},
+    {n:audiProximas, l:'Audiências próximas (7d)', c:'ink', go:'audiencias', filter:'audi_7'},
+    {n:itensCriticos, l:'Itens críticos', c:'vermelho', go:'alertas', filter:'criticos'},
   ];
 
-  let html = `<div class="grid-cards">${cards.map(c=>`<div class="card c-${c.c}" data-go="${c.go}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('')}</div>`;
+  let html = `<div class="grid-cards">${cards.map(c=>`<div class="card c-${c.c}" data-go="${c.go}" data-filter="${c.filter}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('')}</div>`;
 
   const items = [];
   activePrazos.filter(p=>!PRAZO_DONE.includes(p.status)).forEach(p=>{
@@ -662,7 +678,7 @@ function renderDashboard(){
       </div>`).join('')}</div>`;
   }
   document.getElementById('content').innerHTML = html;
-  document.querySelectorAll('.card[data-go]').forEach(c=>c.onclick=()=>{currentView=c.dataset.go; renderAll();});
+  document.querySelectorAll('.card[data-go]').forEach(c=>c.onclick=()=>{ openDashboardFilter(c.dataset.go, c.dataset.filter); });
 }
 
 /* ===================== PUBLICAÇÕES / RECORTES ===================== */
@@ -670,12 +686,14 @@ let pubFilters = {status:'', cliente:'', showArchived:false, sort:'dataPublicaca
 
 function renderPublicacoes(){
   let rows = DB.publicacoes.slice();
+  if(dashboardFilter==='pub_sem_tratamento') rows = rows.filter(p=>PUB_UNTREATED.includes(p.status));
   if(!pubFilters.showArchived) rows = rows.filter(p=>!PUB_ARCHIVED.includes(p.status));
   if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
   if(pubFilters.cliente) rows = rows.filter(p=>p.cliente.toLowerCase().includes(pubFilters.cliente.toLowerCase())||p.processo.toLowerCase().includes(pubFilters.cliente.toLowerCase()));
   rows.sort((a,b)=>{ let va=parseDateLocal(a[pubFilters.sort])||new Date(0), vb=parseDateLocal(b[pubFilters.sort])||new Date(0); if(va<vb) return -1*pubFilters.dir; if(va>vb) return 1*pubFilters.dir; return 0; });
 
-  let html = `<div class="filters">
+  const filterNote = dashboardFilter==='pub_sem_tratamento' ? `<div class="section-title">Filtro: Publicações sem tratamento <span class="cnt">${rows.length}</span></div>` : '';
+  let html = `${filterNote}<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${pubFilters.cliente}">
     <select id="fStatus"><option value="">Todos os status</option>${PUB_STATUSES.map(s=>`<option ${pubFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
@@ -787,12 +805,23 @@ function renderPrazos(){
   let rows = DB.prazos.slice();
   if(!prazoFilters.showValidation) rows = rows.filter(isControlJusPrazo);
   if(!prazoFilters.showArchived) rows = rows.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
+  if(dashboardFilter==='prazos_vencidos') rows = rows.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)<0);
+  if(dashboardFilter==='prazos_hoje') rows = rows.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)===0);
+  if(dashboardFilter==='prazos_3') rows = rows.filter(p=>{ if(PRAZO_DONE.includes(p.status)) return false; const d=diasRestantes(p.prazoFatal); return d>0 && d<=3; });
+  if(dashboardFilter==='prazos_7') rows = rows.filter(p=>{ if(PRAZO_DONE.includes(p.status)) return false; const d=diasRestantes(p.prazoFatal); return d>3 && d<=7; });
   if(prazoFilters.status) rows = rows.filter(p=>p.status===prazoFilters.status);
   if(prazoFilters.responsavel) rows = rows.filter(p=>p.responsavel===prazoFilters.responsavel);
   if(prazoFilters.cliente) rows = rows.filter(p=>p.cliente.toLowerCase().includes(prazoFilters.cliente.toLowerCase()) || p.processo.toLowerCase().includes(prazoFilters.cliente.toLowerCase()));
   rows.sort((a,b)=>{ let va=a[prazoFilters.sort], vb=b[prazoFilters.sort]; if(prazoFilters.sort==='prazoFatal'||prazoFilters.sort==='dataPublicacao'){va=parseDateLocal(va)||new Date(0);vb=parseDateLocal(vb)||new Date(0);} if(va<vb) return -1*prazoFilters.dir; if(va>vb) return 1*prazoFilters.dir; return 0; });
 
-  let html = `<div class="filters">
+  const filterLabels = {
+    prazos_vencidos:'Prazos vencidos',
+    prazos_hoje:'Prazos que vencem hoje',
+    prazos_3:'Prazos dos próximos 3 dias',
+    prazos_7:'Prazos dos próximos 7 dias'
+  };
+  const filterNote = filterLabels[dashboardFilter] ? `<div class="section-title">Filtro: ${filterLabels[dashboardFilter]} <span class="cnt">${rows.length}</span></div>` : '';
+  let html = `${filterNote}<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${prazoFilters.cliente}">
     <select id="fStatus"><option value="">Todos os status</option>${PRAZO_STATUSES.map(s=>`<option ${prazoFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <select id="fResp"><option value="">Todos os responsáveis</option>${respSet.map(r=>`<option ${prazoFilters.responsavel===r?'selected':''}>${r}</option>`).join('')}</select>
@@ -918,12 +947,14 @@ let audiFilters = {status:'', cliente:'', showArchived:false, sort:'data', dir:1
 
 function renderAudiencias(){
   let rows = DB.audiencias.slice();
+  if(dashboardFilter==='audi_7') rows = rows.filter(a=>{ if(AUDI_DONE.includes(a.status)) return false; const d=diasRestantes(a.data); return d>=0 && d<=7; });
   if(!audiFilters.showArchived) rows = rows.filter(a=>!AUDI_ARCHIVED.includes(a.status));
   if(audiFilters.status) rows = rows.filter(a=>a.status===audiFilters.status);
   if(audiFilters.cliente) rows = rows.filter(a=>a.cliente.toLowerCase().includes(audiFilters.cliente.toLowerCase()) || a.processo.toLowerCase().includes(audiFilters.cliente.toLowerCase()));
   rows.sort((a,b)=>{ let va=a[audiFilters.sort], vb=b[audiFilters.sort]; if(audiFilters.sort==='data'){va=new Date(a.data+'T'+(a.horario||'00:00')); vb=new Date(b.data+'T'+(b.horario||'00:00'));} if(va<vb) return -1*audiFilters.dir; if(va>vb) return 1*audiFilters.dir; return 0; });
 
-  let html = `<div class="filters">
+  const filterNote = dashboardFilter==='audi_7' ? `<div class="section-title">Filtro: Audiências próximas (7 dias) <span class="cnt">${rows.length}</span></div>` : '';
+  let html = `${filterNote}<div class="filters">
     <input type="text" id="fAudCliente" placeholder="Buscar cliente ou processo..." value="${audiFilters.cliente}">
     <select id="fAudStatus"><option value="">Todos os status</option>${AUDI_STATUSES.map(s=>`<option ${audiFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <label class="chk"><input type="checkbox" id="fArch" ${audiFilters.showArchived?'checked':''}> Mostrar arquivados</label>
@@ -1025,12 +1056,14 @@ function openAudiModal(a){
 
 /* ===================== TAREFAS ===================== */
 function renderTarefas(){
-  let html = `<div class="filters"><label class="chk" style="margin-left:auto;"><input type="checkbox" id="fArchT"> Mostrar arquivadas</label><button class="btn primary small" id="addTaskBtn">+ Nova tarefa</button></div>`;
-  html += `<div class="table-wrap"><table><thead><tr><th>Título</th><th>Processo / Cliente</th><th>Responsável</th><th>Data limite</th><th>Prioridade</th><th>Status</th><th></th></tr></thead><tbody>`;
   const showArch = document.getElementById('fArchT')?.checked;
   let rows = DB.tarefas.slice();
+  if(dashboardFilter==='tarefas_sem_resp') rows = rows.filter(t=>!TAREFA_DONE.includes(t.status) && !t.responsavel);
   if(!showArch) rows = rows.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
   rows.sort((a,b)=> (parseDateLocal(a.dataLimite)||parseDateLocal('2999-01-01')) - (parseDateLocal(b.dataLimite)||parseDateLocal('2999-01-01')));
+  const filterNote = dashboardFilter==='tarefas_sem_resp' ? `<div class="section-title">Filtro: Tarefas sem responsável <span class="cnt">${rows.length}</span></div>` : '';
+  let html = `${filterNote}<div class="filters"><label class="chk" style="margin-left:auto;"><input type="checkbox" id="fArchT" ${showArch?'checked':''}> Mostrar arquivadas</label><button class="btn primary small" id="addTaskBtn">+ Nova tarefa</button></div>`;
+  html += `<div class="table-wrap"><table><thead><tr><th>Título</th><th>Processo / Cliente</th><th>Responsável</th><th>Data limite</th><th>Prioridade</th><th>Status</th><th></th></tr></thead><tbody>`;
   if(rows.length===0){ html += `<tr><td colspan="7"><div class="empty">Nenhuma tarefa cadastrada. Crie tarefas vinculadas a prazos, audiências ou publicações.</div></td></tr>`; }
   rows.forEach(t=>{
     const dr = t.dataLimite ? diasRestantes(t.dataLimite) : null;
