@@ -233,13 +233,32 @@ function parsePtDate(str){
   if(monthIdx === undefined) return null;
   return new Date(parseInt(m[3]), monthIdx, parseInt(m[1]));
 }
-function fmtDate(d){ if(!d) return '—'; const dt=(d instanceof Date)?d:new Date(d); if(isNaN(dt)) return '—'; return dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+function parseDateLocal(value){
+  if(!value) return null;
+  if(value instanceof Date) return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  const str = String(value);
+  const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(iso) return new Date(Number(iso[1]), Number(iso[2])-1, Number(iso[3]));
+  const dt = new Date(str);
+  if(isNaN(dt)) return null;
+  return dt;
+}
+function fmtDate(d){
+  if(!d) return '—';
+  const iso = String(d).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const dt=parseDateLocal(d);
+  if(!dt) return '—';
+  const dd=String(dt.getDate()).padStart(2,'0');
+  const mm=String(dt.getMonth()+1).padStart(2,'0');
+  return `${dd}/${mm}/${dt.getFullYear()}`;
+}
 function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); if(isNaN(dt)) return '—'; return dt.toLocaleString('pt-BR'); }
-function isoOf(d){ if(!d) return ''; const dt=(d instanceof Date)?d:new Date(d); return isNaN(dt)?'':dt.toISOString().slice(0,10); }
+function isoOf(d){ const dt=parseDateLocal(d); if(!dt) return ''; const mm=String(dt.getMonth()+1).padStart(2,'0'); const dd=String(dt.getDate()).padStart(2,'0'); return `${dt.getFullYear()}-${mm}-${dd}`; }
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 function diasRestantes(dateVal){
-  const dt = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
-  if(isNaN(dt)) return null;
+  const dt = parseDateLocal(dateVal);
+  if(!dt) return null;
   const d = new Date(dt); d.setHours(0,0,0,0);
   return Math.round((d - TODAY) / 86400000);
 }
@@ -654,7 +673,7 @@ function renderPublicacoes(){
   if(!pubFilters.showArchived) rows = rows.filter(p=>!PUB_ARCHIVED.includes(p.status));
   if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
   if(pubFilters.cliente) rows = rows.filter(p=>p.cliente.toLowerCase().includes(pubFilters.cliente.toLowerCase())||p.processo.toLowerCase().includes(pubFilters.cliente.toLowerCase()));
-  rows.sort((a,b)=>{ let va=new Date(a[pubFilters.sort]||0), vb=new Date(b[pubFilters.sort]||0); if(va<vb) return -1*pubFilters.dir; if(va>vb) return 1*pubFilters.dir; return 0; });
+  rows.sort((a,b)=>{ let va=parseDateLocal(a[pubFilters.sort])||new Date(0), vb=parseDateLocal(b[pubFilters.sort])||new Date(0); if(va<vb) return -1*pubFilters.dir; if(va>vb) return 1*pubFilters.dir; return 0; });
 
   let html = `<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${pubFilters.cliente}">
@@ -771,7 +790,7 @@ function renderPrazos(){
   if(prazoFilters.status) rows = rows.filter(p=>p.status===prazoFilters.status);
   if(prazoFilters.responsavel) rows = rows.filter(p=>p.responsavel===prazoFilters.responsavel);
   if(prazoFilters.cliente) rows = rows.filter(p=>p.cliente.toLowerCase().includes(prazoFilters.cliente.toLowerCase()) || p.processo.toLowerCase().includes(prazoFilters.cliente.toLowerCase()));
-  rows.sort((a,b)=>{ let va=a[prazoFilters.sort], vb=b[prazoFilters.sort]; if(prazoFilters.sort==='prazoFatal'||prazoFilters.sort==='dataPublicacao'){va=new Date(va);vb=new Date(vb);} if(va<vb) return -1*prazoFilters.dir; if(va>vb) return 1*prazoFilters.dir; return 0; });
+  rows.sort((a,b)=>{ let va=a[prazoFilters.sort], vb=b[prazoFilters.sort]; if(prazoFilters.sort==='prazoFatal'||prazoFilters.sort==='dataPublicacao'){va=parseDateLocal(va)||new Date(0);vb=parseDateLocal(vb)||new Date(0);} if(va<vb) return -1*prazoFilters.dir; if(va>vb) return 1*prazoFilters.dir; return 0; });
 
   let html = `<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${prazoFilters.cliente}">
@@ -1011,7 +1030,7 @@ function renderTarefas(){
   const showArch = document.getElementById('fArchT')?.checked;
   let rows = DB.tarefas.slice();
   if(!showArch) rows = rows.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
-  rows.sort((a,b)=> new Date(a.dataLimite||'2999-01-01') - new Date(b.dataLimite||'2999-01-01'));
+  rows.sort((a,b)=> (parseDateLocal(a.dataLimite)||parseDateLocal('2999-01-01')) - (parseDateLocal(b.dataLimite)||parseDateLocal('2999-01-01')));
   if(rows.length===0){ html += `<tr><td colspan="7"><div class="empty">Nenhuma tarefa cadastrada. Crie tarefas vinculadas a prazos, audiências ou publicações.</div></td></tr>`; }
   rows.forEach(t=>{
     const dr = t.dataLimite ? diasRestantes(t.dataLimite) : null;
