@@ -45,6 +45,17 @@ function cacheIsFresh(){
   return age >= 0 && age < cacheTtlMs;
 }
 
+function controlJusCacheStatus(){
+  return {
+    hasData:Boolean(controlJusCache),
+    collectedAt:controlJusCache?.collectedAt || null,
+    publicacoes:controlJusCache?.publicacoes?.length || 0,
+    fresh:cacheIsFresh(),
+    refreshing:Boolean(controlJusRefresh),
+    ttlMs:cacheTtlMs
+  };
+}
+
 async function refreshControlJus(){
   if(controlJusRefresh) return controlJusRefresh;
   lastControlJusError = null;
@@ -83,12 +94,7 @@ const server = http.createServer(async (req, res) => {
         service:'lexflow-controljus',
         commit:process.env.RENDER_GIT_COMMIT || '',
         time:new Date().toISOString(),
-        cache:{
-          hasData:Boolean(controlJusCache),
-          collectedAt:controlJusCache?.collectedAt || null,
-          ttlMs:cacheTtlMs,
-          refreshing:Boolean(controlJusRefresh)
-        },
+        cache:controlJusCacheStatus(),
         lastError:lastControlJusError
       }), {'Content-Type':'application/json; charset=utf-8'});
     }
@@ -117,20 +123,38 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, JSON.stringify({...result, sync:{status:'fresh', cacheTtlMs}}), {'Content-Type':'application/json; charset=utf-8'});
     }
 
+    if(url.pathname === '/api/controljus/refresh'){
+      if(!isAuthorized(req)){
+        return send(res, 401, JSON.stringify({error:'unauthorized'}), {'Content-Type':'application/json; charset=utf-8'});
+      }
+
+      const result = await Promise.race([refreshControlJus(), timeout(25000)]);
+      if(result?.timedOut){
+        return send(res, 202, JSON.stringify({
+          source:'ControlJus',
+          collectedAt:new Date().toISOString(),
+          cache:controlJusCacheStatus(),
+          diagnostics:controlJusCache?.diagnostics || null,
+          sync:{status:'processing', message:'A sincronizacao foi acionada e ainda esta em andamento.'}
+        }), {'Content-Type':'application/json; charset=utf-8'});
+      }
+
+      return send(res, 200, JSON.stringify({
+        source:'ControlJus',
+        collectedAt:result.collectedAt,
+        cache:controlJusCacheStatus(),
+        diagnostics:result.diagnostics,
+        sync:{status:'fresh', publicacoes:result.publicacoes?.length || 0, cacheTtlMs}
+      }), {'Content-Type':'application/json; charset=utf-8'});
+    }
+
     if(url.pathname === '/api/controljus/status'){
       if(!isAuthorized(req)){
         return send(res, 401, JSON.stringify({error:'unauthorized'}), {'Content-Type':'application/json; charset=utf-8'});
       }
       return send(res, 200, JSON.stringify({
         source:'ControlJus',
-        cache:{
-          hasData:Boolean(controlJusCache),
-          collectedAt:controlJusCache?.collectedAt || null,
-          publicacoes:controlJusCache?.publicacoes?.length || 0,
-          fresh:cacheIsFresh(),
-          refreshing:Boolean(controlJusRefresh),
-          ttlMs:cacheTtlMs
-        },
+        cache:controlJusCacheStatus(),
         lastError:lastControlJusError
       }), {'Content-Type':'application/json; charset=utf-8'});
     }

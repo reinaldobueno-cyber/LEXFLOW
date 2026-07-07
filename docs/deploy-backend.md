@@ -37,6 +37,7 @@ Os seletores podem ficar com os valores de `.env.example`.
 https://SEU-BACKEND.onrender.com/api/health
 https://SEU-BACKEND.onrender.com/api/controljus/publicacoes
 https://SEU-BACKEND.onrender.com/api/controljus/publicacoes?refresh=1
+https://SEU-BACKEND.onrender.com/api/controljus/refresh
 https://SEU-BACKEND.onrender.com/api/controljus/status
 ```
 

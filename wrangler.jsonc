@@ -6,6 +6,11 @@
   "observability": {
     "enabled": true
   },
+  "triggers": {
+    "crons": [
+      "*/30 11-23 * * mon-fri"
+    ]
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

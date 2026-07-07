@@ -45,6 +45,12 @@ A rota usada pelo painel e:
 http://localhost:8787/api/controljus/publicacoes?refresh=1
 ```
 
+Para apenas acionar a coleta e aquecer o cache, sem retornar a lista completa:
+
+```text
+http://localhost:8787/api/controljus/refresh
+```
+
 Em producao, essa API deve ser publicada em um backend privado, por exemplo Render, Railway, VPS, servidor do escritorio ou outro ambiente com variaveis de ambiente seguras. O Cloudflare Worker do LexFlow passa a ser a porta fixa:
 
 ```text
