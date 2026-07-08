@@ -100,7 +100,7 @@ Status: `[~]`
 
 Problema:
 
-O DJEN entrega a comunicacao/publicacao, mas nao entrega o prazo fatal calculado. O LexFlow precisa calcular ou validar o prazo.
+O DJEN entrega a comunicacao/publicacao, mas nao entrega o prazo fatal calculado. O LexFlow precisa calcular o prazo com base normativa, reduzindo a dependencia de controller/intermediador.
 
 Itens:
 
@@ -108,19 +108,19 @@ Itens:
 - [x] Modelar regra assistiva `area + ato + prazo + contagem + fundamento + confianca`.
 - [x] Mapear tipo de ato -> prazo sugerido para regras iniciais de Civil, Penal, Trabalhista, Eleitoral e Tributario.
 - [x] Configurar dias corridos vs dias uteis na regra.
-- [x] Criar sugestao de prazo na publicacao com fundamento e validacao obrigatoria.
+- [x] Criar sugestao de prazo na publicacao com fundamento, confianca e memoria de calculo.
 - [ ] Definir regra de inicio de contagem: disponibilizacao, publicacao, ciencia, juntada.
 - [ ] Integrar calendario de feriados nacionais.
 - [ ] Integrar feriados estaduais/tribunais.
-- [ ] Registrar base do calculo: data inicial, dias, calendario usado, usuario/IA.
-- [ ] Exigir validacao humana antes de tornar prazo fatal definitivo.
+- [ ] Registrar base do calculo: data inicial, dias, calendario usado, regra e fonte oficial.
+- [ ] Criar status de confianca: calculado LexFlow, revisao recomendada, sem regra confiavel.
 - [ ] Permitir recontagem manual com justificativa.
-- [ ] Alertar quando prazo for sugerido por IA e nao validado.
+- [ ] Alertar quando prazo tiver baixa confianca, termo inicial sensivel ou dados incompletos.
 
 Critérios de aceite:
 
 - Todo prazo fatal deve ter memoria de calculo.
-- Prazo calculado automaticamente deve ter status "pendente de validacao".
+- Prazo calculado automaticamente deve indicar confianca, fundamento e memoria.
 - Usuario deve conseguir auditar por que o prazo caiu naquela data.
 
 ## Epic 3 - Segredo de Justica e Fontes Autenticadas
@@ -286,7 +286,7 @@ Itens:
 
 Critérios de aceite:
 
-- IA nunca cria prazo fatal definitivo sem validacao.
+- IA/motor nunca deve ocultar incerteza: quando a regra for fraca, deve marcar revisao recomendada e explicar o risco.
 - Toda sugestao tem justificativa.
 - Baixa confianca vira alerta, nao automacao.
 
@@ -331,11 +331,11 @@ Sugestao de proximo item:
 
 Motivo:
 
-Este e o item mais critico do produto. O LexFlow precisa entregar uma sugestao de prazo com fundamento legal, considerando area do processo, vara/ramo, tipo de ato e base normativa, sempre exigindo validacao humana antes de virar prazo fatal definitivo.
+Este e o item mais critico do produto. O LexFlow precisa entregar uma sugestao de prazo com fundamento legal, considerando area do processo, vara/ramo, tipo de ato e base normativa, removendo a dependencia operacional de controller/intermediador.
 
 Critérios de aceite:
 
 - Publicacao mostra sugestao de prazo quando houver regra aplicavel.
 - Sugestao informa area inferida, ato/peca, fundamento, contagem e confianca.
-- Prazo sugerido criado fica em "Em analise" e exige validacao humana.
+- Prazo sugerido criado fica como calculado pelo LexFlow quando a regra for confiavel; baixa confianca vira revisao recomendada.
 - Base de Prazos mostra normas oficiais e regras assistivas cadastradas.
