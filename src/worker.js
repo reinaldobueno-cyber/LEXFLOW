@@ -62,15 +62,30 @@ function randomToken(bytes = 32){
 
 async function hashPassword(password, saltValue = ''){
   const salt = saltValue ? base64UrlToBytes(saltValue) : crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt, iterations:180000}, key, 256);
-  return `pbkdf2:sha256:180000:${bytesToBase64Url(salt)}:${bytesToBase64Url(bits)}`;
+  try{
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt, iterations:180000}, key, 256);
+    return `pbkdf2:sha256:180000:${bytesToBase64Url(salt)}:${bytesToBase64Url(bits)}`;
+  }catch(error){
+    return hashPasswordSha256(password, salt);
+  }
+}
+
+async function hashPasswordSha256(password, salt){
+  const encoded = new TextEncoder().encode(password);
+  const joined = new Uint8Array(salt.length + encoded.length);
+  joined.set(salt, 0);
+  joined.set(encoded, salt.length);
+  const digest = await crypto.subtle.digest('SHA-256', joined);
+  return `sha256:salted:1:${bytesToBase64Url(salt)}:${bytesToBase64Url(digest)}`;
 }
 
 async function verifyPassword(password, storedHash){
   const parts = String(storedHash || '').split(':');
-  if(parts.length !== 5 || parts[0] !== 'pbkdf2') return false;
-  const expected = await hashPassword(password, parts[3]);
+  if(parts.length !== 5 || !['pbkdf2','sha256'].includes(parts[0])) return false;
+  const expected = parts[0] === 'sha256'
+    ? await hashPasswordSha256(password, base64UrlToBytes(parts[3]))
+    : await hashPassword(password, parts[3]);
   const a = new TextEncoder().encode(expected);
   const b = new TextEncoder().encode(storedHash);
   if(a.length !== b.length) return false;
@@ -190,28 +205,32 @@ function requireMaster(auth){
 }
 
 async function handleLogin(request, env){
-  const bootstrap = await ensureMasterUser(env);
-  if(!bootstrap.configured){
-    return json({error:'auth_not_configured', message:'Configure MASTER_ADMIN_EMAIL e MASTER_ADMIN_PASSWORD nos secrets da Cloudflare.'}, 503);
+  try{
+    const bootstrap = await ensureMasterUser(env);
+    if(!bootstrap.configured){
+      return json({error:'auth_not_configured', message:'Configure MASTER_ADMIN_EMAIL e MASTER_ADMIN_PASSWORD nos secrets da Cloudflare.'}, 503);
+    }
+    const body = await readBody(request);
+    const email = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    const userId = email ? await env.LEXFLOW_CACHE.get(userEmailKey(email)) : '';
+    const user = userId ? await env.LEXFLOW_CACHE.get(userKey(userId), {type:'json'}) : null;
+    if(!user || user.status !== 'active' || !(await verifyPassword(password, user.passwordHash))){
+      await auditLog(env, MASTER_TENANT_ID, {email}, 'auth.login_failed', {email});
+      return json({error:'invalid_credentials', message:'E-mail ou senha invalidos.'}, 401);
+    }
+    const tenant = await env.LEXFLOW_CACHE.get(tenantKey(user.tenantId), {type:'json'});
+    if(user.role !== 'master' && (!tenant || tenant.status !== 'active')){
+      return json({error:'tenant_inactive', message:'Conta do escritorio inativa.'}, 403);
+    }
+    const token = randomToken();
+    const expiresAt = new Date(Date.now() + AUTH_SESSION_TTL_SECONDS * 1000).toISOString();
+    await env.LEXFLOW_CACHE.put(sessionKey(token), JSON.stringify({userId:user.id, tenantId:user.tenantId, role:user.role, expiresAt}), {expirationTtl:AUTH_SESSION_TTL_SECONDS});
+    await auditLog(env, user.tenantId, user, 'auth.login', {});
+    return json({token, expiresAt, user:publicUser(user, tenant)});
+  }catch(error){
+    return json({error:'auth_bootstrap_error', message:error.message || 'Erro ao iniciar autenticacao.'}, 500);
   }
-  const body = await readBody(request);
-  const email = String(body.email || '').trim().toLowerCase();
-  const password = String(body.password || '');
-  const userId = email ? await env.LEXFLOW_CACHE.get(userEmailKey(email)) : '';
-  const user = userId ? await env.LEXFLOW_CACHE.get(userKey(userId), {type:'json'}) : null;
-  if(!user || user.status !== 'active' || !(await verifyPassword(password, user.passwordHash))){
-    await auditLog(env, MASTER_TENANT_ID, {email}, 'auth.login_failed', {email});
-    return json({error:'invalid_credentials', message:'E-mail ou senha invalidos.'}, 401);
-  }
-  const tenant = await env.LEXFLOW_CACHE.get(tenantKey(user.tenantId), {type:'json'});
-  if(user.role !== 'master' && (!tenant || tenant.status !== 'active')){
-    return json({error:'tenant_inactive', message:'Conta do escritorio inativa.'}, 403);
-  }
-  const token = randomToken();
-  const expiresAt = new Date(Date.now() + AUTH_SESSION_TTL_SECONDS * 1000).toISOString();
-  await env.LEXFLOW_CACHE.put(sessionKey(token), JSON.stringify({userId:user.id, tenantId:user.tenantId, role:user.role, expiresAt}), {expirationTtl:AUTH_SESSION_TTL_SECONDS});
-  await auditLog(env, user.tenantId, user, 'auth.login', {});
-  return json({token, expiresAt, user:publicUser(user, tenant)});
 }
 
 async function handleSession(request, env){
