@@ -159,6 +159,9 @@ td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
 .origin-tag.controljus{background:#E1EAF2; color:var(--azul);}
 .origin-tag.manual{background:#F3EDD6; color:var(--amarelo);}
 .origin-tag::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor;}
+.origin-stack{display:flex; flex-direction:column; align-items:flex-start; gap:4px;}
+.restriction-tag{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; background:#F5E2E0; color:var(--vermelho);}
+.restriction-tag::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor;}
 .row-actions{display:flex; gap:4px;}
 a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
 a.link-audi:hover{text-decoration:underline;}
@@ -679,6 +682,7 @@ async function loadDB(){
         ensureFixedConfig();
         applyKnownCorrections();
         repairDjenClientFields();
+        repairRestrictionFields();
         await saveDB();
         return;
       }
@@ -689,6 +693,7 @@ async function loadDB(){
       changed = applyDataMigrations() || changed;
       changed = applyKnownCorrections() || changed;
       changed = repairDjenClientFields() || changed;
+      changed = repairRestrictionFields() || changed;
       if(changed) await saveDB();
       return;
     }
@@ -699,6 +704,7 @@ async function loadDB(){
   applyDataMigrations();
   applyKnownCorrections();
   repairDjenClientFields();
+  repairRestrictionFields();
   await saveDB();
 }
 function dbStorageKey(){ return `lc:data:${currentTenantId()}`; }
@@ -757,6 +763,38 @@ function originTag(p){
   const origem = publicacaoOrigem(p);
   const cls = origem === 'DJEN' ? 'djen' : (origem === 'ControlJus' ? 'controljus' : 'manual');
   return `<span class="origin-tag ${cls}">${origem}</span>`;
+}
+
+function restrictedReasonFromText(text){
+  const normalized = normalizePersonName(text);
+  if(!normalized) return '';
+  const checks = [
+    {pattern:'SEGREDO DE JUSTICA', reason:'Processo em segredo de justiça'},
+    {pattern:'SIGILOSO', reason:'Documento ou ato sigiloso'},
+    {pattern:'SIGILO', reason:'Documento ou ato sigiloso'},
+    {pattern:'NAO FORAM PUBLICADOS', reason:'Arquivos da intimação não publicados'},
+    {pattern:'ARQUIVOS DA INTIMACAO NAO FORAM PUBLICADOS', reason:'Arquivos da intimação não publicados'},
+    {pattern:'ARQUIVOS DIGITAIS INDISPONIVEIS', reason:'Arquivos digitais indisponíveis'},
+    {pattern:'INDISPONIVEIS NAO SAO DO TIPO PUBLICO', reason:'Arquivos indisponíveis por restrição pública'},
+    {pattern:'NAO SAO DO TIPO PUBLICO', reason:'Arquivos indisponíveis por restrição pública'},
+    {pattern:'RESTRITO', reason:'Conteúdo restrito'}
+  ];
+  const found = checks.find(item => normalized.includes(item.pattern));
+  return found ? found.reason : '';
+}
+
+function restrictedInfo(pub){
+  const reason = pub?.restricaoMotivo || restrictedReasonFromText(`${pub?.textoRecorte || ''} ${pub?.observacoes || ''} ${pub?.tipoPublicacao || ''}`);
+  return {restricted:Boolean(pub?.restrito || reason), reason};
+}
+
+function isRestrictedPublication(pub){
+  return restrictedInfo(pub).restricted;
+}
+
+function restrictionTag(pub){
+  const info = restrictedInfo(pub);
+  return info.restricted ? `<span class="restriction-tag" title="${esc(info.reason || 'Requer fonte autenticada')}">Restrito</span>` : '';
 }
 
 function normalizePersonName(value){
@@ -859,10 +897,32 @@ function repairDjenClientFields(){
   return changed;
 }
 
+function repairRestrictionFields(){
+  let changed = false;
+  (DB.publicacoes || []).forEach(p=>{
+    if(!isIntegratedPublicacao(p)) return;
+    const info = restrictedInfo(p);
+    if(Boolean(p.restrito) !== info.restricted){
+      p.restrito = info.restricted;
+      changed = true;
+    }
+    if(info.restricted && p.restricaoMotivo !== info.reason){
+      p.restricaoMotivo = info.reason || 'Requer fonte autenticada';
+      changed = true;
+    }
+    if(!info.restricted && p.restricaoMotivo){
+      p.restricaoMotivo = '';
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 function normalizeControlJusPublicacao(p){
   const textoRecorte = cleanText(p.textoRecorte || '');
   const advogadoMonitorado = p.advogadoMonitorado || (isKnownMonitoredLawyer(p.cliente) ? p.cliente : '');
   const cliente = normalizedPublicationClient({cliente:p.cliente || '', textoRecorte, advogadoMonitorado});
+  const restricaoMotivo = p.restricaoMotivo || restrictedReasonFromText(`${textoRecorte} ${p.observacoes || ''} ${p.tipoPublicacao || ''}`);
   return {
     id:p.id || uid(),
     refId:p.refId || `CJ-${uid()}`,
@@ -880,6 +940,8 @@ function normalizeControlJusPublicacao(p){
     linkOrigem:p.linkOrigem || DB.config?.controlJusEndpoint || CONTROLJUS_PRIVATE_ENDPOINT,
     source:p.source || 'ControlJus',
     advogadoMonitorado,
+    restrito:Boolean(p.restrito || restricaoMotivo),
+    restricaoMotivo,
     controlJusId:p.controlJusId || '',
     prazoGeradoId:p.prazoGeradoId || ''
   };
@@ -920,7 +982,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
       return;
     }
 
-    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','prazoFatal','observacoes','linkOrigem','controlJusId','source'].forEach(field=>{
+    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','prazoFatal','observacoes','linkOrigem','controlJusId','source','restrito','restricaoMotivo'].forEach(field=>{
       if(pub[field] && existing[field] !== pub[field]){
         existing[field] = pub[field];
         updated++;
@@ -948,6 +1010,7 @@ function normalizeDjenPublicacao(c){
   const advogado = c.advogado ? `${c.advogado.nome || ''} OAB/${c.advogado.uf || ''} ${c.advogado.numero || ''}`.trim() : '';
   const textoRecorte = cleanText(c.texto || '');
   const cliente = normalizedPublicationClient({cliente:c.destinatario || '', textoRecorte, advogadoMonitorado:advogado});
+  const restricaoMotivo = c.restricaoMotivo || restrictedReasonFromText(`${textoRecorte} ${c.orgao || ''} ${c.tipoComunicacao || ''}`);
   const detalhes = [
     c.orgao ? `Orgao: ${c.orgao}` : '',
     c.meio ? `Meio: ${c.meio}` : ''
@@ -969,6 +1032,8 @@ function normalizeDjenPublicacao(c){
     linkOrigem:c.link || DB.config?.lexflowDjenEndpoint || LEXFLOW_DJEN_ENDPOINT,
     source:'DJEN',
     advogadoMonitorado:advogado,
+    restrito:Boolean(c.restrito || restricaoMotivo),
+    restricaoMotivo,
     controlJusId:'',
     prazoGeradoId:''
   };
@@ -1008,7 +1073,7 @@ async function syncDjenComunicacoes(force = true, opts = {}){
       created++;
       return;
     }
-    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','observacoes','linkOrigem','source','advogadoMonitorado'].forEach(field=>{
+    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','observacoes','linkOrigem','source','advogadoMonitorado','restrito','restricaoMotivo'].forEach(field=>{
       if(pub[field] && existing[field] !== pub[field]){
         existing[field] = pub[field];
         updated++;
@@ -1062,6 +1127,7 @@ function computeAlertCount(){
   let crit = 0;
   DB.prazos.filter(isControlJusPrazo).forEach(p=>{ if(PRAZO_DONE.includes(p.status)) return; const dr=diasRestantes(p.prazoFatal); if(dr!==null && dr<=0) crit++; });
   DB.audiencias.forEach(a=>{ if(AUDI_DONE.includes(a.status)) return; const dr=diasRestantes(a.data); if(dr!==null && dr>=0 && dr<=1) crit++; });
+  crit += publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status) && isRestrictedPublication(p)).length;
   return crit;
 }
 
@@ -1092,7 +1158,7 @@ function openDashboardFilter(view, filter){
     prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, showValidation:false, sort:'prazoFatal', dir:1};
   }
   if(view==='publicacoes'){
-    pubFilters = {status:'', cliente:'', showArchived:false, sort:'dataPublicacao', dir:-1};
+    pubFilters = {status:'', cliente:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
   }
   if(view==='audiencias'){
     audiFilters = {status:'', cliente:'', showArchived:false, sort:'data', dir:1};
@@ -1127,7 +1193,8 @@ function renderDashboard(){
   const tarefasSemResp = activeTarefas.filter(t=>!TAREFA_DONE.includes(t.status) && !t.responsavel).length;
   const audiProximas = activeAudi.filter(a=>{if(AUDI_DONE.includes(a.status))return false; const d=diasRestantes(a.data); return d>=0&&d<=7;}).length;
   const semRespTotal = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status)&&!p.responsavel).length + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&!a.responsavel).length;
-  const itensCriticos = vencidos + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&diasRestantes(a.data)===0).length + semRespTotal;
+  const pubsRestritas = activePubs.filter(isRestrictedPublication).length;
+  const itensCriticos = vencidos + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&diasRestantes(a.data)===0).length + semRespTotal + pubsRestritas;
 
   const cards = [
     {n:vencidos, l:'Prazos vencidos', c:'vermelho', go:'prazos', filter:'prazos_vencidos'},
@@ -1135,6 +1202,7 @@ function renderDashboard(){
     {n:em3, l:'Próximos 3 dias', c:'laranja', go:'prazos', filter:'prazos_3'},
     {n:em7, l:'Próximos 7 dias', c:'amarelo', go:'prazos', filter:'prazos_7'},
     {n:pubSemTratamento, l:'Publicações sem tratamento', c:'azul', go:'publicacoes', filter:'pub_sem_tratamento'},
+    {n:pubsRestritas, l:'Publicações restritas', c:'vermelho', go:'publicacoes', filter:'pub_restritas'},
     {n:tarefasSemResp, l:'Tarefas sem responsável', c:'ink', go:'tarefas', filter:'tarefas_sem_resp'},
     {n:audiProximas, l:'Audiências próximas (7d)', c:'ink', go:'audiencias', filter:'audi_7'},
     {n:itensCriticos, l:'Itens críticos', c:'vermelho', go:'alertas', filter:'criticos'},
@@ -1173,20 +1241,25 @@ function renderDashboard(){
 }
 
 /* ===================== PUBLICAÇÕES / RECORTES ===================== */
-let pubFilters = {status:'', cliente:'', showArchived:false, sort:'dataPublicacao', dir:-1};
+let pubFilters = {status:'', cliente:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
 
 function renderPublicacoes(){
   let rows = publicacoesOperacionais();
   if(dashboardFilter==='pub_sem_tratamento') rows = rows.filter(p=>PUB_UNTREATED.includes(p.status));
+  if(dashboardFilter==='pub_restritas') rows = rows.filter(isRestrictedPublication);
   if(!pubFilters.showArchived) rows = rows.filter(p=>!PUB_ARCHIVED.includes(p.status));
+  if(pubFilters.showRestricted) rows = rows.filter(isRestrictedPublication);
   if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
   if(pubFilters.cliente) rows = rows.filter(p=>String(p.cliente||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.processo||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.advogadoMonitorado||'').toLowerCase().includes(pubFilters.cliente.toLowerCase()));
   rows.sort((a,b)=>{ let va=parseDateLocal(a[pubFilters.sort])||new Date(0), vb=parseDateLocal(b[pubFilters.sort])||new Date(0); if(va<vb) return -1*pubFilters.dir; if(va>vb) return 1*pubFilters.dir; return 0; });
 
-  const filterNote = dashboardFilter==='pub_sem_tratamento' ? `<div class="section-title">Filtro: Publicações sem tratamento <span class="cnt">${rows.length}</span></div>` : '';
+  const filterNote = dashboardFilter==='pub_sem_tratamento'
+    ? `<div class="section-title">Filtro: Publicações sem tratamento <span class="cnt">${rows.length}</span></div>`
+    : (dashboardFilter==='pub_restritas' ? `<div class="section-title">Filtro: Publicações restritas <span class="cnt">${rows.length}</span></div>` : '');
   let html = `${filterNote}<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${pubFilters.cliente}">
     <select id="fStatus"><option value="">Todos os status</option>${PUB_STATUSES.map(s=>`<option ${pubFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
+    <label class="chk"><input type="checkbox" id="fRestritas" ${pubFilters.showRestricted?'checked':''}> Somente restritas</label>
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
   </div>`;
   html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
@@ -1200,7 +1273,7 @@ function renderPublicacoes(){
     const recorteLen = cleanText(p.textoRecorte).length;
     html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
       <td>${esc(fmtDate(p.dataPublicacao))}</td>
-      <td>${originTag(p)}</td>
+      <td><div class="origin-stack">${originTag(p)}${restrictionTag(p)}</div></td>
       <td class="cliente">${esc(displayClientName(p))}</td>
       <td>${esc(p.advogadoMonitorado || '—')}</td>
       <td class="proc">${esc(p.processo || '—')}</td>
@@ -1222,6 +1295,7 @@ function renderPublicacoes(){
 
   document.getElementById('fCliente').oninput = e=>{pubFilters.cliente=e.target.value; renderPublicacoes();};
   document.getElementById('fStatus').onchange = e=>{pubFilters.status=e.target.value; renderPublicacoes();};
+  document.getElementById('fRestritas').onchange = e=>{pubFilters.showRestricted=e.target.checked; renderPublicacoes();};
   document.getElementById('fArch').onchange = e=>{pubFilters.showArchived=e.target.checked; renderPublicacoes();};
   document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(pubFilters.sort===s) pubFilters.dir*=-1; else {pubFilters.sort=s; pubFilters.dir=-1;} renderPublicacoes(); });
   document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
@@ -1239,10 +1313,12 @@ function renderPublicacoes(){
 function openPubModal(p){
   const isNew = !p;
   const d = p || {id:uid(), refId:'PUB-'+uid(), dataPublicacao:'', processo:'', cliente:'', tribunal:'', tipoPublicacao:'', textoRecorte:'', prazoIdentificado:'', prazoFatal:'', status:'Novo', responsavel:'', observacoes:'', linkOrigem:CONTROLJUS_PRIVATE_ENDPOINT, advogadoMonitorado:'', prazoGeradoId:''};
+  const restricao = restrictedInfo(d);
   const box = document.getElementById('modalBox');
   box.innerHTML = `
     <div class="modal-head"><h3>${isNew?'Novo recorte / publicação':'Editar recorte'}</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
+      ${restricao.restricted ? `<div style="font-size:12px; background:#F5E2E0; color:var(--vermelho); padding:9px 10px; border-radius:7px; font-weight:700;">Restrito: ${esc(restricao.reason || 'requer fonte autenticada')}. Para completar os dados, será necessário acesso autorizado ao tribunal, Domicílio/PDPJ ou certificado/token do escritório.</div>` : ''}
       <div class="field-row">
         <div class="field"><label>Data da publicação</label><input type="date" id="mData" value="${esc(d.dataPublicacao)}"></div>
         <div class="field"><label>Tribunal</label><input id="mTribunal" value="${esc(d.tribunal)}"></div>
@@ -1648,7 +1724,8 @@ function renderAlertas(){
     {label:'Prazos vencidos', color:'vermelho', items: activePrazos.filter(p=>diasRestantes(p.prazoFatal)<0), type:'prazo'},
     {label:'Prazos que vencem hoje', color:'vermelho', items: activePrazos.filter(p=>diasRestantes(p.prazoFatal)===0), type:'prazo'},
     {label:'Prazos próximos (até 7 dias)', color:'laranja', items: activePrazos.filter(p=>{const d=diasRestantes(p.prazoFatal); return d>0&&d<=7;}), type:'prazo'},
-    {label:'Publicações sem análise', color:'azul', items: activePubs.filter(p=>PUB_UNTREATED.includes(p.status)), type:'pub'},
+    {label:'Publicações restritas - requer autenticação', color:'vermelho', items: activePubs.filter(isRestrictedPublication), type:'pub'},
+    {label:'Publicações sem análise', color:'azul', items: activePubs.filter(p=>PUB_UNTREATED.includes(p.status) && !isRestrictedPublication(p)), type:'pub'},
     {label:'Audiências de hoje', color:'vermelho', items: activeAudi.filter(a=>diasRestantes(a.data)===0), type:'audi'},
     {label:'Audiências amanhã', color:'laranja', items: activeAudi.filter(a=>diasRestantes(a.data)===1), type:'audi'},
     {label:'Itens sem responsável', color:'cinza', items: [...activePrazos.filter(p=>!p.responsavel), ...activeAudi.filter(a=>!a.responsavel)], type:'mixed'},
@@ -1668,7 +1745,7 @@ function renderAlertas(){
           <div class="info">
             <div class="top-line"><span class="cliente">${esc(isPub?displayClientName(it):it.cliente)}</span><span class="tribunal-tag">${esc(isAudi?it.estado:it.tribunal)}</span></div>
             <div class="proc">${esc(it.processo)}</div>
-            <div class="desc">${esc(isPub?recortePreview(it.textoRecorte):(isAudi?it.tipo:it.tipoPrazo))}</div>
+            <div class="desc">${esc(isPub?(restrictedInfo(it).reason || recortePreview(it.textoRecorte)):(isAudi?it.tipo:it.tipoPrazo))}</div>
           </div>
           <div style="text-align:right; font-size:11.5px; color:var(--ink-soft); white-space:nowrap;">${fmtDate(isAudi?it.data:(it.prazoFatal||it.dataPublicacao))}</div>
         </div>`;
@@ -2042,7 +2119,7 @@ document.getElementById('exportBtn').onclick = ()=>{
   let csv, filename;
   if(currentView==='audiencias'){ csv = toCSV(DB.audiencias, ['data','horario','cliente','processo','estado','tipo','modalidade','link','responsavel','status','observacoes']); filename='audiencias.csv'; }
   else if(currentView==='tarefas'){ csv = toCSV(DB.tarefas, ['titulo','processo','cliente','responsavel','dataLimite','prioridade','status','observacao','concluidoEm']); filename='tarefas.csv'; }
-  else if(currentView==='publicacoes'){ csv = toCSV(publicacoesOperacionais().map(p=>({...p, origem:publicacaoOrigem(p)})), ['dataPublicacao','origem','cliente','advogadoMonitorado','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
+  else if(currentView==='publicacoes'){ csv = toCSV(publicacoesOperacionais().map(p=>({...p, origem:publicacaoOrigem(p), restrito:isRestrictedPublication(p), restricaoMotivo:restrictedInfo(p).reason})), ['dataPublicacao','origem','restrito','restricaoMotivo','cliente','advogadoMonitorado','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
   else { csv = toCSV(DB.prazos, ['processo','cliente','tribunal','origemPublicacaoId','dataPublicacao','tipoPrazo','prazoFatal','responsavel','status','prioridade','observacao','concluidoEm']); filename='prazos.csv'; }
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -2068,6 +2145,7 @@ function renderAll(){
   let changed = false;
   changed = applyKnownCorrections() || changed;
   changed = repairDjenClientFields() || changed;
+  changed = repairRestrictionFields() || changed;
   if(changed) saveDB();
   renderNav();
   document.getElementById('sessionChip').textContent = AUTH.user ? `${AUTH.user.name || AUTH.user.email} · ${isMaster() && AUTH.activeTenantId ? 'Tenant ativo ' + AUTH.activeTenantId : (AUTH.user.tenant?.name || AUTH.user.role)}` : '';

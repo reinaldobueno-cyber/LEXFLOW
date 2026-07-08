@@ -539,6 +539,24 @@ function normalizePersonName(value){
     .trim();
 }
 
+function restrictedReasonFromText(text){
+  const normalized = normalizePersonName(text);
+  if(!normalized) return '';
+  const checks = [
+    {pattern:'SEGREDO DE JUSTICA', reason:'Processo em segredo de justiça'},
+    {pattern:'SIGILOSO', reason:'Documento ou ato sigiloso'},
+    {pattern:'SIGILO', reason:'Documento ou ato sigiloso'},
+    {pattern:'NAO FORAM PUBLICADOS', reason:'Arquivos da intimação não publicados'},
+    {pattern:'ARQUIVOS DA INTIMACAO NAO FORAM PUBLICADOS', reason:'Arquivos da intimação não publicados'},
+    {pattern:'ARQUIVOS DIGITAIS INDISPONIVEIS', reason:'Arquivos digitais indisponíveis'},
+    {pattern:'INDISPONIVEIS NAO SAO DO TIPO PUBLICO', reason:'Arquivos indisponíveis por restrição pública'},
+    {pattern:'NAO SAO DO TIPO PUBLICO', reason:'Arquivos indisponíveis por restrição pública'},
+    {pattern:'RESTRITO', reason:'Conteúdo restrito'}
+  ];
+  const found = checks.find(item => normalized.includes(item.pattern));
+  return found ? found.reason : '';
+}
+
 function samePersonName(a, b){
   const left = normalizePersonName(a);
   const right = normalizePersonName(b);
@@ -638,6 +656,7 @@ function normalizeDjenComunicacao(item, oab, sourceUrl){
   const inferredParty = extractDjenPartyFromText(texto);
   const rawDestinatario = String(item.nomeParte || item.destinatario || '').replace(/\s+/g, ' ').trim();
   const destinatario = bestPartyCandidate([rawDestinatario, inferredParty]);
+  const restricaoMotivo = restrictedReasonFromText(`${texto} ${item.nomeOrgao || ''} ${item.tipoComunicacao || ''}`);
   return {
     refId:item.id ? `DJEN-${item.id}` : `DJEN-${oab.uf}-${oab.numero}-${item.numero_processo || crypto.randomUUID()}`,
     id:item.id || '',
@@ -654,7 +673,9 @@ function normalizeDjenComunicacao(item, oab, sourceUrl){
     meio:item.meio || '',
     texto,
     link:item.link || sourceUrl,
-    prazoIdentificado:detectPrazoText(texto)
+    prazoIdentificado:detectPrazoText(texto),
+    restrito:Boolean(restricaoMotivo),
+    restricaoMotivo
   };
 }
 
@@ -795,6 +816,7 @@ function normalizeRecorte(item, sourceUrl){
   const processo = item.processoEletronico || item.protocolo || item.publicacaoNumero || '';
   const tribunal = item.orgaoSigla || item.diarioSigla || item.estadoSigla || item.ufString || '';
   const texto = item.textoLimpo || item.textoResumido || item.texto || '';
+  const restricaoMotivo = restrictedReasonFromText(`${texto} ${item.cadernoNome || ''} ${item.diarioTipo || ''} ${item.titulo || ''}`);
   return {
     refId: item.publicacaoId ? `CJ-${item.publicacaoId}` : `CJ-${item.id || processo}`,
     dataPublicacao: isoDate(item.publicacaoData || item.disponibilizacaoDataHora || item.dataInsercao),
@@ -809,7 +831,9 @@ function normalizeRecorte(item, sourceUrl){
     responsavel: '',
     observacoes: item.diarioNome ? `Diario: ${item.diarioNome}` : '',
     linkOrigem: sourceUrl,
-    controlJusId: item.publicacaoId || item.id || ''
+    controlJusId: item.publicacaoId || item.id || '',
+    restrito:Boolean(restricaoMotivo),
+    restricaoMotivo
   };
 }
 

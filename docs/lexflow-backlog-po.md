@@ -76,7 +76,7 @@ Itens:
 - [x] Bloquear texto grande no campo cliente.
 - [x] Bloquear advogado como cliente.
 - [x] Mostrar "Parte nao identificada" quando nao houver dado confiavel.
-- [ ] Criar campo `restrito/sigilo` quando o texto indicar segredo de justica.
+- [x] Criar campo `restrito/sigilo` quando o texto indicar segredo de justica.
 - [ ] Criar detalhe expandido da publicacao com texto completo, partes, advogados e fonte.
 - [ ] Criar fila de triagem: Novo -> Em analise -> Gera prazo -> Nao gera prazo -> Tarefa criada.
 - [ ] Criar vinculacao com processo existente.
@@ -213,7 +213,7 @@ Itens:
 - [x] Cards clicaveis filtrando a tela correta.
 - [x] Fila de prioridade critica.
 - [x] Alertas por vencimento e responsavel.
-- [ ] Alertas por publicacao restrita.
+- [x] Alertas por publicacao restrita.
 - [ ] Alertas por prazo sugerido sem validacao.
 - [ ] Alertas por falha de sincronizacao.
 - [ ] Alertas por credencial expirada.
@@ -289,7 +289,7 @@ Critérios de aceite:
 
 ### Sprint 1 - Higiene da Inbox Integrada
 
-- [ ] Marcar publicacoes de segredo de justica/restritas.
+- [x] Marcar publicacoes de segredo de justica/restritas.
 - [ ] Melhorar detalhe da publicacao.
 - [ ] Criar campo "parte nao identificada" como status/filtro.
 - [ ] Deduplicacao forte.
@@ -320,15 +320,15 @@ Critérios de aceite:
 
 Sugestao de proximo item:
 
-`Sprint 1.1 - Marcar publicacoes restritas/segredo de justica`
+`Sprint 1.2 - Melhorar detalhe da publicacao`
 
 Motivo:
 
-Antes de buscar dados por certificado A3, o sistema precisa identificar claramente quais publicacoes precisam de fonte autenticada e separar isso do fluxo normal.
+Depois de identificar publicacoes restritas, o usuario precisa abrir uma publicacao e entender claramente a fonte, o texto, o motivo da restricao, o advogado monitorado, a parte identificada e o proximo passo operacional.
 
 Critérios de aceite:
 
-- Publicacoes com texto "segredo de justica", "arquivos nao publicados", "arquivos indisponiveis" ou equivalentes recebem flag `restrito`.
-- A tela mostra selo `Restrito`.
-- O alerta mostra "requer autenticacao".
-- O detalhe explica que precisa de fonte autenticada do tribunal.
+- Modal/detalhe mostra texto completo com boa leitura.
+- Modal/detalhe mostra origem, motivo da restricao, advogado monitorado e parte identificada.
+- Usuario consegue gerar tarefa/prazo a partir do detalhe.
+- Publicacoes restritas deixam claro que precisam de fonte autenticada.
