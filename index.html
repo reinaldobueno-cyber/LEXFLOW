@@ -139,19 +139,20 @@ tbody tr.archived{opacity:.55;}
 td.proc{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
 td.cliente{font-weight:600;}
 td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
-.pub-table{table-layout:fixed; min-width:1500px;}
+.pub-table{table-layout:fixed; min-width:1620px;}
 .pub-table th:nth-child(1){width:92px;}
 .pub-table th:nth-child(2){width:105px;}
-.pub-table th:nth-child(3){width:210px;}
+.pub-table th:nth-child(3){width:200px;}
 .pub-table th:nth-child(4){width:180px;}
 .pub-table th:nth-child(5){width:150px;}
-.pub-table th:nth-child(6){width:84px;}
-.pub-table th:nth-child(7){width:120px;}
-.pub-table th:nth-child(8){width:330px;}
-.pub-table th:nth-child(9){width:150px;}
-.pub-table th:nth-child(10){width:145px;}
-.pub-table th:nth-child(11){width:105px;}
-.pub-table th:nth-child(12){width:92px;}
+.pub-table th:nth-child(6){width:78px;}
+.pub-table th:nth-child(7){width:110px;}
+.pub-table th:nth-child(8){width:360px;}
+.pub-table th:nth-child(9){width:190px;}
+.pub-table th:nth-child(10){width:140px;}
+.pub-table th:nth-child(11){width:108px;}
+.pub-table th:nth-child(12){width:107px;}
+.pub-table td:nth-child(10), .pub-table td:nth-child(11), .pub-table td:nth-child(12){vertical-align:middle;}
 .recorte-preview{display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; line-height:1.35;}
 .recorte-meta{display:block; margin-top:4px; font-size:10.5px; color:var(--azul); font-weight:600;}
 .origin-tag{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; background:#E4E9F0; color:var(--azul);}
@@ -162,7 +163,9 @@ td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
 .origin-stack{display:flex; flex-direction:column; align-items:flex-start; gap:4px;}
 .restriction-tag{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; background:#F5E2E0; color:var(--vermelho);}
 .restriction-tag::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor;}
-.row-actions{display:flex; gap:4px;}
+.row-actions{white-space:nowrap;}
+.pub-table td.row-actions{display:table-cell;}
+.row-actions-inner{display:flex; gap:4px; align-items:center; justify-content:flex-start;}
 a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
 a.link-audi:hover{text-decoration:underline;}
 
@@ -177,6 +180,7 @@ a.link-audi:hover{text-decoration:underline;}
 .pill.st-azul{background:#E1EAF2; color:var(--azul);} .pill.st-azul .dot{background:var(--azul);}
 
 select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:600; padding:4px 8px; border-radius:20px; border:1px solid var(--line); background:var(--paper-2); color:var(--ink);}
+.pub-table select.status-select{width:118px;}
 .priority-tag{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
 .priority-alta{color:var(--vermelho);} .priority-media{color:var(--laranja);} .priority-baixa{color:var(--ink-soft);}
 
@@ -1178,6 +1182,38 @@ function ringHTML(dias, done){
 }
 function pill(status, color){ return `<span class="pill st-${color}"><span class="dot"></span>${status}</span>`; }
 
+function publicationDeadlineInfo(pub){
+  const identified = cleanText(pub?.prazoIdentificado);
+  if(identified) return {label:identified, color:'vermelho'};
+  if(pub?.prazoFatal) return {label:`Prazo fatal em ${fmtDate(pub.prazoFatal)}`, color:'vermelho'};
+  if(isRestrictedPublication(pub)) return {label:'Requer autenticação', color:'vermelho'};
+
+  const text = normalizePersonName(`${pub?.tipoPublicacao || ''} ${pub?.textoRecorte || ''}`);
+  const possibleDeadline = [
+    'INTIMACAO',
+    'CITACAO',
+    'DESPACHO',
+    'DECISAO',
+    'ACORDAO',
+    'SENTENCA',
+    'MANIFESTACAO',
+    'CONTESTACAO',
+    'APELACAO',
+    'AGRAVO',
+    'RECURSO',
+    'EMENDA',
+    'VISTA'
+  ].some(term => text.includes(term));
+
+  if(possibleDeadline) return {label:'Requer análise de prazo', color:'amarelo'};
+  return {label:'Sem prazo automático', color:'cinza'};
+}
+
+function deadlineInfoTag(pub){
+  const info = publicationDeadlineInfo(pub);
+  return pill(info.label, info.color);
+}
+
 /* ===================== DASHBOARD EXECUTIVO ===================== */
 function renderDashboard(){
   const activePrazos = DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status));
@@ -1263,7 +1299,7 @@ function renderPublicacoes(){
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
   </div>`;
   html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
-    <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
+    <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo / ação</th><th>Status</th><th>Responsável</th><th></th>
   </tr></thead><tbody>`;
   if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhuma publicação de integração encontrada. Esta tela mostra apenas dados sincronizados por DJEN ou ControlJus.</div></td></tr>`; }
   rows.forEach(p=>{
@@ -1280,14 +1316,14 @@ function renderPublicacoes(){
       <td><span class="tribunal-tag">${esc(p.tribunal || '—')}</span></td>
       <td>${esc(p.tipoPublicacao || '—')}</td>
       <td class="texto"><div class="recorte-preview">${esc(preview)}</div>${recorteLen>360?'<span class="recorte-meta">Texto completo no editar</span>':''}</td>
-      <td>${esc(p.prazoIdentificado || '—')}</td>
+      <td>${deadlineInfoTag(p)}</td>
       <td><select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td>${p.responsavel ? esc(p.responsavel) : '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
-      <td class="row-actions">
+      <td class="row-actions"><div class="row-actions-inner">
         ${canGerarPrazo?`<button class="btn small azul" data-act="genprazo">Gerar prazo →</button>`:''}
         <button class="btn small ghost" data-act="edit">✎</button>
         ${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}
-      </td>
+      </div></td>
     </tr>`;
   });
   html += `</tbody></table></div>`;

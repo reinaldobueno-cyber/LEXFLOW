@@ -77,6 +77,7 @@ Itens:
 - [x] Bloquear advogado como cliente.
 - [x] Mostrar "Parte nao identificada" quando nao houver dado confiavel.
 - [x] Criar campo `restrito/sigilo` quando o texto indicar segredo de justica.
+- [x] Exibir estado operacional quando ainda nao ha prazo fatal calculado.
 - [ ] Criar detalhe expandido da publicacao com texto completo, partes, advogados e fonte.
 - [ ] Criar fila de triagem: Novo -> Em analise -> Gera prazo -> Nao gera prazo -> Tarefa criada.
 - [ ] Criar vinculacao com processo existente.
@@ -88,6 +89,7 @@ Critérios de aceite:
 - Nenhum texto narrativo aparece como cliente.
 - Publicacoes sem parte estruturada ficam marcadas como parte nao identificada.
 - Publicacoes com segredo de justica ficam destacadas como restritas.
+- Publicacoes integradas sem prazo calculado mostram se exigem analise, autenticacao ou se nao ha prazo automatico.
 
 ## Epic 2 - Motor de Prazos
 
@@ -290,6 +292,7 @@ Critérios de aceite:
 ### Sprint 1 - Higiene da Inbox Integrada
 
 - [x] Marcar publicacoes de segredo de justica/restritas.
+- [x] Trocar traco vazio de prazo por estado operacional de triagem.
 - [ ] Melhorar detalhe da publicacao.
 - [ ] Criar campo "parte nao identificada" como status/filtro.
 - [ ] Deduplicacao forte.
