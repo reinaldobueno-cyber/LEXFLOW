@@ -139,18 +139,19 @@ tbody tr.archived{opacity:.55;}
 td.proc{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
 td.cliente{font-weight:600;}
 td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
-.pub-table{table-layout:fixed; min-width:1380px;}
+.pub-table{table-layout:fixed; min-width:1500px;}
 .pub-table th:nth-child(1){width:92px;}
 .pub-table th:nth-child(2){width:105px;}
 .pub-table th:nth-child(3){width:210px;}
-.pub-table th:nth-child(4){width:150px;}
-.pub-table th:nth-child(5){width:84px;}
-.pub-table th:nth-child(6){width:120px;}
-.pub-table th:nth-child(7){width:330px;}
-.pub-table th:nth-child(8){width:150px;}
-.pub-table th:nth-child(9){width:145px;}
-.pub-table th:nth-child(10){width:105px;}
-.pub-table th:nth-child(11){width:92px;}
+.pub-table th:nth-child(4){width:180px;}
+.pub-table th:nth-child(5){width:150px;}
+.pub-table th:nth-child(6){width:84px;}
+.pub-table th:nth-child(7){width:120px;}
+.pub-table th:nth-child(8){width:330px;}
+.pub-table th:nth-child(9){width:150px;}
+.pub-table th:nth-child(10){width:145px;}
+.pub-table th:nth-child(11){width:105px;}
+.pub-table th:nth-child(12){width:92px;}
 .recorte-preview{display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; line-height:1.35;}
 .recorte-meta{display:block; margin-top:4px; font-size:10.5px; color:var(--azul); font-weight:600;}
 .origin-tag{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; background:#E4E9F0; color:var(--azul);}
@@ -677,12 +678,17 @@ async function loadDB(){
         DB.historico.unshift({ts:new Date().toISOString(), texto:'Base operacional recriada a partir da fonte oficial do LexFlow. Dados manuais antigos ficaram fora da operação e servem apenas para de-para/validação.'});
         ensureFixedConfig();
         applyKnownCorrections();
+        repairDjenClientFields();
         await saveDB();
         return;
       }
       if(!DB.publicacoes) DB.publicacoes=[];
       DB.dataVersion = APP_DATA_VERSION;
-      const changed = ensureFixedConfig() || applyDataMigrations() || applyKnownCorrections();
+      let changed = false;
+      changed = ensureFixedConfig() || changed;
+      changed = applyDataMigrations() || changed;
+      changed = applyKnownCorrections() || changed;
+      changed = repairDjenClientFields() || changed;
       if(changed) await saveDB();
       return;
     }
@@ -692,6 +698,7 @@ async function loadDB(){
   ensureFixedConfig();
   applyDataMigrations();
   applyKnownCorrections();
+  repairDjenClientFields();
   await saveDB();
 }
 function dbStorageKey(){ return `lc:data:${currentTenantId()}`; }
@@ -744,6 +751,69 @@ function originTag(p){
   return `<span class="origin-tag ${cls}">${origem}</span>`;
 }
 
+function normalizePersonName(value){
+  return cleanText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function lawyerNameFromMonitor(value){
+  return cleanText(value).replace(/\s+OAB\/.*$/i, '').trim();
+}
+
+function samePersonName(a, b){
+  const left = normalizePersonName(a);
+  const right = normalizePersonName(b);
+  return Boolean(left && right && left === right);
+}
+
+function isKnownMonitoredLawyer(value){
+  const name = normalizePersonName(value);
+  return ['IGOR LAZARO PIRES NETO', 'LUIZ FERNANDO CORREA PIRES'].includes(name);
+}
+
+function extractDjenPartyFromText(text){
+  const raw = cleanText(text);
+  if(!raw) return '';
+  const patterns = [
+    /\b(?:AUTOR(?:A)?|REQUERENTE|APELANTE|AGRAVANTE|EXEQUENTE|RECORRENTE|IMPETRANTE|INTERESSAD[OA])(?:\s*\([A-Z/]+\))*\s*:?\s*([^:;]{3,180})/i,
+    /\b(?:R[ÉE]U|REQUERID[OA]|APELAD[OA]|AGRAVAD[OA]|EXECUTAD[OA]|RECORRID[OA]|IMPETRAD[OA])(?:\s*\([A-Z/]+\))*\s*:?\s*([^:;]{3,180})/i
+  ];
+  for(const pattern of patterns){
+    const match = raw.match(pattern);
+    if(!match) continue;
+    const party = cleanText(match[1])
+      .replace(/\s+(?:ADVOGAD[OA]\(?S?\)?|OAB|PROCURADOR(?:A)?|DEFENSOR(?:A)?|MINIST[ÉE]RIO|AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA]|RECORRENTE|RECORRID[OA]|IMPETRANTE|IMPETRAD[OA]|INTERESSAD[OA])\b[\s\S]*$/i, '')
+      .replace(/\s+-\s+.*$/i, '')
+      .trim();
+    if(party && party.length >= 3) return party.slice(0, 120);
+  }
+  return '';
+}
+
+function repairDjenClientFields(){
+  let changed = false;
+  (DB.publicacoes || []).forEach(p=>{
+    if(publicacaoOrigem(p) !== 'DJEN') return;
+    const obsLawyer = cleanText(p.observacoes).match(/([^|]+?\s+OAB\/[A-Z]{2}\s+\d+)/i);
+    if(!p.advogadoMonitorado && obsLawyer){
+      p.advogadoMonitorado = cleanText(obsLawyer[1]);
+      changed = true;
+    }
+    if(!p.advogadoMonitorado && isKnownMonitoredLawyer(p.cliente)){
+      p.advogadoMonitorado = p.cliente;
+      changed = true;
+    }
+    const lawyerName = lawyerNameFromMonitor(p.advogadoMonitorado);
+    const inferredParty = extractDjenPartyFromText(p.textoRecorte);
+    if(!p.cliente || samePersonName(p.cliente, lawyerName)){
+      if(p.cliente !== inferredParty){
+        p.cliente = samePersonName(inferredParty, lawyerName) ? '' : inferredParty;
+        changed = true;
+      }
+    }
+  });
+  return changed;
+}
+
 function normalizeControlJusPublicacao(p){
   return {
     id:p.id || uid(),
@@ -761,6 +831,7 @@ function normalizeControlJusPublicacao(p){
     observacoes:p.observacoes || '',
     linkOrigem:p.linkOrigem || DB.config?.controlJusEndpoint || CONTROLJUS_PRIVATE_ENDPOINT,
     source:p.source || 'ControlJus',
+    advogadoMonitorado:p.advogadoMonitorado || '',
     controlJusId:p.controlJusId || '',
     prazoGeradoId:p.prazoGeradoId || ''
   };
@@ -826,20 +897,26 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
 
 function normalizeDjenPublicacao(c){
   const advogado = c.advogado ? `${c.advogado.nome || ''} OAB/${c.advogado.uf || ''} ${c.advogado.numero || ''}`.trim() : '';
+  const textoRecorte = cleanText(c.texto || '');
+  const advogadoNome = lawyerNameFromMonitor(advogado);
+  let cliente = cleanText(c.destinatario || extractDjenPartyFromText(textoRecorte));
+  if(samePersonName(cliente, advogadoNome)){
+    cliente = extractDjenPartyFromText(textoRecorte);
+  }
+  if(samePersonName(cliente, advogadoNome)) cliente = '';
   const detalhes = [
     c.orgao ? `Orgao: ${c.orgao}` : '',
-    c.meio ? `Meio: ${c.meio}` : '',
-    advogado
+    c.meio ? `Meio: ${c.meio}` : ''
   ].filter(Boolean).join(' | ');
   return {
     id:uid(),
     refId:c.refId || `DJEN-${uid()}`,
     dataPublicacao:c.dataPublicacao || c.dataDisponibilizacao || '',
     processo:c.processo || c.processoOriginal || '',
-    cliente:c.destinatario || c.advogado?.nome || '',
+    cliente,
     tribunal:c.tribunal || '',
     tipoPublicacao:c.tipoComunicacao || 'Comunicacao DJEN',
-    textoRecorte:cleanText(c.texto || ''),
+    textoRecorte,
     prazoIdentificado:c.prazoIdentificado || '',
     prazoFatal:'',
     status:'Novo',
@@ -847,6 +924,7 @@ function normalizeDjenPublicacao(c){
     observacoes:detalhes,
     linkOrigem:c.link || DB.config?.lexflowDjenEndpoint || LEXFLOW_DJEN_ENDPOINT,
     source:'DJEN',
+    advogadoMonitorado:advogado,
     controlJusId:'',
     prazoGeradoId:''
   };
@@ -886,12 +964,13 @@ async function syncDjenComunicacoes(force = true, opts = {}){
       created++;
       return;
     }
-    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','observacoes','linkOrigem','source'].forEach(field=>{
+    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','observacoes','linkOrigem','source','advogadoMonitorado'].forEach(field=>{
       if(pub[field] && existing[field] !== pub[field]){
         existing[field] = pub[field];
         updated++;
       }
     });
+    if(repairDjenClientFields()) updated++;
   });
 
   DB.config.lastDjenSyncAt = payload.collectedAt || new Date().toISOString();
@@ -1057,7 +1136,7 @@ function renderPublicacoes(){
   if(dashboardFilter==='pub_sem_tratamento') rows = rows.filter(p=>PUB_UNTREATED.includes(p.status));
   if(!pubFilters.showArchived) rows = rows.filter(p=>!PUB_ARCHIVED.includes(p.status));
   if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
-  if(pubFilters.cliente) rows = rows.filter(p=>p.cliente.toLowerCase().includes(pubFilters.cliente.toLowerCase())||p.processo.toLowerCase().includes(pubFilters.cliente.toLowerCase()));
+  if(pubFilters.cliente) rows = rows.filter(p=>String(p.cliente||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.processo||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.advogadoMonitorado||'').toLowerCase().includes(pubFilters.cliente.toLowerCase()));
   rows.sort((a,b)=>{ let va=parseDateLocal(a[pubFilters.sort])||new Date(0), vb=parseDateLocal(b[pubFilters.sort])||new Date(0); if(va<vb) return -1*pubFilters.dir; if(va>vb) return 1*pubFilters.dir; return 0; });
 
   const filterNote = dashboardFilter==='pub_sem_tratamento' ? `<div class="section-title">Filtro: Publicações sem tratamento <span class="cnt">${rows.length}</span></div>` : '';
@@ -1067,9 +1146,9 @@ function renderPublicacoes(){
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
   </div>`;
   html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
-    <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
+    <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
   </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="11"><div class="empty">Nenhum recorte encontrado. Assim que a conexão autorizada com o endpoint fixo do ControlJus estiver ativa, os recortes chegarão automaticamente.</div></td></tr>`; }
+  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhum recorte encontrado. Assim que a conexão autorizada com o endpoint fixo do ControlJus estiver ativa, os recortes chegarão automaticamente.</div></td></tr>`; }
   rows.forEach(p=>{
     const archived = PUB_ARCHIVED.includes(p.status);
     const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
@@ -1079,6 +1158,7 @@ function renderPublicacoes(){
       <td>${esc(fmtDate(p.dataPublicacao))}</td>
       <td>${originTag(p)}</td>
       <td class="cliente">${esc(p.cliente || '—')}</td>
+      <td>${esc(p.advogadoMonitorado || '—')}</td>
       <td class="proc">${esc(p.processo || '—')}</td>
       <td><span class="tribunal-tag">${esc(p.tribunal || '—')}</span></td>
       <td>${esc(p.tipoPublicacao || '—')}</td>
@@ -1114,7 +1194,7 @@ function renderPublicacoes(){
 
 function openPubModal(p){
   const isNew = !p;
-  const d = p || {id:uid(), refId:'PUB-'+uid(), dataPublicacao:'', processo:'', cliente:'', tribunal:'', tipoPublicacao:'', textoRecorte:'', prazoIdentificado:'', prazoFatal:'', status:'Novo', responsavel:'', observacoes:'', linkOrigem:CONTROLJUS_PRIVATE_ENDPOINT, prazoGeradoId:''};
+  const d = p || {id:uid(), refId:'PUB-'+uid(), dataPublicacao:'', processo:'', cliente:'', tribunal:'', tipoPublicacao:'', textoRecorte:'', prazoIdentificado:'', prazoFatal:'', status:'Novo', responsavel:'', observacoes:'', linkOrigem:CONTROLJUS_PRIVATE_ENDPOINT, advogadoMonitorado:'', prazoGeradoId:''};
   const box = document.getElementById('modalBox');
   box.innerHTML = `
     <div class="modal-head"><h3>${isNew?'Novo recorte / publicação':'Editar recorte'}</h3><button class="close-x" id="mClose">✕</button></div>
@@ -1123,7 +1203,10 @@ function openPubModal(p){
         <div class="field"><label>Data da publicação</label><input type="date" id="mData" value="${esc(d.dataPublicacao)}"></div>
         <div class="field"><label>Tribunal</label><input id="mTribunal" value="${esc(d.tribunal)}"></div>
       </div>
-      <div class="field"><label>Origem</label><input value="${esc(publicacaoOrigem(d))}" disabled></div>
+      <div class="field-row">
+        <div class="field"><label>Origem</label><input value="${esc(publicacaoOrigem(d))}" disabled></div>
+        <div class="field"><label>Advogado monitorado</label><input id="mAdvogado" value="${esc(d.advogadoMonitorado || '')}" placeholder="OAB monitorada na sincronização"></div>
+      </div>
       <div class="field"><label>Cliente / parte</label><input id="mCliente" value="${esc(d.cliente)}"></div>
       <div class="field-row">
         <div class="field"><label>Nº do processo</label><input id="mProcesso" class="mono" value="${esc(d.processo)}"></div>
@@ -1138,7 +1221,7 @@ function openPubModal(p){
         <div class="field"><label>Status de tratamento</label><select id="mStatus">${PUB_STATUSES.map(s=>`<option ${d.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field"><label>Responsável</label><input id="mResp" value="${esc(d.responsavel)}"></div>
       </div>
-      <div class="field"><label>Link para origem no ControlJus</label><input id="mLink" value="${esc(d.linkOrigem)}"></div>
+      <div class="field"><label>Link oficial / origem</label><input id="mLink" value="${esc(d.linkOrigem)}"></div>
       <div class="field"><label>Observações</label><textarea id="mObs">${esc(d.observacoes)}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar recorte</button></div>
@@ -1161,6 +1244,7 @@ function openPubModal(p){
       status:document.getElementById('mStatus').value,
       responsavel:document.getElementById('mResp').value.trim(),
       linkOrigem:document.getElementById('mLink').value.trim(),
+      advogadoMonitorado:document.getElementById('mAdvogado').value.trim(),
       observacoes:document.getElementById('mObs').value.trim(),
     };
     if(isNew){ DB.publicacoes.push(updated); logHist(`Novo recorte cadastrado: ${cliente} (${processo})`); }
@@ -1914,7 +1998,7 @@ document.getElementById('exportBtn').onclick = ()=>{
   let csv, filename;
   if(currentView==='audiencias'){ csv = toCSV(DB.audiencias, ['data','horario','cliente','processo','estado','tipo','modalidade','link','responsavel','status','observacoes']); filename='audiencias.csv'; }
   else if(currentView==='tarefas'){ csv = toCSV(DB.tarefas, ['titulo','processo','cliente','responsavel','dataLimite','prioridade','status','observacao','concluidoEm']); filename='tarefas.csv'; }
-  else if(currentView==='publicacoes'){ csv = toCSV(DB.publicacoes.map(p=>({...p, origem:publicacaoOrigem(p)})), ['dataPublicacao','origem','cliente','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
+  else if(currentView==='publicacoes'){ csv = toCSV(DB.publicacoes.map(p=>({...p, origem:publicacaoOrigem(p)})), ['dataPublicacao','origem','cliente','advogadoMonitorado','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
   else { csv = toCSV(DB.prazos, ['processo','cliente','tribunal','origemPublicacaoId','dataPublicacao','tipoPrazo','prazoFatal','responsavel','status','prioridade','observacao','concluidoEm']); filename='prazos.csv'; }
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -1937,7 +2021,10 @@ const TITLES = {
   integracao:['Integração ControlJus', 'Roteiro para conectar de verdade o LexFlow ao ControlJus'],
 };
 function renderAll(){
-  if(applyKnownCorrections()) saveDB();
+  let changed = false;
+  changed = applyKnownCorrections() || changed;
+  changed = repairDjenClientFields() || changed;
+  if(changed) saveDB();
   renderNav();
   document.getElementById('sessionChip').textContent = AUTH.user ? `${AUTH.user.name || AUTH.user.email} · ${isMaster() && AUTH.activeTenantId ? 'Tenant ativo ' + AUTH.activeTenantId : (AUTH.user.tenant?.name || AUTH.user.role)}` : '';
   const [title, sub] = TITLES[currentView];

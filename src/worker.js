@@ -519,6 +519,42 @@ function detectPrazoText(text){
   return matches.length === 1 ? `Prazo mencionado: ${matches[0]} dias` : `Prazos mencionados: ${matches.join(', ')} dias`;
 }
 
+function normalizePersonName(value){
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function samePersonName(a, b){
+  const left = normalizePersonName(a);
+  const right = normalizePersonName(b);
+  return Boolean(left && right && left === right);
+}
+
+function extractDjenPartyFromText(text){
+  const raw = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if(!raw) return '';
+  const patterns = [
+    /\b(?:AUTOR(?:A)?|REQUERENTE|APELANTE|AGRAVANTE|EXEQUENTE|RECORRENTE|IMPETRANTE|INTERESSAD[OA])(?:\s*\([A-Z/]+\))*\s*:?\s*([^:;]{3,180})/i,
+    /\b(?:R[ÉE]U|REQUERID[OA]|APELAD[OA]|AGRAVAD[OA]|EXECUTAD[OA]|RECORRID[OA]|IMPETRAD[OA])(?:\s*\([A-Z/]+\))*\s*:?\s*([^:;]{3,180})/i
+  ];
+  for(const pattern of patterns){
+    const match = raw.match(pattern);
+    if(!match) continue;
+    const party = String(match[1] || '')
+      .replace(/\s+(?:ADVOGAD[OA]\(?S?\)?|OAB|PROCURADOR(?:A)?|DEFENSOR(?:A)?|MINIST[ÉE]RIO|AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA]|RECORRENTE|RECORRID[OA]|IMPETRANTE|IMPETRAD[OA]|INTERESSAD[OA])\b[\s\S]*$/i, '')
+      .replace(/\s+-\s+.*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if(party.length >= 3) return party.slice(0, 120);
+  }
+  return '';
+}
+
 function djenEndpoint(env){
   return (env.DJEN_ENDPOINT || DEFAULT_DJEN_ENDPOINT).trim();
 }
@@ -546,6 +582,11 @@ function djenRange(requestUrl){
 
 function normalizeDjenComunicacao(item, oab, sourceUrl){
   const texto = stripHtml(item.texto || item.textoComunicacao || '');
+  const inferredParty = extractDjenPartyFromText(texto);
+  let destinatario = String(item.nomeParte || item.destinatario || inferredParty || '').replace(/\s+/g, ' ').trim();
+  if(samePersonName(destinatario, oab.nome)){
+    destinatario = samePersonName(inferredParty, oab.nome) ? '' : inferredParty;
+  }
   return {
     refId:item.id ? `DJEN-${item.id}` : `DJEN-${oab.uf}-${oab.numero}-${item.numero_processo || crypto.randomUUID()}`,
     id:item.id || '',
@@ -557,7 +598,7 @@ function normalizeDjenComunicacao(item, oab, sourceUrl){
     tipoComunicacao:item.tipoComunicacao || '',
     processo:formatProcesso(item.numero_processo || item.processo || ''),
     processoOriginal:item.numero_processo || '',
-    destinatario:item.nomeParte || item.destinatario || '',
+    destinatario,
     advogado:{nome:oab.nome, uf:oab.uf, numero:oab.numero},
     meio:item.meio || '',
     texto,
