@@ -745,6 +745,14 @@ function publicacaoOrigem(p){
   return 'Manual';
 }
 
+function isIntegratedPublicacao(p){
+  return ['DJEN', 'ControlJus'].includes(publicacaoOrigem(p));
+}
+
+function publicacoesOperacionais(){
+  return (DB.publicacoes || []).filter(isIntegratedPublicacao);
+}
+
 function originTag(p){
   const origem = publicacaoOrigem(p);
   const cls = origem === 'DJEN' ? 'djen' : (origem === 'ControlJus' ? 'controljus' : 'manual');
@@ -1029,7 +1037,7 @@ function renderNav(){
     if(gi===1) html += `<div class="nav-label">Sistema</div>`;
     VIEWS.filter(v=>v.group===g && (!v.managerOnly || isUserManager())).forEach(v=>{
       let badge='';
-      if(v.id==='publicacoes'){ const n=DB.publicacoes.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${DB.publicacoes.length}</span>`; }
+      if(v.id==='publicacoes'){ const pubs=publicacoesOperacionais(); const n=pubs.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${pubs.length}</span>`; }
       if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
       if(v.id==='audiencias') badge = `<span class="badge">${DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status)).length}</span>`;
       if(v.id==='tarefas') badge = `<span class="badge">${DB.tarefas.filter(t=>!TAREFA_DONE.includes(t.status)).length}</span>`;
@@ -1073,7 +1081,7 @@ function renderDashboard(){
   const activePrazos = DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status));
   const activeAudi = DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status));
   const activeTarefas = DB.tarefas.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
-  const activePubs = DB.publicacoes.filter(p=>!PUB_ARCHIVED.includes(p.status));
+  const activePubs = publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status));
 
   const vencidos = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)<0).length;
   const hoje = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)===0).length;
@@ -1132,7 +1140,7 @@ function renderDashboard(){
 let pubFilters = {status:'', cliente:'', showArchived:false, sort:'dataPublicacao', dir:-1};
 
 function renderPublicacoes(){
-  let rows = DB.publicacoes.slice();
+  let rows = publicacoesOperacionais();
   if(dashboardFilter==='pub_sem_tratamento') rows = rows.filter(p=>PUB_UNTREATED.includes(p.status));
   if(!pubFilters.showArchived) rows = rows.filter(p=>!PUB_ARCHIVED.includes(p.status));
   if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
@@ -1148,7 +1156,7 @@ function renderPublicacoes(){
   html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
     <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
   </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhum recorte encontrado. Assim que a conexão autorizada com o endpoint fixo do ControlJus estiver ativa, os recortes chegarão automaticamente.</div></td></tr>`; }
+  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhuma publicação de integração encontrada. Esta tela mostra apenas dados sincronizados por DJEN ou ControlJus.</div></td></tr>`; }
   rows.forEach(p=>{
     const archived = PUB_ARCHIVED.includes(p.status);
     const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
@@ -1598,7 +1606,7 @@ function openTaskModal(t){
 function renderAlertas(){
   const activePrazos = DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_DONE.includes(p.status));
   const activeAudi = DB.audiencias.filter(a=>!AUDI_DONE.includes(a.status));
-  const activePubs = DB.publicacoes.filter(p=>!PUB_ARCHIVED.includes(p.status));
+  const activePubs = publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status));
 
   const groups = [
     {label:'Prazos vencidos', color:'vermelho', items: activePrazos.filter(p=>diasRestantes(p.prazoFatal)<0), type:'prazo'},
@@ -1998,7 +2006,7 @@ document.getElementById('exportBtn').onclick = ()=>{
   let csv, filename;
   if(currentView==='audiencias'){ csv = toCSV(DB.audiencias, ['data','horario','cliente','processo','estado','tipo','modalidade','link','responsavel','status','observacoes']); filename='audiencias.csv'; }
   else if(currentView==='tarefas'){ csv = toCSV(DB.tarefas, ['titulo','processo','cliente','responsavel','dataLimite','prioridade','status','observacao','concluidoEm']); filename='tarefas.csv'; }
-  else if(currentView==='publicacoes'){ csv = toCSV(DB.publicacoes.map(p=>({...p, origem:publicacaoOrigem(p)})), ['dataPublicacao','origem','cliente','advogadoMonitorado','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
+  else if(currentView==='publicacoes'){ csv = toCSV(publicacoesOperacionais().map(p=>({...p, origem:publicacaoOrigem(p)})), ['dataPublicacao','origem','cliente','advogadoMonitorado','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
   else { csv = toCSV(DB.prazos, ['processo','cliente','tribunal','origemPublicacaoId','dataPublicacao','tipoPrazo','prazoFatal','responsavel','status','prioridade','observacao','concluidoEm']); filename='prazos.csv'; }
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
