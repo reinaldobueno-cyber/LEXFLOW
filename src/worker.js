@@ -28,6 +28,287 @@ function json(body, status = 200){
   return new Response(JSON.stringify(body), {status, headers: jsonHeaders});
 }
 
+const AUTH_SESSION_TTL_SECONDS = 60 * 60 * 12;
+const MASTER_TENANT_ID = 'tenant_master';
+
+function nowIso(){
+  return new Date().toISOString();
+}
+
+function tenantKey(id){ return `tenant:${id}`; }
+function userKey(id){ return `user:${id}`; }
+function userEmailKey(email){ return `user-email:${String(email || '').trim().toLowerCase()}`; }
+function sessionKey(token){ return `session:${token}`; }
+function settingsKey(tenantId){ return `settings:${tenantId}`; }
+function auditKey(tenantId, id = crypto.randomUUID()){ return `audit:${tenantId}:${Date.now()}:${id}`; }
+
+function bytesToBase64Url(bytes){
+  let str = '';
+  new Uint8Array(bytes).forEach(byte => { str += String.fromCharCode(byte); });
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function base64UrlToBytes(value){
+  const normalized = String(value).replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  return Uint8Array.from(atob(padded), char => char.charCodeAt(0));
+}
+
+function randomToken(bytes = 32){
+  const data = new Uint8Array(bytes);
+  crypto.getRandomValues(data);
+  return bytesToBase64Url(data);
+}
+
+async function hashPassword(password, saltValue = ''){
+  const salt = saltValue ? base64UrlToBytes(saltValue) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt, iterations:180000}, key, 256);
+  return `pbkdf2:sha256:180000:${bytesToBase64Url(salt)}:${bytesToBase64Url(bits)}`;
+}
+
+async function verifyPassword(password, storedHash){
+  const parts = String(storedHash || '').split(':');
+  if(parts.length !== 5 || parts[0] !== 'pbkdf2') return false;
+  const expected = await hashPassword(password, parts[3]);
+  const a = new TextEncoder().encode(expected);
+  const b = new TextEncoder().encode(storedHash);
+  if(a.length !== b.length) return false;
+  let diff = 0;
+  for(let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+async function encryptionKey(env){
+  const secret = env.SETTINGS_ENCRYPTION_KEY || env.AUTH_SECRET || '';
+  if(!secret) throw new Error('SETTINGS_ENCRYPTION_KEY nao configurada.');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
+  return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+async function encryptSecret(value, env){
+  if(!value) return null;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({name:'AES-GCM', iv}, await encryptionKey(env), new TextEncoder().encode(value));
+  return {alg:'AES-GCM', iv:bytesToBase64Url(iv), data:bytesToBase64Url(encrypted)};
+}
+
+function maskSecret(value){
+  if(!value) return '';
+  return '••••••••';
+}
+
+async function readBody(request){
+  return await request.json().catch(() => ({}));
+}
+
+function publicUser(user, tenant){
+  return {
+    id:user.id,
+    email:user.email,
+    name:user.name,
+    role:user.role,
+    tenantId:user.tenantId,
+    tenant:tenant ? {id:tenant.id, name:tenant.name, plan:tenant.plan, status:tenant.status} : null
+  };
+}
+
+async function auditLog(env, tenantId, actor, action, metadata = {}){
+  const record = {
+    id:crypto.randomUUID(),
+    tenantId:tenantId || actor?.tenantId || MASTER_TENANT_ID,
+    actorUserId:actor?.id || '',
+    actorEmail:actor?.email || '',
+    action,
+    metadata,
+    createdAt:nowIso()
+  };
+  await env.LEXFLOW_CACHE.put(auditKey(record.tenantId, record.id), JSON.stringify(record));
+  return record;
+}
+
+async function ensureMasterUser(env){
+  const email = (env.MASTER_ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = env.MASTER_ADMIN_PASSWORD || '';
+  if(!email || !password) return {configured:false};
+
+  const existingUserId = await env.LEXFLOW_CACHE.get(userEmailKey(email));
+  if(existingUserId) return {configured:true};
+
+  const tenant = {
+    id:MASTER_TENANT_ID,
+    name:'LexFlow Master',
+    plan:'master',
+    status:'active',
+    createdAt:nowIso()
+  };
+  const user = {
+    id:crypto.randomUUID(),
+    tenantId:tenant.id,
+    email,
+    name:env.MASTER_ADMIN_NAME || 'Reinaldo',
+    role:'master',
+    status:'active',
+    passwordHash:await hashPassword(password),
+    createdAt:nowIso(),
+    updatedAt:nowIso()
+  };
+  await env.LEXFLOW_CACHE.put(tenantKey(tenant.id), JSON.stringify(tenant));
+  await env.LEXFLOW_CACHE.put(userKey(user.id), JSON.stringify(user));
+  await env.LEXFLOW_CACHE.put(userEmailKey(email), user.id);
+  await auditLog(env, tenant.id, user, 'user.bootstrap_master', {email});
+  return {configured:true};
+}
+
+function authTokenFromRequest(request){
+  const auth = request.headers.get('Authorization') || '';
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
+async function getSession(request, env){
+  const token = authTokenFromRequest(request);
+  if(!token) return null;
+  const session = await env.LEXFLOW_CACHE.get(sessionKey(token), {type:'json'});
+  if(!session || new Date(session.expiresAt).getTime() < Date.now()) return null;
+  const user = await env.LEXFLOW_CACHE.get(userKey(session.userId), {type:'json'});
+  if(!user || user.status !== 'active') return null;
+  const tenant = await env.LEXFLOW_CACHE.get(tenantKey(user.tenantId), {type:'json'});
+  if(user.role !== 'master' && (!tenant || tenant.status !== 'active')) return null;
+  return {token, session, user, tenant};
+}
+
+async function requireAuth(request, env){
+  const auth = await getSession(request, env);
+  if(!auth) return json({error:'unauthorized', message:'Sessao invalida ou expirada.'}, 401);
+  return auth;
+}
+
+function requireMaster(auth){
+  if(auth.user.role !== 'master') return json({error:'forbidden', message:'Acesso restrito ao Administrador Master.'}, 403);
+  return null;
+}
+
+async function handleLogin(request, env){
+  const bootstrap = await ensureMasterUser(env);
+  if(!bootstrap.configured){
+    return json({error:'auth_not_configured', message:'Configure MASTER_ADMIN_EMAIL e MASTER_ADMIN_PASSWORD nos secrets da Cloudflare.'}, 503);
+  }
+  const body = await readBody(request);
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  const userId = email ? await env.LEXFLOW_CACHE.get(userEmailKey(email)) : '';
+  const user = userId ? await env.LEXFLOW_CACHE.get(userKey(userId), {type:'json'}) : null;
+  if(!user || user.status !== 'active' || !(await verifyPassword(password, user.passwordHash))){
+    await auditLog(env, MASTER_TENANT_ID, {email}, 'auth.login_failed', {email});
+    return json({error:'invalid_credentials', message:'E-mail ou senha invalidos.'}, 401);
+  }
+  const tenant = await env.LEXFLOW_CACHE.get(tenantKey(user.tenantId), {type:'json'});
+  if(user.role !== 'master' && (!tenant || tenant.status !== 'active')){
+    return json({error:'tenant_inactive', message:'Conta do escritorio inativa.'}, 403);
+  }
+  const token = randomToken();
+  const expiresAt = new Date(Date.now() + AUTH_SESSION_TTL_SECONDS * 1000).toISOString();
+  await env.LEXFLOW_CACHE.put(sessionKey(token), JSON.stringify({userId:user.id, tenantId:user.tenantId, role:user.role, expiresAt}), {expirationTtl:AUTH_SESSION_TTL_SECONDS});
+  await auditLog(env, user.tenantId, user, 'auth.login', {});
+  return json({token, expiresAt, user:publicUser(user, tenant)});
+}
+
+async function handleSession(request, env){
+  const auth = await getSession(request, env);
+  if(!auth) return json({authenticated:false}, 200);
+  return json({authenticated:true, user:publicUser(auth.user, auth.tenant)});
+}
+
+async function handleLogout(request, env){
+  const auth = await getSession(request, env);
+  if(auth){
+    await env.LEXFLOW_CACHE.delete(sessionKey(auth.token));
+    await auditLog(env, auth.user.tenantId, auth.user, 'auth.logout', {});
+  }
+  return json({ok:true});
+}
+
+async function listTenants(env){
+  const list = await env.LEXFLOW_CACHE.list({prefix:'tenant:'});
+  const tenants = await Promise.all(list.keys.map(key => env.LEXFLOW_CACHE.get(key.name, {type:'json'})));
+  return tenants.filter(Boolean);
+}
+
+async function handleTenants(request, env, auth){
+  const denied = requireMaster(auth);
+  if(denied) return denied;
+  if(request.method === 'GET') return json({tenants:await listTenants(env)});
+  if(request.method !== 'POST') return json({error:'method_not_allowed'}, 405);
+  const body = await readBody(request);
+  const tenant = {
+    id:body.id || crypto.randomUUID(),
+    name:String(body.name || '').trim(),
+    plan:body.plan || 'starter',
+    status:body.status || 'active',
+    createdAt:nowIso()
+  };
+  if(!tenant.name) return json({error:'validation_error', message:'Nome do escritorio e obrigatorio.'}, 400);
+  await env.LEXFLOW_CACHE.put(tenantKey(tenant.id), JSON.stringify(tenant));
+  await auditLog(env, tenant.id, auth.user, 'tenant.create', {tenantId:tenant.id, name:tenant.name});
+  return json({tenant}, 201);
+}
+
+async function handleSettings(request, env, auth){
+  const tenantId = auth.user.role === 'master' && new URL(request.url).searchParams.get('tenantId')
+    ? new URL(request.url).searchParams.get('tenantId')
+    : auth.user.tenantId;
+  if(auth.user.role !== 'master' && tenantId !== auth.user.tenantId) return json({error:'forbidden'}, 403);
+  const current = await env.LEXFLOW_CACHE.get(settingsKey(tenantId), {type:'json'}) || {tenantId, integrations:{}};
+  if(request.method === 'GET'){
+    const masked = structuredClone(current);
+    if(masked.integrations?.controljus?.apiKeyEncrypted) masked.integrations.controljus.apiKeyMasked = maskSecret('x');
+    if(masked.integrations?.djen?.tokenEncrypted) masked.integrations.djen.tokenMasked = maskSecret('x');
+    delete masked.integrations?.controljus?.apiKeyEncrypted;
+    delete masked.integrations?.djen?.tokenEncrypted;
+    return json({settings:masked});
+  }
+  if(request.method !== 'PUT' && request.method !== 'POST') return json({error:'method_not_allowed'}, 405);
+  const body = await readBody(request);
+  const next = {
+    tenantId,
+    integrations:{
+      controljus:{
+        baseUrl:body.controljus?.baseUrl || current.integrations?.controljus?.baseUrl || '',
+        apiKeyEncrypted:current.integrations?.controljus?.apiKeyEncrypted || null
+      },
+      djen:{
+        authType:body.djen?.authType || current.integrations?.djen?.authType || 'public',
+        serviceUrl:body.djen?.serviceUrl || current.integrations?.djen?.serviceUrl || DEFAULT_DJEN_ENDPOINT,
+        frequency:body.djen?.frequency || current.integrations?.djen?.frequency || 'manual',
+        tokenEncrypted:current.integrations?.djen?.tokenEncrypted || null
+      }
+    },
+    updatedAt:nowIso(),
+    updatedBy:auth.user.id
+  };
+  if(body.controljus?.apiKey) next.integrations.controljus.apiKeyEncrypted = await encryptSecret(body.controljus.apiKey, env);
+  if(body.djen?.token) next.integrations.djen.tokenEncrypted = await encryptSecret(body.djen.token, env);
+  await env.LEXFLOW_CACHE.put(settingsKey(tenantId), JSON.stringify(next));
+  await auditLog(env, tenantId, auth.user, 'settings.update', {sections:Object.keys(body)});
+  return json({ok:true});
+}
+
+async function handleAuditLog(request, env, auth){
+  const tenantId = auth.user.role === 'master' && new URL(request.url).searchParams.get('tenantId')
+    ? new URL(request.url).searchParams.get('tenantId')
+    : auth.user.tenantId;
+  const list = await env.LEXFLOW_CACHE.list({prefix:`audit:${tenantId}:`});
+  const rows = await Promise.all(list.keys.slice(-100).map(key => env.LEXFLOW_CACHE.get(key.name, {type:'json'})));
+  return json({items:rows.filter(Boolean).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))});
+}
+
+async function handleIntegrationTest(request, env, auth){
+  const body = await readBody(request);
+  await auditLog(env, auth.user.tenantId, auth.user, 'integration.test', {type:body.type || 'unknown'});
+  return json({ok:true, message:'Estrutura de teste registrada. A validacao real sera feita pelo conector especifico.'});
+}
+
 function sleep(ms){
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -620,6 +901,19 @@ export default {
         controlJusBackendConfigured:Boolean(backendBase(env)),
         controlJusNativeConfigured:native.hasBrowserBinding && native.hasCacheBinding && native.hasUser && native.hasPassword
       });
+    }
+
+    if(url.pathname === '/api/auth/login' && request.method === 'POST') return handleLogin(request, env);
+    if(url.pathname === '/api/auth/session') return handleSession(request, env);
+    if(url.pathname === '/api/auth/logout' && request.method === 'POST') return handleLogout(request, env);
+
+    if(url.pathname.startsWith('/api/')){
+      const auth = await requireAuth(request, env);
+      if(auth instanceof Response) return auth;
+      if(url.pathname === '/api/tenants') return handleTenants(request, env, auth);
+      if(url.pathname === '/api/settings') return handleSettings(request, env, auth);
+      if(url.pathname === '/api/audit-log') return handleAuditLog(request, env, auth);
+      if(url.pathname === '/api/integrations/test') return handleIntegrationTest(request, env, auth);
     }
 
     if(url.pathname === '/api/controljus/publicacoes') return proxyControlJus(request, env);

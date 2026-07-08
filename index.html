@@ -17,6 +17,39 @@
 body{font-family:'IBM Plex Sans', sans-serif; background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased;}
 .mono{font-family:'IBM Plex Mono', monospace;} .serif{font-family:'Source Serif 4', serif;}
 #app{display:flex; min-height:100vh;}
+body:not(.authenticated) #app{display:none;}
+body.authenticated #loginScreen{display:none;}
+
+.login-screen{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px; background:
+  radial-gradient(circle at 18% 18%, rgba(124,35,51,.16), transparent 28%),
+  radial-gradient(circle at 82% 8%, rgba(46,92,138,.16), transparent 30%),
+  linear-gradient(135deg, #FFFDF9 0%, #F6F3EC 48%, #ECE6D8 100%);
+}
+.login-shell{width:min(960px, 100%); display:grid; grid-template-columns:1.05fr .95fr; background:rgba(255,253,249,.82); border:1px solid rgba(221,214,196,.9); border-radius:18px; box-shadow:0 24px 80px rgba(22,35,58,.16); overflow:hidden; backdrop-filter:blur(14px);}
+.login-brand{padding:56px 52px; background:var(--ink); color:var(--paper); display:flex; flex-direction:column; justify-content:space-between; min-height:520px;}
+.login-logo{display:flex; align-items:center; gap:16px;}
+.login-logo .seal{width:52px; height:52px; font-size:23px; border-color:#B95F6D;}
+.login-logo h1{font-family:'Source Serif 4',serif; font-size:34px; line-height:1; font-weight:700;}
+.login-logo p{font-size:13px; color:#AAB7CE; margin-top:6px; letter-spacing:.04em; text-transform:uppercase;}
+.login-slogan{font-family:'Source Serif 4',serif; font-size:31px; line-height:1.18; max-width:360px; color:#FFFDF9;}
+.login-sub{font-size:13px; color:#9CADC8; line-height:1.65; max-width:390px;}
+.login-panel{padding:56px 48px; display:flex; flex-direction:column; justify-content:center;}
+.login-panel h2{font-family:'Source Serif 4',serif; font-size:25px; margin-bottom:8px;}
+.login-panel .hint{font-size:13px; color:var(--ink-soft); margin-bottom:28px;}
+.login-form{display:flex; flex-direction:column; gap:14px;}
+.login-field{display:flex; flex-direction:column; gap:7px;}
+.login-field label{font-size:12px; color:var(--ink-2); font-weight:700;}
+.login-field input{font-family:'IBM Plex Sans'; font-size:14px; padding:12px 13px; border-radius:9px; border:1px solid var(--line); background:#fff; color:var(--ink);}
+.login-field input:focus{outline:2px solid rgba(46,92,138,.18); border-color:var(--azul);}
+.login-error{display:none; padding:10px 12px; border-radius:9px; background:#F5E2E0; color:var(--vermelho); font-size:12.5px; font-weight:600;}
+.login-error.show{display:block;}
+.login-row{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:2px;}
+.login-row a{font-size:12.5px; color:var(--azul); text-decoration:none; font-weight:600;}
+.login-row a:hover{text-decoration:underline;}
+.login-submit{width:100%; justify-content:center; padding:12px 16px; margin-top:4px;}
+.login-submit.loading{opacity:.75; cursor:wait;}
+.session-chip{font-size:11.5px; color:var(--ink-soft); align-self:center;}
+@media (max-width: 860px){.login-shell{grid-template-columns:1fr;}.login-brand{min-height:260px; padding:34px 28px;}.login-panel{padding:34px 28px;}.login-slogan{font-size:25px; margin-top:36px;}}
 
 .sidebar{width:238px; flex-shrink:0; background:var(--ink); color:var(--paper); display:flex; flex-direction:column; padding:24px 16px; position:sticky; top:0; height:100vh; overflow-y:auto;}
 .brand{display:flex; align-items:center; gap:10px; padding:0 8px 14px 8px; border-bottom:1px solid rgba(255,255,255,0.12); margin-bottom:8px;}
@@ -205,6 +238,42 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 </style>
 </head>
 <body>
+<div class="login-screen" id="loginScreen">
+  <div class="login-shell">
+    <section class="login-brand">
+      <div class="login-logo">
+        <div class="seal">§</div>
+        <div>
+          <h1>LexFlow</h1>
+          <p>SaaS jurídico</p>
+        </div>
+      </div>
+      <div>
+        <div class="login-slogan">Transformando prazos em estratégia.</div>
+        <p class="login-sub">Gestão segura de publicações, prazos, agenda e integrações por escritório.</p>
+      </div>
+    </section>
+    <section class="login-panel">
+      <h2>Acesse sua conta</h2>
+      <p class="hint">Entre com suas credenciais para acessar o ambiente do escritório.</p>
+      <form class="login-form" id="loginForm">
+        <div class="login-error" id="loginError"></div>
+        <div class="login-field">
+          <label for="loginEmail">E-mail</label>
+          <input id="loginEmail" type="email" autocomplete="email" required>
+        </div>
+        <div class="login-field">
+          <label for="loginPassword">Senha</label>
+          <input id="loginPassword" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="login-row">
+          <a href="#" id="forgotPassword">Esqueci minha senha</a>
+        </div>
+        <button class="btn primary login-submit" id="loginSubmit" type="submit">Entrar</button>
+      </form>
+    </section>
+  </div>
+</div>
 <div id="app">
   <div class="sidebar" id="sidebar">
     <div class="brand">
@@ -223,8 +292,10 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
         <div><h1 id="pageTitle">Dashboard</h1><div class="sub" id="pageSub"></div></div>
       </div>
       <div class="topbar-actions">
+        <span class="session-chip" id="sessionChip"></span>
         <button class="btn" id="importBtn">Sincronizar ControlJus</button>
         <button class="btn" id="exportBtn">⇩ Exportar CSV</button>
+        <button class="btn" id="logoutBtn">Sair</button>
       </div>
     </div>
     <div class="content" id="content"></div>
@@ -304,6 +375,59 @@ const LEXFLOW_DJEN_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/dj
 const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
 const isControlJusPrazo = p => Boolean(p && p.origemPublicacaoId);
 const isValidationPrazo = p => !isControlJusPrazo(p);
+const AUTH_STORAGE_KEY = 'lf:auth';
+let AUTH = {token:'', user:null};
+
+function loadStoredAuth(){
+  try{ AUTH = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || '{"token":"","user":null}'); }
+  catch(e){ AUTH = {token:'', user:null}; }
+}
+function saveStoredAuth(){ localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(AUTH)); }
+function clearStoredAuth(){ AUTH = {token:'', user:null}; localStorage.removeItem(AUTH_STORAGE_KEY); }
+function authHeaders(extra = {}){
+  const headers = {'Accept':'application/json', ...extra};
+  if(AUTH.token) headers.Authorization = `Bearer ${AUTH.token}`;
+  return headers;
+}
+function isMaster(){ return AUTH.user?.role === 'master'; }
+async function apiFetch(url, options = {}){
+  return fetch(url, {...options, headers:authHeaders(options.headers || {})});
+}
+function showLogin(message = ''){
+  document.body.classList.remove('authenticated');
+  const err = document.getElementById('loginError');
+  if(err){
+    err.textContent = message;
+    err.classList.toggle('show', Boolean(message));
+  }
+}
+function showApp(){
+  document.body.classList.add('authenticated');
+}
+async function restoreSession(){
+  loadStoredAuth();
+  if(!AUTH.token) return false;
+  const res = await apiFetch('/api/auth/session');
+  const payload = await res.json().catch(()=>({}));
+  if(!payload.authenticated){
+    clearStoredAuth();
+    return false;
+  }
+  AUTH.user = payload.user;
+  saveStoredAuth();
+  return true;
+}
+async function login(email, password){
+  const res = await fetch('/api/auth/login', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'Accept':'application/json'},
+    body:JSON.stringify({email, password})
+  });
+  const payload = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(payload.message || 'Falha no login.');
+  AUTH = {token:payload.token, user:payload.user};
+  saveStoredAuth();
+}
 
 /* ===================== SEED DATA ===================== */
 function seedData(){
@@ -626,7 +750,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
   if(!silent) toast('Sincronizando ControlJus...');
   const url = new URL(DB.config.controlJusEndpoint);
   if(force) url.searchParams.set('refresh', '1');
-  const res = await fetch(url.toString(), {headers:{'Accept':'application/json'}});
+  const res = await apiFetch(url.toString());
   const payload = await res.json().catch(()=>({}));
   if(!res.ok && res.status !== 202){
     const msg = syncErrorMessage(payload);
@@ -710,7 +834,7 @@ async function syncDjenComunicacoes(force = true, opts = {}){
   if(!silent) toast('Sincronizando DJEN/CNJ...');
   const url = new URL(DB.config.lexflowDjenEndpoint || LEXFLOW_DJEN_ENDPOINT);
   if(force) url.searchParams.set('refresh', '1');
-  const res = await fetch(url.toString(), {headers:{'Accept':'application/json'}});
+  const res = await apiFetch(url.toString());
   const payload = await res.json().catch(()=>({}));
   if(!res.ok && res.status !== 202){
     const msg = payload?.sync?.message || payload?.error || 'Falha ao sincronizar DJEN/CNJ';
@@ -772,11 +896,13 @@ async function hydrateFromServerCache(){
 /* ===================== NAV ===================== */
 const VIEWS = [
   {id:'dashboard', label:'Dashboard', icon:'◆', group:'main'},
-  {id:'publicacoes', label:'Publicações', icon:'✉', group:'main'},
+  {id:'publicacoes', label:'Processos', icon:'✉', group:'main'},
   {id:'prazos', label:'Prazos', icon:'▤', group:'main'},
-  {id:'audiencias', label:'Audiências', icon:'◷', group:'main'},
+  {id:'audiencias', label:'Agenda', icon:'◷', group:'main'},
   {id:'tarefas', label:'Tarefas', icon:'☑', group:'main'},
   {id:'alertas', label:'Alertas', icon:'▲', group:'main'},
+  {id:'configuracoes', label:'Configurações', icon:'⚙', group:'main'},
+  {id:'usuarios', label:'Usuários', icon:'◉', group:'main', masterOnly:true},
   {id:'historico', label:'Histórico', icon:'≡', group:'sec'},
   {id:'integracao', label:'Integração ControlJus', icon:'⇄', group:'sec'},
 ];
@@ -796,7 +922,7 @@ function renderNav(){
   let html = '';
   ['main','sec'].forEach((g,gi)=>{
     if(gi===1) html += `<div class="nav-label">Sistema</div>`;
-    VIEWS.filter(v=>v.group===g).forEach(v=>{
+    VIEWS.filter(v=>v.group===g && (!v.masterOnly || isMaster())).forEach(v=>{
       let badge='';
       if(v.id==='publicacoes'){ const n=DB.publicacoes.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${DB.publicacoes.length}</span>`; }
       if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
@@ -1490,6 +1616,99 @@ function renderIntegracao(){
   });
 }
 
+/* ===================== CONFIGURAÇÕES / USUÁRIOS ===================== */
+async function fetchSettings(){
+  const res = await apiFetch('/api/settings');
+  if(!res.ok) throw new Error('Falha ao carregar configurações');
+  return (await res.json()).settings || {};
+}
+
+function renderConfiguracoes(){
+  let html = `
+    <div class="section-title">Ambiente <span class="cnt">${esc(AUTH.user?.tenant?.name || 'Tenant')}</span></div>
+    <div class="path-cards">
+      <div class="path-card">
+        <div class="path-tag">Isolamento obrigatório</div>
+        <h4>TenantID</h4>
+        <p><span class="mono">${esc(AUTH.user?.tenantId || '')}</span></p>
+        <p>Todas as configurações salvas nesta tela ficam vinculadas exclusivamente a este escritório.</p>
+      </div>
+      <div class="path-card">
+        <div class="path-tag">Perfil de acesso</div>
+        <h4>${isMaster() ? 'Administrador Master' : 'Advogado'}</h4>
+        <p>${isMaster() ? 'Acesso global habilitado para auditoria, contratos, consumo e ambientes.' : 'Acesso restrito ao próprio TenantID. Dados de outros escritórios não são consultados.'}</p>
+      </div>
+    </div>
+
+    <div class="section-title">Integração ControlJus</div>
+    <div class="table-wrap" style="padding:18px;">
+      <div class="field-row">
+        <div class="field"><label>API Key</label><input id="cfgControlKey" type="password" placeholder="Nova chave ou deixe em branco"></div>
+        <div class="field"><label>URL Base</label><input id="cfgControlUrl" placeholder="https://..."></div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="testControlJus">Testar conexão</button><button class="btn primary" id="saveSettings">Salvar</button></div>
+    </div>
+
+    <div class="section-title">Integração DJEN</div>
+    <div class="table-wrap" style="padding:18px;">
+      <div class="field-row">
+        <div class="field"><label>Tipo de autenticação</label><select id="cfgDjenAuth"><option value="public">Pública</option><option value="token">Token/API</option></select></div>
+        <div class="field"><label>Token/API</label><input id="cfgDjenToken" type="password" placeholder="Novo token ou deixe em branco"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>URL do serviço</label><input id="cfgDjenUrl" placeholder="${DJEN_PUBLIC_ENDPOINT}"></div>
+        <div class="field"><label>Frequência de sincronização</label><select id="cfgDjenFreq">
+          <option value="manual">Manual</option><option value="1h">A cada hora</option><option value="2h">2 horas</option><option value="6h">6 horas</option><option value="12h">12 horas</option><option value="daily">Diário</option>
+        </select></div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="syncDjenSettings">Sincronizar agora</button><button class="btn primary" id="saveSettings2">Salvar configuração</button></div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+
+  fetchSettings().then(settings=>{
+    const c = settings.integrations?.controljus || {};
+    const d = settings.integrations?.djen || {};
+    document.getElementById('cfgControlUrl').value = c.baseUrl || '';
+    document.getElementById('cfgDjenAuth').value = d.authType || 'public';
+    document.getElementById('cfgDjenUrl').value = d.serviceUrl || DJEN_PUBLIC_ENDPOINT;
+    document.getElementById('cfgDjenFreq').value = d.frequency || 'manual';
+  }).catch(e=>toast(e.message));
+
+  async function saveSettingsFromForm(){
+    const body = {
+      controljus:{apiKey:document.getElementById('cfgControlKey').value.trim(), baseUrl:document.getElementById('cfgControlUrl').value.trim()},
+      djen:{authType:document.getElementById('cfgDjenAuth').value, token:document.getElementById('cfgDjenToken').value.trim(), serviceUrl:document.getElementById('cfgDjenUrl').value.trim(), frequency:document.getElementById('cfgDjenFreq').value}
+    };
+    const res = await apiFetch('/api/settings', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const payload = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(payload.message || 'Falha ao salvar configuração');
+    document.getElementById('cfgControlKey').value = '';
+    document.getElementById('cfgDjenToken').value = '';
+    toast('Configuração salva');
+  }
+  document.getElementById('saveSettings').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
+  document.getElementById('saveSettings2').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
+  document.getElementById('testControlJus').onclick = async ()=>{
+    const res = await apiFetch('/api/integrations/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'controljus'})});
+    const payload = await res.json().catch(()=>({}));
+    toast(payload.message || 'Teste registrado');
+  };
+  document.getElementById('syncDjenSettings').onclick = ()=>syncDjenComunicacoes(true).catch(e=>toast(e.message));
+}
+
+function renderUsuarios(){
+  if(!isMaster()){
+    document.getElementById('content').innerHTML = `<div class="empty">Acesso restrito ao Administrador Master.</div>`;
+    return;
+  }
+  document.getElementById('content').innerHTML = `<div class="section-title">Escritórios / contratos</div><div class="table-wrap"><table><thead><tr><th>TenantID</th><th>Nome</th><th>Plano</th><th>Status</th><th>Criado em</th></tr></thead><tbody id="tenantsRows"><tr><td colspan="5">Carregando...</td></tr></tbody></table></div>`;
+  apiFetch('/api/tenants').then(r=>r.json()).then(payload=>{
+    const rows = payload.tenants || [];
+    document.getElementById('tenantsRows').innerHTML = rows.map(t=>`<tr><td class="proc">${esc(t.id)}</td><td class="cliente">${esc(t.name)}</td><td>${esc(t.plan)}</td><td>${esc(t.status)}</td><td>${esc(fmtDateTime(t.createdAt))}</td></tr>`).join('') || `<tr><td colspan="5"><div class="empty">Nenhum escritório cadastrado.</div></td></tr>`;
+  }).catch(e=>{ document.getElementById('tenantsRows').innerHTML = `<tr><td colspan="5">${esc(e.message)}</td></tr>`; });
+}
+
 /* ===================== MODAL HELPERS ===================== */
 function showModal(){ document.getElementById('overlay').classList.add('open'); }
 function hideModal(){ document.getElementById('overlay').classList.remove('open'); }
@@ -1556,17 +1775,20 @@ document.getElementById('exportBtn').onclick = ()=>{
 /* ===================== ROUTER ===================== */
 const TITLES = {
   dashboard:['Dashboard Executivo', 'Visão geral de hoje, próximos 7 dias e itens de risco'],
-  publicacoes:['Publicações / Recortes', 'Fonte: ControlJus — recortes que ainda não viraram prazo ou tarefa'],
+  publicacoes:['Processos / Publicações', 'Recortes e comunicações ainda não convertidos em prazo ou tarefa'],
   prazos:['Prazos', 'Controle de prazos processuais e pendências'],
-  audiencias:['Audiências', 'Agenda de audiências por cliente, tribunal e modalidade'],
+  audiencias:['Agenda', 'Audiências por cliente, tribunal e modalidade'],
   tarefas:['Tarefas', 'Itens operacionais vinculados a processos, prazos e publicações'],
   alertas:['Central de Alertas', 'Tudo que exige atenção imediata, agrupado por urgência'],
+  configuracoes:['Configurações', 'Integrações, credenciais e preferências do escritório'],
+  usuarios:['Usuários', 'Administração de escritórios, contratos e acessos'],
   historico:['Histórico de alterações', 'Registro de tudo que foi criado, editado, concluído ou arquivado'],
   integracao:['Integração ControlJus', 'Roteiro para conectar de verdade o LexFlow ao ControlJus'],
 };
 function renderAll(){
   if(applyKnownCorrections()) saveDB();
   renderNav();
+  document.getElementById('sessionChip').textContent = AUTH.user ? `${AUTH.user.name || AUTH.user.email} · ${AUTH.user.tenant?.name || AUTH.user.role}` : '';
   const [title, sub] = TITLES[currentView];
   document.getElementById('pageTitle').textContent = title;
   document.getElementById('pageSub').textContent = sub;
@@ -1576,14 +1798,52 @@ function renderAll(){
   else if(currentView==='audiencias') renderAudiencias();
   else if(currentView==='tarefas') renderTarefas();
   else if(currentView==='alertas') renderAlertas();
+  else if(currentView==='configuracoes') renderConfiguracoes();
+  else if(currentView==='usuarios') renderUsuarios();
   else if(currentView==='historico') renderHistorico();
   else if(currentView==='integracao') renderIntegracao();
   document.getElementById('sidebar').classList.remove('open');
 }
 document.getElementById('menuBtn').onclick = ()=>document.getElementById('sidebar').classList.toggle('open');
+document.getElementById('logoutBtn').onclick = async ()=>{
+  await apiFetch('/api/auth/logout', {method:'POST'}).catch(()=>{});
+  clearStoredAuth();
+  showLogin();
+};
+document.getElementById('forgotPassword').onclick = e=>{
+  e.preventDefault();
+  showLogin('Recuperação de senha será enviada por e-mail quando o provedor transacional estiver configurado.');
+};
+document.getElementById('loginForm').onsubmit = async e=>{
+  e.preventDefault();
+  const btn = document.getElementById('loginSubmit');
+  const err = document.getElementById('loginError');
+  err.classList.remove('show');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.textContent = 'Entrando...';
+  try{
+    await login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value);
+    showApp();
+    await loadDB();
+    renderAll();
+    hydrateFromServerCache().catch(console.warn);
+  }catch(error){
+    showLogin(error.message);
+  }finally{
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.textContent = 'Entrar';
+  }
+};
 
 /* ===================== INIT ===================== */
 (async function init(){
+  if(!(await restoreSession())){
+    showLogin();
+    return;
+  }
+  showApp();
   await loadDB();
   renderAll();
   hydrateFromServerCache().catch(err=>console.warn('cache hydrate failed', err));
