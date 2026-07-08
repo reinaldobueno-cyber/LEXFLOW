@@ -139,19 +139,25 @@ tbody tr.archived{opacity:.55;}
 td.proc{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
 td.cliente{font-weight:600;}
 td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
-.pub-table{table-layout:fixed; min-width:1280px;}
+.pub-table{table-layout:fixed; min-width:1380px;}
 .pub-table th:nth-child(1){width:92px;}
-.pub-table th:nth-child(2){width:210px;}
-.pub-table th:nth-child(3){width:150px;}
-.pub-table th:nth-child(4){width:84px;}
-.pub-table th:nth-child(5){width:120px;}
-.pub-table th:nth-child(6){width:330px;}
-.pub-table th:nth-child(7){width:150px;}
-.pub-table th:nth-child(8){width:145px;}
-.pub-table th:nth-child(9){width:105px;}
-.pub-table th:nth-child(10){width:92px;}
+.pub-table th:nth-child(2){width:105px;}
+.pub-table th:nth-child(3){width:210px;}
+.pub-table th:nth-child(4){width:150px;}
+.pub-table th:nth-child(5){width:84px;}
+.pub-table th:nth-child(6){width:120px;}
+.pub-table th:nth-child(7){width:330px;}
+.pub-table th:nth-child(8){width:150px;}
+.pub-table th:nth-child(9){width:145px;}
+.pub-table th:nth-child(10){width:105px;}
+.pub-table th:nth-child(11){width:92px;}
 .recorte-preview{display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; line-height:1.35;}
 .recorte-meta{display:block; margin-top:4px; font-size:10.5px; color:var(--azul); font-weight:600;}
+.origin-tag{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; background:#E4E9F0; color:var(--azul);}
+.origin-tag.djen{background:#E1EEE4; color:var(--verde);}
+.origin-tag.controljus{background:#E1EAF2; color:var(--azul);}
+.origin-tag.manual{background:#F3EDD6; color:var(--amarelo);}
+.origin-tag::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor;}
 .row-actions{display:flex; gap:4px;}
 a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
 a.link-audi:hover{text-decoration:underline;}
@@ -384,12 +390,14 @@ function loadStoredAuth(){
 }
 function saveStoredAuth(){ localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(AUTH)); }
 function clearStoredAuth(){ AUTH = {token:'', user:null}; localStorage.removeItem(AUTH_STORAGE_KEY); }
+function currentTenantId(){ return AUTH.activeTenantId || AUTH.user?.tenantId || 'anonymous'; }
 function authHeaders(extra = {}){
   const headers = {'Accept':'application/json', ...extra};
   if(AUTH.token) headers.Authorization = `Bearer ${AUTH.token}`;
   return headers;
 }
 function isMaster(){ return AUTH.user?.role === 'master'; }
+function isUserManager(){ return ['master','admin'].includes(AUTH.user?.role); }
 async function apiFetch(url, options = {}){
   return fetch(url, {...options, headers:authHeaders(options.headers || {})});
 }
@@ -661,7 +669,7 @@ function applyKnownCorrections(){
 
 async function loadDB(){
   try{
-    const res = await window.storage.get('lc:data', false);
+    const res = await window.storage.get(dbStorageKey(), false);
     if(res && res.value){
       DB = JSON.parse(res.value);
       if(DB.dataVersion !== APP_DATA_VERSION){
@@ -686,7 +694,8 @@ async function loadDB(){
   applyKnownCorrections();
   await saveDB();
 }
-async function saveDB(){ try{ await window.storage.set('lc:data', JSON.stringify(DB), false); }catch(e){ console.error('storage error', e); } }
+function dbStorageKey(){ return `lc:data:${currentTenantId()}`; }
+async function saveDB(){ try{ await window.storage.set(dbStorageKey(), JSON.stringify(DB), false); }catch(e){ console.error('storage error', e); } }
 function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), texto}); if(DB.historico.length>250) DB.historico.length=250; }
 
 let toastTimer;
@@ -722,6 +731,19 @@ function controlJusPublicacaoKey(p){
   return `fallback:${processo}:${p.dataPublicacao||''}:${texto}`;
 }
 
+function publicacaoOrigem(p){
+  const raw = String(p?.source || p?.origem || p?.refId || p?.linkOrigem || '').toLowerCase();
+  if(raw.includes('djen') || raw.includes('cnj')) return 'DJEN';
+  if(raw.includes('controljus') || raw.startsWith('cj-') || p?.controlJusId) return 'ControlJus';
+  return 'Manual';
+}
+
+function originTag(p){
+  const origem = publicacaoOrigem(p);
+  const cls = origem === 'DJEN' ? 'djen' : (origem === 'ControlJus' ? 'controljus' : 'manual');
+  return `<span class="origin-tag ${cls}">${origem}</span>`;
+}
+
 function normalizeControlJusPublicacao(p){
   return {
     id:p.id || uid(),
@@ -738,6 +760,7 @@ function normalizeControlJusPublicacao(p){
     responsavel:p.responsavel || '',
     observacoes:p.observacoes || '',
     linkOrigem:p.linkOrigem || DB.config?.controlJusEndpoint || CONTROLJUS_PRIVATE_ENDPOINT,
+    source:p.source || 'ControlJus',
     controlJusId:p.controlJusId || '',
     prazoGeradoId:p.prazoGeradoId || ''
   };
@@ -750,6 +773,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
   if(!silent) toast('Sincronizando ControlJus...');
   const url = new URL(DB.config.controlJusEndpoint);
   if(force) url.searchParams.set('refresh', '1');
+  if(isMaster() && AUTH.activeTenantId) url.searchParams.set('tenantId', AUTH.activeTenantId);
   const res = await apiFetch(url.toString());
   const payload = await res.json().catch(()=>({}));
   if(!res.ok && res.status !== 202){
@@ -777,7 +801,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
       return;
     }
 
-    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','prazoFatal','observacoes','linkOrigem','controlJusId'].forEach(field=>{
+    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','prazoFatal','observacoes','linkOrigem','controlJusId','source'].forEach(field=>{
       if(pub[field] && existing[field] !== pub[field]){
         existing[field] = pub[field];
         updated++;
@@ -822,6 +846,7 @@ function normalizeDjenPublicacao(c){
     responsavel:'',
     observacoes:detalhes,
     linkOrigem:c.link || DB.config?.lexflowDjenEndpoint || LEXFLOW_DJEN_ENDPOINT,
+    source:'DJEN',
     controlJusId:'',
     prazoGeradoId:''
   };
@@ -834,6 +859,7 @@ async function syncDjenComunicacoes(force = true, opts = {}){
   if(!silent) toast('Sincronizando DJEN/CNJ...');
   const url = new URL(DB.config.lexflowDjenEndpoint || LEXFLOW_DJEN_ENDPOINT);
   if(force) url.searchParams.set('refresh', '1');
+  if(isMaster() && AUTH.activeTenantId) url.searchParams.set('tenantId', AUTH.activeTenantId);
   const res = await apiFetch(url.toString());
   const payload = await res.json().catch(()=>({}));
   if(!res.ok && res.status !== 202){
@@ -860,7 +886,7 @@ async function syncDjenComunicacoes(force = true, opts = {}){
       created++;
       return;
     }
-    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','observacoes','linkOrigem'].forEach(field=>{
+    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','observacoes','linkOrigem','source'].forEach(field=>{
       if(pub[field] && existing[field] !== pub[field]){
         existing[field] = pub[field];
         updated++;
@@ -902,7 +928,7 @@ const VIEWS = [
   {id:'tarefas', label:'Tarefas', icon:'☑', group:'main'},
   {id:'alertas', label:'Alertas', icon:'▲', group:'main'},
   {id:'configuracoes', label:'Configurações', icon:'⚙', group:'main'},
-  {id:'usuarios', label:'Usuários', icon:'◉', group:'main', masterOnly:true},
+  {id:'usuarios', label:'Usuários', icon:'◉', group:'main', managerOnly:true},
   {id:'historico', label:'Histórico', icon:'≡', group:'sec'},
   {id:'integracao', label:'Integração ControlJus', icon:'⇄', group:'sec'},
 ];
@@ -922,7 +948,7 @@ function renderNav(){
   let html = '';
   ['main','sec'].forEach((g,gi)=>{
     if(gi===1) html += `<div class="nav-label">Sistema</div>`;
-    VIEWS.filter(v=>v.group===g && (!v.masterOnly || isMaster())).forEach(v=>{
+    VIEWS.filter(v=>v.group===g && (!v.managerOnly || isUserManager())).forEach(v=>{
       let badge='';
       if(v.id==='publicacoes'){ const n=DB.publicacoes.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${DB.publicacoes.length}</span>`; }
       if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
@@ -1041,9 +1067,9 @@ function renderPublicacoes(){
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
   </div>`;
   html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
-    <th data-s="dataPublicacao">Publicação</th><th>Cliente</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
+    <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo identificado</th><th>Status</th><th>Responsável</th><th></th>
   </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="10"><div class="empty">Nenhum recorte encontrado. Assim que a conexão autorizada com o endpoint fixo do ControlJus estiver ativa, os recortes chegarão automaticamente.</div></td></tr>`; }
+  if(rows.length===0){ html += `<tr><td colspan="11"><div class="empty">Nenhum recorte encontrado. Assim que a conexão autorizada com o endpoint fixo do ControlJus estiver ativa, os recortes chegarão automaticamente.</div></td></tr>`; }
   rows.forEach(p=>{
     const archived = PUB_ARCHIVED.includes(p.status);
     const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
@@ -1051,6 +1077,7 @@ function renderPublicacoes(){
     const recorteLen = cleanText(p.textoRecorte).length;
     html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
       <td>${esc(fmtDate(p.dataPublicacao))}</td>
+      <td>${originTag(p)}</td>
       <td class="cliente">${esc(p.cliente || '—')}</td>
       <td class="proc">${esc(p.processo || '—')}</td>
       <td><span class="tribunal-tag">${esc(p.tribunal || '—')}</span></td>
@@ -1096,6 +1123,7 @@ function openPubModal(p){
         <div class="field"><label>Data da publicação</label><input type="date" id="mData" value="${esc(d.dataPublicacao)}"></div>
         <div class="field"><label>Tribunal</label><input id="mTribunal" value="${esc(d.tribunal)}"></div>
       </div>
+      <div class="field"><label>Origem</label><input value="${esc(publicacaoOrigem(d))}" disabled></div>
       <div class="field"><label>Cliente / parte</label><input id="mCliente" value="${esc(d.cliente)}"></div>
       <div class="field-row">
         <div class="field"><label>Nº do processo</label><input id="mProcesso" class="mono" value="${esc(d.processo)}"></div>
@@ -1618,12 +1646,18 @@ function renderIntegracao(){
 
 /* ===================== CONFIGURAÇÕES / USUÁRIOS ===================== */
 async function fetchSettings(){
-  const res = await apiFetch('/api/settings');
+  const suffix = isMaster() && AUTH.activeTenantId ? `?tenantId=${encodeURIComponent(AUTH.activeTenantId)}` : '';
+  const res = await apiFetch('/api/settings' + suffix);
   if(!res.ok) throw new Error('Falha ao carregar configurações');
   return (await res.json()).settings || {};
 }
 
 function renderConfiguracoes(){
+  const defaultOabs = [
+    {uf:'GO', numero:'60795', nome:'Igor Lazaro Pires Neto'},
+    {uf:'DF', numero:'59142', nome:'Igor Lazaro Pires Neto'},
+    {uf:'GO', numero:'74242', nome:'Luiz Fernando Correa Pires'}
+  ];
   let html = `
     <div class="section-title">Ambiente <span class="cnt">${esc(AUTH.user?.tenant?.name || 'Tenant')}</span></div>
     <div class="path-cards">
@@ -1661,6 +1695,10 @@ function renderConfiguracoes(){
           <option value="manual">Manual</option><option value="1h">A cada hora</option><option value="2h">2 horas</option><option value="6h">6 horas</option><option value="12h">12 horas</option><option value="daily">Diário</option>
         </select></div>
       </div>
+      <div class="field" style="margin-top:12px;">
+        <label>OABs monitoradas (uma por linha)</label>
+        <textarea id="cfgDjenOabs" style="min-height:96px;" placeholder="GO 12345 Nome do advogado&#10;SP 98765 Nome do advogado"></textarea>
+      </div>
       <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="syncDjenSettings">Sincronizar agora</button><button class="btn primary" id="saveSettings2">Salvar configuração</button></div>
     </div>
   `;
@@ -1673,14 +1711,25 @@ function renderConfiguracoes(){
     document.getElementById('cfgDjenAuth').value = d.authType || 'public';
     document.getElementById('cfgDjenUrl').value = d.serviceUrl || DJEN_PUBLIC_ENDPOINT;
     document.getElementById('cfgDjenFreq').value = d.frequency || 'manual';
+    const oabs = d.oabs?.length ? d.oabs : defaultOabs;
+    document.getElementById('cfgDjenOabs').value = oabs.map(o=>`${o.uf || ''} ${o.numero || ''} ${o.nome || ''}`.trim()).join('\n');
   }).catch(e=>toast(e.message));
+
+  function parseOabs(){
+    return document.getElementById('cfgDjenOabs').value.split(/\n+/).map(line=>{
+      const m = line.trim().match(/^([A-Za-z]{2})\s*\/?\s*(\d[\d.\-]*)\s*(.*)$/);
+      if(!m) return null;
+      return {uf:m[1].toUpperCase(), numero:m[2].replace(/\D/g,''), nome:m[3].trim()};
+    }).filter(Boolean);
+  }
 
   async function saveSettingsFromForm(){
     const body = {
       controljus:{apiKey:document.getElementById('cfgControlKey').value.trim(), baseUrl:document.getElementById('cfgControlUrl').value.trim()},
-      djen:{authType:document.getElementById('cfgDjenAuth').value, token:document.getElementById('cfgDjenToken').value.trim(), serviceUrl:document.getElementById('cfgDjenUrl').value.trim(), frequency:document.getElementById('cfgDjenFreq').value}
+      djen:{authType:document.getElementById('cfgDjenAuth').value, token:document.getElementById('cfgDjenToken').value.trim(), serviceUrl:document.getElementById('cfgDjenUrl').value.trim(), frequency:document.getElementById('cfgDjenFreq').value, oabs:parseOabs()}
     };
-    const res = await apiFetch('/api/settings', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const suffix = isMaster() && AUTH.activeTenantId ? `?tenantId=${encodeURIComponent(AUTH.activeTenantId)}` : '';
+    const res = await apiFetch('/api/settings' + suffix, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     const payload = await res.json().catch(()=>({}));
     if(!res.ok) throw new Error(payload.message || 'Falha ao salvar configuração');
     document.getElementById('cfgControlKey').value = '';
@@ -1698,15 +1747,117 @@ function renderConfiguracoes(){
 }
 
 function renderUsuarios(){
-  if(!isMaster()){
-    document.getElementById('content').innerHTML = `<div class="empty">Acesso restrito ao Administrador Master.</div>`;
+  if(!isUserManager()){
+    document.getElementById('content').innerHTML = `<div class="empty">Acesso restrito a administradores.</div>`;
     return;
   }
-  document.getElementById('content').innerHTML = `<div class="section-title">Escritórios / contratos</div><div class="table-wrap"><table><thead><tr><th>TenantID</th><th>Nome</th><th>Plano</th><th>Status</th><th>Criado em</th></tr></thead><tbody id="tenantsRows"><tr><td colspan="5">Carregando...</td></tr></tbody></table></div>`;
-  apiFetch('/api/tenants').then(r=>r.json()).then(payload=>{
-    const rows = payload.tenants || [];
-    document.getElementById('tenantsRows').innerHTML = rows.map(t=>`<tr><td class="proc">${esc(t.id)}</td><td class="cliente">${esc(t.name)}</td><td>${esc(t.plan)}</td><td>${esc(t.status)}</td><td>${esc(fmtDateTime(t.createdAt))}</td></tr>`).join('') || `<tr><td colspan="5"><div class="empty">Nenhum escritório cadastrado.</div></td></tr>`;
-  }).catch(e=>{ document.getElementById('tenantsRows').innerHTML = `<tr><td colspan="5">${esc(e.message)}</td></tr>`; });
+  const tenantSelect = isMaster() ? `<select id="tenantSelect"><option value="${esc(AUTH.user.tenantId)}">LexFlow Master</option></select>` : '';
+  document.getElementById('content').innerHTML = `
+    ${isMaster()?`
+      <div class="section-title">Contratos / escritórios</div>
+      <div class="filters"><button class="btn primary" id="newTenantBtn">+ Novo contrato</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Escritório</th><th>Responsável</th><th>E-mail</th><th>Plano</th><th>Status</th><th>Usuários</th><th>Processos</th><th></th></tr></thead><tbody id="tenantsRows"><tr><td colspan="8">Carregando...</td></tr></tbody></table></div>
+    `:''}
+    <div class="section-title">Usuários ${tenantSelect}</div>
+    <div class="filters"><button class="btn primary" id="newUserBtn">+ Novo usuário</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Criado em</th><th></th></tr></thead><tbody id="usersRows"><tr><td colspan="6">Carregando...</td></tr></tbody></table></div>
+  `;
+
+  let selectedTenantId = currentTenantId();
+  let tenantsCache = [];
+
+  async function loadTenants(){
+    if(!isMaster()) return;
+    const payload = await (await apiFetch('/api/tenants')).json();
+    tenantsCache = payload.tenants || [];
+    const sel = document.getElementById('tenantSelect');
+    sel.innerHTML = tenantsCache.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+    if(tenantsCache.some(t=>t.id===selectedTenantId)) sel.value = selectedTenantId;
+    selectedTenantId = sel.value || currentTenantId();
+    sel.onchange = ()=>{ selectedTenantId = sel.value; loadUsers(); };
+    document.getElementById('tenantsRows').innerHTML = tenantsCache.map(t=>`<tr>
+      <td class="cliente">${esc(t.name)}</td><td>${esc(t.responsible || '—')}</td><td>${esc(t.email || '—')}</td><td>${esc(t.plan || 'starter')}</td><td>${esc(t.status || 'active')}</td><td>${esc(t.userLimit || 0)}</td><td>${esc(t.processLimit || 0)}</td>
+      <td class="row-actions"><button class="btn small ghost" data-tenant-edit="${esc(t.id)}">✎</button><button class="btn small ghost" data-tenant-enter="${esc(t.id)}">Entrar</button></td>
+    </tr>`).join('') || `<tr><td colspan="8"><div class="empty">Nenhum contrato cadastrado.</div></td></tr>`;
+    document.querySelectorAll('[data-tenant-edit]').forEach(btn=>btn.onclick=()=>openTenantModal(tenantsCache.find(t=>t.id===btn.dataset.tenantEdit)));
+    document.querySelectorAll('[data-tenant-enter]').forEach(btn=>{ btn.onclick=async()=>{ selectedTenantId = btn.dataset.tenantEnter; AUTH.activeTenantId = selectedTenantId; saveStoredAuth(); document.getElementById('tenantSelect').value=selectedTenantId; await loadDB(); loadUsers(); renderAll(); toast('Ambiente selecionado para suporte'); }; });
+  }
+
+  async function loadUsers(){
+    const url = isMaster() ? `/api/users?tenantId=${encodeURIComponent(selectedTenantId)}` : '/api/users';
+    const payload = await (await apiFetch(url)).json();
+    const rows = payload.users || [];
+    document.getElementById('usersRows').innerHTML = rows.map(u=>`<tr>
+      <td class="cliente">${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(roleLabel(u.role))}</td><td>${esc(statusLabel(u.status))}</td><td>${esc(fmtDateTime(u.createdAt))}</td>
+      <td class="row-actions"><button class="btn small ghost" data-user-edit="${esc(u.id)}">✎</button><button class="btn small ghost" data-user-toggle="${esc(u.id)}">${u.status==='active'?'Inativar':'Ativar'}</button><button class="btn small ghost" data-user-del="${esc(u.id)}">Excluir</button></td>
+    </tr>`).join('') || `<tr><td colspan="6"><div class="empty">Nenhum usuário cadastrado.</div></td></tr>`;
+    document.querySelectorAll('[data-user-edit]').forEach(btn=>btn.onclick=()=>openUserModal(rows.find(u=>u.id===btn.dataset.userEdit)));
+    document.querySelectorAll('[data-user-toggle]').forEach(btn=>btn.onclick=async()=>{ const u=rows.find(x=>x.id===btn.dataset.userToggle); await saveUser({...u, status:u.status==='active'?'inactive':'active'}); });
+    document.querySelectorAll('[data-user-del]').forEach(btn=>btn.onclick=async()=>{ if(confirm('Excluir este usuário?')){ await deleteUser(btn.dataset.userDel); } });
+  }
+
+  function roleLabel(role){ return ({master:'Master', admin:'Administrador', advogado:'Advogado', assistente:'Assistente'}[role] || role); }
+  function statusLabel(st){ return st === 'inactive' ? 'Inativo' : 'Ativo'; }
+
+  async function saveUser(user){
+    const method = user.id ? 'PUT' : 'POST';
+    const url = isMaster() ? `/api/users?tenantId=${encodeURIComponent(selectedTenantId)}` : '/api/users';
+    const res = await apiFetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(user)});
+    const payload = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(payload.message || 'Falha ao salvar usuário');
+    toast('Usuário salvo');
+    loadUsers();
+  }
+  async function deleteUser(id){
+    const url = isMaster() ? `/api/users?tenantId=${encodeURIComponent(selectedTenantId)}&id=${encodeURIComponent(id)}` : `/api/users?id=${encodeURIComponent(id)}`;
+    const res = await apiFetch(url, {method:'DELETE'});
+    if(!res.ok) throw new Error('Falha ao excluir usuário');
+    toast('Usuário excluído');
+    loadUsers();
+  }
+
+  function openUserModal(user=null){
+    const box=document.getElementById('modalBox');
+    box.innerHTML=`<div class="modal-head"><h3>${user?'Editar usuário':'Novo usuário'}</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nome</label><input id="uName" value="${esc(user?.name || '')}"></div>
+      <div class="field"><label>E-mail</label><input id="uEmail" type="email" value="${esc(user?.email || '')}"></div>
+      <div class="field-row"><div class="field"><label>Senha ${user?'(deixe em branco para manter)':''}</label><input id="uPass" type="password"></div><div class="field"><label>Perfil</label><select id="uRole"><option value="admin">Administrador</option><option value="advogado">Advogado</option><option value="assistente">Assistente</option></select></div></div>
+      <div class="field"><label>Status</label><select id="uStatus"><option value="active">Ativo</option><option value="inactive">Inativo</option></select></div>
+    </div><div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar</button></div>`;
+    showModal();
+    document.getElementById('uRole').value = user?.role || 'advogado';
+    document.getElementById('uStatus').value = user?.status || 'active';
+    document.getElementById('mClose').onclick=hideModal; document.getElementById('mCancel').onclick=hideModal;
+    document.getElementById('mSave').onclick=()=>{ const next={id:user?.id, name:document.getElementById('uName').value.trim(), email:document.getElementById('uEmail').value.trim(), password:document.getElementById('uPass').value, role:document.getElementById('uRole').value, status:document.getElementById('uStatus').value}; saveUser(next).then(hideModal).catch(e=>toast(e.message)); };
+  }
+
+  async function saveTenant(tenant){
+    const method = tenant.id ? 'PUT' : 'POST';
+    const res = await apiFetch('/api/tenants', {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(tenant)});
+    const payload = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(payload.message || 'Falha ao salvar contrato');
+    toast('Contrato salvo');
+    await loadTenants();
+    await loadUsers();
+  }
+  function openTenantModal(t=null){
+    const box=document.getElementById('modalBox');
+    box.innerHTML=`<div class="modal-head"><h3>${t?'Editar contrato':'Novo contrato'}</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nome do escritório</label><input id="tName" value="${esc(t?.name || '')}"></div>
+      <div class="field-row"><div class="field"><label>Responsável</label><input id="tResp" value="${esc(t?.responsible || '')}"></div><div class="field"><label>E-mail</label><input id="tEmail" value="${esc(t?.email || '')}"></div></div>
+      <div class="field-row"><div class="field"><label>Plano contratado</label><input id="tPlan" value="${esc(t?.plan || 'starter')}"></div><div class="field"><label>Status</label><select id="tStatus"><option value="active">Ativo</option><option value="inactive">Inativo</option></select></div></div>
+      <div class="field-row"><div class="field"><label>Limite de usuários</label><input id="tUsers" type="number" value="${esc(t?.userLimit || 5)}"></div><div class="field"><label>Limite de processos</label><input id="tProc" type="number" value="${esc(t?.processLimit || 0)}"></div></div>
+    </div><div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar</button></div>`;
+    showModal(); document.getElementById('tStatus').value=t?.status || 'active';
+    document.getElementById('mClose').onclick=hideModal; document.getElementById('mCancel').onclick=hideModal;
+    document.getElementById('mSave').onclick=()=>{ const next={id:t?.id, name:document.getElementById('tName').value.trim(), responsible:document.getElementById('tResp').value.trim(), email:document.getElementById('tEmail').value.trim(), plan:document.getElementById('tPlan').value.trim(), status:document.getElementById('tStatus').value, userLimit:Number(document.getElementById('tUsers').value||0), processLimit:Number(document.getElementById('tProc').value||0)}; saveTenant(next).then(hideModal).catch(e=>toast(e.message)); };
+  }
+
+  document.getElementById('newUserBtn').onclick=()=>openUserModal();
+  if(isMaster()) document.getElementById('newTenantBtn').onclick=()=>openTenantModal();
+  (async()=>{ try{ await loadTenants(); await loadUsers(); }catch(e){ toast(e.message); } })();
 }
 
 /* ===================== MODAL HELPERS ===================== */
@@ -1763,7 +1914,7 @@ document.getElementById('exportBtn').onclick = ()=>{
   let csv, filename;
   if(currentView==='audiencias'){ csv = toCSV(DB.audiencias, ['data','horario','cliente','processo','estado','tipo','modalidade','link','responsavel','status','observacoes']); filename='audiencias.csv'; }
   else if(currentView==='tarefas'){ csv = toCSV(DB.tarefas, ['titulo','processo','cliente','responsavel','dataLimite','prioridade','status','observacao','concluidoEm']); filename='tarefas.csv'; }
-  else if(currentView==='publicacoes'){ csv = toCSV(DB.publicacoes, ['dataPublicacao','cliente','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
+  else if(currentView==='publicacoes'){ csv = toCSV(DB.publicacoes.map(p=>({...p, origem:publicacaoOrigem(p)})), ['dataPublicacao','origem','cliente','processo','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','status','responsavel','observacoes','linkOrigem']); filename='publicacoes.csv'; }
   else { csv = toCSV(DB.prazos, ['processo','cliente','tribunal','origemPublicacaoId','dataPublicacao','tipoPrazo','prazoFatal','responsavel','status','prioridade','observacao','concluidoEm']); filename='prazos.csv'; }
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
@@ -1788,7 +1939,7 @@ const TITLES = {
 function renderAll(){
   if(applyKnownCorrections()) saveDB();
   renderNav();
-  document.getElementById('sessionChip').textContent = AUTH.user ? `${AUTH.user.name || AUTH.user.email} · ${AUTH.user.tenant?.name || AUTH.user.role}` : '';
+  document.getElementById('sessionChip').textContent = AUTH.user ? `${AUTH.user.name || AUTH.user.email} · ${isMaster() && AUTH.activeTenantId ? 'Tenant ativo ' + AUTH.activeTenantId : (AUTH.user.tenant?.name || AUTH.user.role)}` : '';
   const [title, sub] = TITLES[currentView];
   document.getElementById('pageTitle').textContent = title;
   document.getElementById('pageSub').textContent = sub;

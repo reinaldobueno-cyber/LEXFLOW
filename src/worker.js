@@ -128,6 +128,19 @@ function publicUser(user, tenant){
   };
 }
 
+function publicUserRow(user){
+  return {
+    id:user.id,
+    tenantId:user.tenantId,
+    email:user.email,
+    name:user.name,
+    role:user.role,
+    status:user.status,
+    createdAt:user.createdAt,
+    updatedAt:user.updatedAt
+  };
+}
+
 async function auditLog(env, tenantId, actor, action, metadata = {}){
   const record = {
     id:crypto.randomUUID(),
@@ -204,6 +217,10 @@ function requireMaster(auth){
   return null;
 }
 
+function canManageTenantUsers(auth, tenantId){
+  return auth.user.role === 'master' || (auth.user.role === 'admin' && auth.user.tenantId === tenantId);
+}
+
 async function handleLogin(request, env){
   try{
     const bootstrap = await ensureMasterUser(env);
@@ -254,23 +271,120 @@ async function listTenants(env){
   return tenants.filter(Boolean);
 }
 
+async function listUsers(env, tenantId){
+  const list = await env.LEXFLOW_CACHE.list({prefix:'user:'});
+  const users = await Promise.all(list.keys.map(key => env.LEXFLOW_CACHE.get(key.name, {type:'json'})));
+  return users.filter(user => user && (!tenantId || user.tenantId === tenantId)).map(publicUserRow);
+}
+
 async function handleTenants(request, env, auth){
   const denied = requireMaster(auth);
   if(denied) return denied;
   if(request.method === 'GET') return json({tenants:await listTenants(env)});
-  if(request.method !== 'POST') return json({error:'method_not_allowed'}, 405);
   const body = await readBody(request);
+  if(request.method === 'PUT' || request.method === 'PATCH'){
+    const id = body.id || new URL(request.url).searchParams.get('id');
+    const current = id ? await env.LEXFLOW_CACHE.get(tenantKey(id), {type:'json'}) : null;
+    if(!current) return json({error:'not_found', message:'Contrato nao encontrado.'}, 404);
+    const next = {
+      ...current,
+      name:String(body.name ?? current.name).trim(),
+      responsible:body.responsible ?? current.responsible ?? '',
+      email:body.email ?? current.email ?? '',
+      plan:body.plan ?? current.plan ?? 'starter',
+      status:body.status ?? current.status ?? 'active',
+      userLimit:Number(body.userLimit ?? current.userLimit ?? 5),
+      processLimit:Number(body.processLimit ?? current.processLimit ?? 0),
+      updatedAt:nowIso()
+    };
+    await env.LEXFLOW_CACHE.put(tenantKey(next.id), JSON.stringify(next));
+    await auditLog(env, next.id, auth.user, 'tenant.update', {tenantId:next.id});
+    return json({tenant:next});
+  }
+  if(request.method !== 'POST') return json({error:'method_not_allowed'}, 405);
   const tenant = {
     id:body.id || crypto.randomUUID(),
     name:String(body.name || '').trim(),
+    responsible:body.responsible || '',
+    email:body.email || '',
     plan:body.plan || 'starter',
     status:body.status || 'active',
+    userLimit:Number(body.userLimit || 5),
+    processLimit:Number(body.processLimit || 0),
     createdAt:nowIso()
   };
   if(!tenant.name) return json({error:'validation_error', message:'Nome do escritorio e obrigatorio.'}, 400);
   await env.LEXFLOW_CACHE.put(tenantKey(tenant.id), JSON.stringify(tenant));
   await auditLog(env, tenant.id, auth.user, 'tenant.create', {tenantId:tenant.id, name:tenant.name});
   return json({tenant}, 201);
+}
+
+async function handleUsers(request, env, auth){
+  const url = new URL(request.url);
+  const selectedTenant = auth.user.role === 'master' && url.searchParams.get('tenantId') ? url.searchParams.get('tenantId') : auth.user.tenantId;
+  if(!canManageTenantUsers(auth, selectedTenant)) return json({error:'forbidden', message:'Sem permissao para gerenciar usuarios deste escritorio.'}, 403);
+
+  if(request.method === 'GET') return json({users:await listUsers(env, selectedTenant)});
+
+  const body = await readBody(request);
+  const id = body.id || url.searchParams.get('id');
+
+  if(request.method === 'DELETE'){
+    const user = id ? await env.LEXFLOW_CACHE.get(userKey(id), {type:'json'}) : null;
+    if(!user || user.tenantId !== selectedTenant) return json({error:'not_found'}, 404);
+    if(user.role === 'master') return json({error:'forbidden', message:'Usuario master nao pode ser excluido.'}, 403);
+    await env.LEXFLOW_CACHE.delete(userKey(user.id));
+    await env.LEXFLOW_CACHE.delete(userEmailKey(user.email));
+    await auditLog(env, selectedTenant, auth.user, 'user.delete', {userId:user.id, email:user.email});
+    return json({ok:true});
+  }
+
+  if(request.method === 'PUT' || request.method === 'PATCH'){
+    const current = id ? await env.LEXFLOW_CACHE.get(userKey(id), {type:'json'}) : null;
+    if(!current || current.tenantId !== selectedTenant) return json({error:'not_found'}, 404);
+    const nextEmail = String(body.email ?? current.email).trim().toLowerCase();
+    const next = {
+      ...current,
+      name:String(body.name ?? current.name).trim(),
+      email:nextEmail,
+      role:['admin','advogado','assistente'].includes(body.role) ? body.role : current.role,
+      status:['active','inactive'].includes(body.status) ? body.status : current.status,
+      updatedAt:nowIso()
+    };
+    if(body.password) next.passwordHash = await hashPassword(String(body.password));
+    if(next.email !== current.email){
+      const existing = await env.LEXFLOW_CACHE.get(userEmailKey(next.email));
+      if(existing && existing !== current.id) return json({error:'validation_error', message:'E-mail ja cadastrado.'}, 400);
+      await env.LEXFLOW_CACHE.delete(userEmailKey(current.email));
+      await env.LEXFLOW_CACHE.put(userEmailKey(next.email), next.id);
+    }
+    await env.LEXFLOW_CACHE.put(userKey(next.id), JSON.stringify(next));
+    await auditLog(env, selectedTenant, auth.user, 'user.update', {userId:next.id, email:next.email});
+    return json({user:publicUserRow(next)});
+  }
+
+  if(request.method !== 'POST') return json({error:'method_not_allowed'}, 405);
+  const email = String(body.email || '').trim().toLowerCase();
+  const name = String(body.name || '').trim();
+  const password = String(body.password || '');
+  const role = ['admin','advogado','assistente'].includes(body.role) ? body.role : 'advogado';
+  if(!email || !name || !password) return json({error:'validation_error', message:'Nome, e-mail e senha sao obrigatorios.'}, 400);
+  if(await env.LEXFLOW_CACHE.get(userEmailKey(email))) return json({error:'validation_error', message:'E-mail ja cadastrado.'}, 400);
+  const user = {
+    id:crypto.randomUUID(),
+    tenantId:selectedTenant,
+    email,
+    name,
+    role,
+    status:body.status || 'active',
+    passwordHash:await hashPassword(password),
+    createdAt:nowIso(),
+    updatedAt:nowIso()
+  };
+  await env.LEXFLOW_CACHE.put(userKey(user.id), JSON.stringify(user));
+  await env.LEXFLOW_CACHE.put(userEmailKey(email), user.id);
+  await auditLog(env, selectedTenant, auth.user, 'user.create', {userId:user.id, email});
+  return json({user:publicUserRow(user)}, 201);
 }
 
 async function handleSettings(request, env, auth){
@@ -300,6 +414,7 @@ async function handleSettings(request, env, auth){
         authType:body.djen?.authType || current.integrations?.djen?.authType || 'public',
         serviceUrl:body.djen?.serviceUrl || current.integrations?.djen?.serviceUrl || DEFAULT_DJEN_ENDPOINT,
         frequency:body.djen?.frequency || current.integrations?.djen?.frequency || 'manual',
+        oabs:Array.isArray(body.djen?.oabs) ? body.djen.oabs.map(oab => ({uf:String(oab.uf || '').toUpperCase(), numero:onlyDigits(oab.numero), nome:String(oab.nome || '')})).filter(oab => oab.uf && oab.numero) : (current.integrations?.djen?.oabs || []),
         tokenEncrypted:current.integrations?.djen?.tokenEncrypted || null
       }
     },
@@ -408,7 +523,11 @@ function djenEndpoint(env){
   return (env.DJEN_ENDPOINT || DEFAULT_DJEN_ENDPOINT).trim();
 }
 
-function parseDjenOabs(env){
+function parseDjenOabs(env, settings = null){
+  const tenantOabs = settings?.integrations?.djen?.oabs;
+  if(Array.isArray(tenantOabs) && tenantOabs.length){
+    return tenantOabs.map(oab => ({uf:String(oab.uf || '').toUpperCase(), numero:onlyDigits(oab.numero), nome:String(oab.nome || '')})).filter(oab => oab.uf && oab.numero);
+  }
   const configured = (env.DJEN_OABS || '').trim();
   if(!configured) return DEFAULT_DJEN_OABS;
   return configured.split(';').map(entry => {
@@ -467,29 +586,33 @@ async function fetchDjenForOab(env, oab, start, end){
   };
 }
 
-async function readDjenCache(env){
-  return await env.LEXFLOW_CACHE.get(DJEN_CACHE_KEY, {type:'json'});
+function scopedKey(base, tenantId = MASTER_TENANT_ID){
+  return `${base}:${tenantId || MASTER_TENANT_ID}`;
 }
 
-async function writeDjenCache(env, payload){
-  await env.LEXFLOW_CACHE.put(DJEN_CACHE_KEY, JSON.stringify(payload));
-  await env.LEXFLOW_CACHE.delete(DJEN_ERROR_KEY);
+async function readDjenCache(env, tenantId = MASTER_TENANT_ID){
+  return await env.LEXFLOW_CACHE.get(scopedKey(DJEN_CACHE_KEY, tenantId), {type:'json'});
 }
 
-async function writeDjenError(env, error){
-  await env.LEXFLOW_CACHE.put(DJEN_ERROR_KEY, JSON.stringify({
+async function writeDjenCache(env, payload, tenantId = MASTER_TENANT_ID){
+  await env.LEXFLOW_CACHE.put(scopedKey(DJEN_CACHE_KEY, tenantId), JSON.stringify(payload));
+  await env.LEXFLOW_CACHE.delete(scopedKey(DJEN_ERROR_KEY, tenantId));
+}
+
+async function writeDjenError(env, error, tenantId = MASTER_TENANT_ID){
+  await env.LEXFLOW_CACHE.put(scopedKey(DJEN_ERROR_KEY, tenantId), JSON.stringify({
     message:error.message || 'Erro ao sincronizar DJEN',
     at:new Date().toISOString()
   }));
 }
 
-async function readDjenError(env){
-  return await env.LEXFLOW_CACHE.get(DJEN_ERROR_KEY, {type:'json'});
+async function readDjenError(env, tenantId = MASTER_TENANT_ID){
+  return await env.LEXFLOW_CACHE.get(scopedKey(DJEN_ERROR_KEY, tenantId), {type:'json'});
 }
 
-async function refreshDjen(env, requestUrl = 'https://lexflow.local/api/djen/comunicacoes'){
+async function refreshDjen(env, requestUrl = 'https://lexflow.local/api/djen/comunicacoes', settings = null, tenantId = MASTER_TENANT_ID){
   const {start, end} = djenRange(requestUrl);
-  const oabs = parseDjenOabs(env);
+  const oabs = parseDjenOabs(env, settings);
   const settled = await Promise.allSettled(oabs.map(oab => fetchDjenForOab(env, oab, start, end)));
   const results = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
   const errors = settled.filter(r => r.status === 'rejected').map(r => r.reason?.message || 'Erro desconhecido');
@@ -515,22 +638,24 @@ async function refreshDjen(env, requestUrl = 'https://lexflow.local/api/djen/com
       errors
     }
   };
-  await writeDjenCache(env, payload);
+  await writeDjenCache(env, payload, tenantId);
   return payload;
 }
 
-async function proxyDjenComunicacoes(request, env){
+async function proxyDjenComunicacoes(request, env, auth = null){
   const url = new URL(request.url);
   const force = url.searchParams.get('refresh') === '1';
-  const cached = await readDjenCache(env);
+  const tenantId = auth?.user?.role === 'master' && url.searchParams.get('tenantId') ? url.searchParams.get('tenantId') : (auth?.user?.tenantId || MASTER_TENANT_ID);
+  const cached = await readDjenCache(env, tenantId);
   if(cached && !force){
     return json({...cached, sync:{status:'cached_djen', comunicacoes:cached.comunicacoes?.length || 0}});
   }
   try{
-    const payload = await refreshDjen(env, request.url);
+    const settings = auth ? await env.LEXFLOW_CACHE.get(settingsKey(tenantId), {type:'json'}) : null;
+    const payload = await refreshDjen(env, request.url, settings, tenantId);
     return json({...payload, sync:{status:'fresh_djen', comunicacoes:payload.comunicacoes.length}});
   }catch(error){
-    await writeDjenError(env, error);
+    await writeDjenError(env, error, tenantId);
     if(cached){
       return json({...cached, sync:{status:'stale_djen_after_error', message:error.message}}, 202);
     }
@@ -544,13 +669,15 @@ async function proxyDjenComunicacoes(request, env){
   }
 }
 
-async function proxyDjenStatus(request, env){
-  const cached = await readDjenCache(env);
-  const lastError = await readDjenError(env);
+async function proxyDjenStatus(request, env, auth = null){
+  const tenantId = auth?.user?.role === 'master' && url.searchParams.get('tenantId') ? url.searchParams.get('tenantId') : (auth?.user?.tenantId || MASTER_TENANT_ID);
+  const settings = auth ? await env.LEXFLOW_CACHE.get(settingsKey(auth.user.tenantId), {type:'json'}) : null;
+  const cached = await readDjenCache(env, tenantId);
+  const lastError = await readDjenError(env, tenantId);
   return json({
     source:'DJEN/CNJ',
     endpoint:djenEndpoint(env),
-    oabs:parseDjenOabs(env),
+    oabs:parseDjenOabs(env, settings),
     cache:{
       hasData:Boolean(cached),
       collectedAt:cached?.collectedAt || null,
@@ -629,24 +756,24 @@ async function proxiedJsonResponse(response){
   return new Response(response.body, {status: response.status, headers: proxiedHeaders});
 }
 
-async function readCache(env){
-  return await env.LEXFLOW_CACHE.get(CACHE_KEY, {type:'json'});
+async function readCache(env, tenantId = MASTER_TENANT_ID){
+  return await env.LEXFLOW_CACHE.get(scopedKey(CACHE_KEY, tenantId), {type:'json'});
 }
 
-async function writeCache(env, payload){
-  await env.LEXFLOW_CACHE.put(CACHE_KEY, JSON.stringify(payload));
-  await env.LEXFLOW_CACHE.delete(ERROR_KEY);
+async function writeCache(env, payload, tenantId = MASTER_TENANT_ID){
+  await env.LEXFLOW_CACHE.put(scopedKey(CACHE_KEY, tenantId), JSON.stringify(payload));
+  await env.LEXFLOW_CACHE.delete(scopedKey(ERROR_KEY, tenantId));
 }
 
-async function writeError(env, error){
-  await env.LEXFLOW_CACHE.put(ERROR_KEY, JSON.stringify({
+async function writeError(env, error, tenantId = MASTER_TENANT_ID){
+  await env.LEXFLOW_CACHE.put(scopedKey(ERROR_KEY, tenantId), JSON.stringify({
     message:error.message || 'Erro ao sincronizar ControlJus',
     at:new Date().toISOString()
   }));
 }
 
-async function readError(env){
-  return await env.LEXFLOW_CACHE.get(ERROR_KEY, {type:'json'});
+async function readError(env, tenantId = MASTER_TENANT_ID){
+  return await env.LEXFLOW_CACHE.get(scopedKey(ERROR_KEY, tenantId), {type:'json'});
 }
 
 function credentialsStatus(env){
@@ -811,7 +938,7 @@ async function fetchControlJusWithBrowser(env){
   }
 }
 
-async function proxyControlJus(request, env){
+async function proxyControlJus(request, env, auth = null){
   const endpoint = backendEndpoint(env, '/api/controljus/publicacoes');
   if(endpoint){
     const response = await fetch(withQuery(endpoint, request.url), {method:'GET', headers:backendHeaders(env)});
@@ -820,21 +947,22 @@ async function proxyControlJus(request, env){
 
   const url = new URL(request.url);
   const force = url.searchParams.get('refresh') === '1';
-  const cached = await readCache(env);
+  const tenantId = auth?.user?.tenantId || MASTER_TENANT_ID;
+  const cached = await readCache(env, tenantId);
   if(cached && !force){
     return json({...cached, sync:{status:'cached_native'}});
   }
-  return refreshControlJusNative(env);
+  return refreshControlJusNative(env, tenantId);
 }
 
-async function refreshControlJusNative(env){
+async function refreshControlJusNative(env, tenantId = MASTER_TENANT_ID){
   try{
     const result = await fetchControlJusWithBrowser(env);
-    await writeCache(env, result);
+    await writeCache(env, result, tenantId);
     return json({...result, sync:{status:'fresh_native', publicacoes:result.publicacoes.length}});
   }catch(error){
-    await writeError(env, error);
-    const cached = await readCache(env);
+    await writeError(env, error, tenantId);
+    const cached = await readCache(env, tenantId);
     if(cached){
       return json({...cached, sync:{status:'stale_after_error', message:error.message}}, 202);
     }
@@ -848,15 +976,16 @@ async function refreshControlJusNative(env){
   }
 }
 
-async function proxyControlJusStatus(request, env){
+async function proxyControlJusStatus(request, env, auth = null){
   const endpoint = backendEndpoint(env, '/api/controljus/status');
   if(endpoint){
     const response = await fetch(withQuery(endpoint, request.url), {method:'GET', headers:backendHeaders(env)});
     return proxiedJsonResponse(response);
   }
 
-  const cached = await readCache(env);
-  const lastError = await readError(env);
+  const tenantId = auth?.user?.tenantId || MASTER_TENANT_ID;
+  const cached = await readCache(env, tenantId);
+  const lastError = await readError(env, tenantId);
   return json({
     source:'ControlJus',
     mode:'cloudflare_browser_run',
@@ -872,10 +1001,10 @@ async function proxyControlJusStatus(request, env){
   }, cached || credentialsStatus(env).hasUser && credentialsStatus(env).hasPassword ? 200 : 503);
 }
 
-async function refreshControlJusBackend(env, reason, cron = ''){
+async function refreshControlJusBackend(env, reason, cron = '', tenantId = MASTER_TENANT_ID){
   const endpoint = backendEndpoint(env, '/api/controljus/refresh');
   if(!endpoint){
-    const response = await refreshControlJusNative(env);
+    const response = await refreshControlJusNative(env, tenantId);
     const payload = await response.json().catch(() => ({}));
     return {ok:response.ok || response.status === 202, status:response.status, reason, cron, ...payload};
   }
@@ -890,19 +1019,19 @@ async function refreshControlJusBackend(env, reason, cron = ''){
   return {ok:response.ok || response.status === 202, status:response.status, ...payload};
 }
 
-async function proxyControlJusRefresh(request, env){
+async function proxyControlJusRefresh(request, env, auth = null){
   if(request.method !== 'POST' && request.method !== 'GET'){
     return json({error:'method_not_allowed'}, 405);
   }
-  const result = await refreshControlJusBackend(env, 'manual');
+  const result = await refreshControlJusBackend(env, 'manual', '', auth?.user?.tenantId || MASTER_TENANT_ID);
   return json(result, result.status || (result.ok ? 200 : 503));
 }
 
-async function proxyDjenRefresh(request, env){
+async function proxyDjenRefresh(request, env, auth = null){
   if(request.method !== 'POST' && request.method !== 'GET'){
     return json({error:'method_not_allowed'}, 405);
   }
-  const response = await proxyDjenComunicacoes(new Request(`${new URL(request.url).origin}/api/djen/comunicacoes?refresh=1`), env);
+  const response = await proxyDjenComunicacoes(new Request(`${new URL(request.url).origin}/api/djen/comunicacoes?refresh=1`), env, auth);
   return response;
 }
 
@@ -930,9 +1059,16 @@ export default {
       const auth = await requireAuth(request, env);
       if(auth instanceof Response) return auth;
       if(url.pathname === '/api/tenants') return handleTenants(request, env, auth);
+      if(url.pathname === '/api/users') return handleUsers(request, env, auth);
       if(url.pathname === '/api/settings') return handleSettings(request, env, auth);
       if(url.pathname === '/api/audit-log') return handleAuditLog(request, env, auth);
       if(url.pathname === '/api/integrations/test') return handleIntegrationTest(request, env, auth);
+      if(url.pathname === '/api/controljus/publicacoes') return proxyControlJus(request, env, auth);
+      if(url.pathname === '/api/controljus/status') return proxyControlJusStatus(request, env, auth);
+      if(url.pathname === '/api/controljus/refresh') return proxyControlJusRefresh(request, env, auth);
+      if(url.pathname === '/api/djen/comunicacoes') return proxyDjenComunicacoes(request, env, auth);
+      if(url.pathname === '/api/djen/status') return proxyDjenStatus(request, env, auth);
+      if(url.pathname === '/api/djen/refresh') return proxyDjenRefresh(request, env, auth);
     }
 
     if(url.pathname === '/api/controljus/publicacoes') return proxyControlJus(request, env);
