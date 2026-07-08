@@ -775,32 +775,72 @@ function samePersonName(a, b){
 
 function isKnownMonitoredLawyer(value){
   const name = normalizePersonName(value);
-  return ['IGOR LAZARO PIRES NETO', 'LUIZ FERNANDO CORREA PIRES'].includes(name);
+  return ['IGOR LAZARO PIRES NETO', 'LUIZ FERNANDO CORREA PIRES'].some(lawyer => name === lawyer || name.includes(lawyer));
+}
+
+function cleanPartyCandidate(value){
+  return cleanText(value)
+    .replace(/\s*\((?:OAB|ADV|ADVOGAD[OA]|AUTOR|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA])[^)]*\)\s*/gi, ' ')
+    .replace(/\s+R[ÉE]\s*\(?U?\)?\s*$/i, '')
+    .replace(/\s+(?:AUTOR(?:A)?|R[ÉE]U|PARTE\s+R[ÉE]|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA])\s*\(?[A-Z/]*\)?\s*$/i, '')
+    .replace(/\s+(?:ADVOGAD[OA]\(?S?\)?|OAB|PROCURADOR(?:A)?|DEFENSOR(?:A)?|PROMOTOR(?:A)?|MINIST[ÉE]RIO)\b[\s\S]*$/i, '')
+    .replace(/\s+-\s+.*$/i, '')
+    .replace(/[.,;:]+$/g, '')
+    .trim();
+}
+
+function isValidPartyCandidate(value){
+  const candidate = cleanPartyCandidate(value);
+  if(candidate.length < 3 || candidate.length > 80) return false;
+  if(isKnownMonitoredLawyer(candidate)) return false;
+  const normalized = normalizePersonName(candidate);
+  if(!/[A-Z]{2,}(?:\s+[A-Z]{2,})+/.test(normalized)) return false;
+  const blocked = ['ADVOGADO','ADVOGADA','OAB','PODER JUDICIARIO','TRIBUNAL','DIARIO DE JUSTICA','PROCESSO','PROCEDIMENTO','INTIMACAO','INTIMADO','INTIMADA','ARQUIVO','ARQUIVOS','DISPONIVEIS','INDISPONIVEIS','SEGREDO DE JUSTICA','DATA E ASSINATURA','ASSINATURA ELETRONICA','JUIZ','JUIZA','DE DIREITO','COMARCA','VARA','GABINETE','SENTENCA','DECISAO','DESPACHO','AUDIENCIA','DOCUMENTO','PUBLICADO','DISPONIBILIZADO'];
+  return !blocked.some(word => normalized.includes(word));
+}
+
+function bestPartyCandidate(values){
+  for(const value of values){
+    const candidate = cleanPartyCandidate(value);
+    if(isValidPartyCandidate(candidate)) return candidate;
+  }
+  return '';
+}
+
+function extractPartyFromPublicationText(text){
+  const raw = cleanText(text);
+  if(!raw) return '';
+  const role = '(?:AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA]|RECORRENTE|RECORRID[OA]|IMPETRANTE|IMPETRAD[OA]|INTERESSAD[OA]|PACIENTE)';
+  const stop = '(?=\\s+(?:ADVOGAD[OA]\\(?S?\\)?|OAB|PROCURADOR(?:A)?|DEFENSOR(?:A)?|PROMOTOR(?:A)?|MINIST[ÉE]RIO|AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA]|RECORRENTE|RECORRID[OA]|IMPETRANTE|IMPETRAD[OA]|INTERESSAD[OA]|PACIENTE|RELATOR|JUIZ|JUIZA)\\b|$)';
+  const regex = new RegExp(`\\b${role}(?:\\s*\\([A-Z/]+\\))*\\s*:\\s*([\\s\\S]{3,160}?)${stop}`, 'gi');
+  const candidates = [];
+  let match;
+  while((match = regex.exec(raw))) candidates.push(match[1]);
+  const selected = bestPartyCandidate(candidates);
+  if(selected) return selected;
+  const inline = raw.match(/\b(?:AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA])(?:\s*\([A-Z/]+\))*\s+([A-ZÁÉÍÓÚÃÕÇ][A-ZÁÉÍÓÚÃÕÇ'.-]+(?:\s+[A-ZÁÉÍÓÚÃÕÇ][A-ZÁÉÍÓÚÃÕÇ'.-]+){1,8})/);
+  return inline ? bestPartyCandidate([inline[1]]) : '';
 }
 
 function extractDjenPartyFromText(text){
-  const raw = cleanText(text);
-  if(!raw) return '';
-  const patterns = [
-    /\b(?:AUTOR(?:A)?|REQUERENTE|APELANTE|AGRAVANTE|EXEQUENTE|RECORRENTE|IMPETRANTE|INTERESSAD[OA])(?:\s*\([A-Z/]+\))*\s*:?\s*([^:;]{3,180})/i,
-    /\b(?:R[ÉE]U|REQUERID[OA]|APELAD[OA]|AGRAVAD[OA]|EXECUTAD[OA]|RECORRID[OA]|IMPETRAD[OA])(?:\s*\([A-Z/]+\))*\s*:?\s*([^:;]{3,180})/i
-  ];
-  for(const pattern of patterns){
-    const match = raw.match(pattern);
-    if(!match) continue;
-    const party = cleanText(match[1])
-      .replace(/\s+(?:ADVOGAD[OA]\(?S?\)?|OAB|PROCURADOR(?:A)?|DEFENSOR(?:A)?|MINIST[ÉE]RIO|AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA]|RECORRENTE|RECORRID[OA]|IMPETRANTE|IMPETRAD[OA]|INTERESSAD[OA])\b[\s\S]*$/i, '')
-      .replace(/\s+-\s+.*$/i, '')
-      .trim();
-    if(party && party.length >= 3) return party.slice(0, 120);
-  }
-  return '';
+  return extractPartyFromPublicationText(text);
+}
+
+function normalizedPublicationClient(pub){
+  const current = cleanPartyCandidate(pub?.cliente || '');
+  const lawyer = lawyerNameFromMonitor(pub?.advogadoMonitorado || '');
+  if(isValidPartyCandidate(current) && !samePersonName(current, lawyer)) return current;
+  return extractPartyFromPublicationText(pub?.textoRecorte || '');
+}
+
+function displayClientName(pub){
+  return normalizedPublicationClient(pub) || 'Parte não identificada';
 }
 
 function repairDjenClientFields(){
   let changed = false;
   (DB.publicacoes || []).forEach(p=>{
-    if(publicacaoOrigem(p) !== 'DJEN') return;
+    if(!['DJEN','ControlJus'].includes(publicacaoOrigem(p))) return;
     const obsLawyer = cleanText(p.observacoes).match(/([^|]+?\s+OAB\/[A-Z]{2}\s+\d+)/i);
     if(!p.advogadoMonitorado && obsLawyer){
       p.advogadoMonitorado = cleanText(obsLawyer[1]);
@@ -810,28 +850,28 @@ function repairDjenClientFields(){
       p.advogadoMonitorado = p.cliente;
       changed = true;
     }
-    const lawyerName = lawyerNameFromMonitor(p.advogadoMonitorado);
-    const inferredParty = extractDjenPartyFromText(p.textoRecorte);
-    if(!p.cliente || samePersonName(p.cliente, lawyerName)){
-      if(p.cliente !== inferredParty){
-        p.cliente = samePersonName(inferredParty, lawyerName) ? '' : inferredParty;
-        changed = true;
-      }
+    const fixedClient = normalizedPublicationClient(p);
+    if(p.cliente !== fixedClient){
+      p.cliente = fixedClient;
+      changed = true;
     }
   });
   return changed;
 }
 
 function normalizeControlJusPublicacao(p){
+  const textoRecorte = cleanText(p.textoRecorte || '');
+  const advogadoMonitorado = p.advogadoMonitorado || (isKnownMonitoredLawyer(p.cliente) ? p.cliente : '');
+  const cliente = normalizedPublicationClient({cliente:p.cliente || '', textoRecorte, advogadoMonitorado});
   return {
     id:p.id || uid(),
     refId:p.refId || `CJ-${uid()}`,
     dataPublicacao:p.dataPublicacao || '',
     processo:p.processo || '',
-    cliente:p.cliente || '',
+    cliente,
     tribunal:p.tribunal || '',
     tipoPublicacao:p.tipoPublicacao || 'Recorte ControlJus',
-    textoRecorte:cleanText(p.textoRecorte || ''),
+    textoRecorte,
     prazoIdentificado:p.prazoIdentificado || '',
     prazoFatal:p.prazoFatal || '',
     status:p.status || 'Novo',
@@ -839,7 +879,7 @@ function normalizeControlJusPublicacao(p){
     observacoes:p.observacoes || '',
     linkOrigem:p.linkOrigem || DB.config?.controlJusEndpoint || CONTROLJUS_PRIVATE_ENDPOINT,
     source:p.source || 'ControlJus',
-    advogadoMonitorado:p.advogadoMonitorado || '',
+    advogadoMonitorado,
     controlJusId:p.controlJusId || '',
     prazoGeradoId:p.prazoGeradoId || ''
   };
@@ -886,6 +926,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
         updated++;
       }
     });
+    if(repairDjenClientFields()) updated++;
   });
 
   DB.config.lastControlJusSyncAt = payload.collectedAt || new Date().toISOString();
@@ -906,12 +947,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
 function normalizeDjenPublicacao(c){
   const advogado = c.advogado ? `${c.advogado.nome || ''} OAB/${c.advogado.uf || ''} ${c.advogado.numero || ''}`.trim() : '';
   const textoRecorte = cleanText(c.texto || '');
-  const advogadoNome = lawyerNameFromMonitor(advogado);
-  let cliente = cleanText(c.destinatario || extractDjenPartyFromText(textoRecorte));
-  if(samePersonName(cliente, advogadoNome)){
-    cliente = extractDjenPartyFromText(textoRecorte);
-  }
-  if(samePersonName(cliente, advogadoNome)) cliente = '';
+  const cliente = normalizedPublicationClient({cliente:c.destinatario || '', textoRecorte, advogadoMonitorado:advogado});
   const detalhes = [
     c.orgao ? `Orgao: ${c.orgao}` : '',
     c.meio ? `Meio: ${c.meio}` : ''
@@ -1165,7 +1201,7 @@ function renderPublicacoes(){
     html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
       <td>${esc(fmtDate(p.dataPublicacao))}</td>
       <td>${originTag(p)}</td>
-      <td class="cliente">${esc(p.cliente || '—')}</td>
+      <td class="cliente">${esc(displayClientName(p))}</td>
       <td>${esc(p.advogadoMonitorado || '—')}</td>
       <td class="proc">${esc(p.processo || '—')}</td>
       <td><span class="tribunal-tag">${esc(p.tribunal || '—')}</span></td>
@@ -1191,12 +1227,12 @@ function renderPublicacoes(){
   document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
     const id=tr.dataset.id; const p = DB.publicacoes.find(x=>x.id===id);
     const stSel = tr.querySelector('[data-act="status"]');
-    if(stSel) stSel.onchange = async e=>{ const old=p.status; p.status=e.target.value; logHist(`Publicação de ${p.cliente} (${p.processo}) alterada: ${old} → ${p.status}`); await saveDB(); renderAll(); toast('Status atualizado'); };
+    if(stSel) stSel.onchange = async e=>{ const old=p.status; p.status=e.target.value; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) alterada: ${old} → ${p.status}`); await saveDB(); renderAll(); toast('Status atualizado'); };
     const genBtn = tr.querySelector('[data-act="genprazo"]');
     if(genBtn) genBtn.onclick = ()=>openPrazoModal(null, p);
     tr.querySelector('[data-act="edit"]').onclick = ()=>openPubModal(p);
     const archBtn = tr.querySelector('[data-act="archive"]');
-    if(archBtn) archBtn.onclick = async ()=>{ p.status='Arquivado'; logHist(`Publicação de ${p.cliente} (${p.processo}) arquivada.`); await saveDB(); renderAll(); toast('Recorte arquivado'); };
+    if(archBtn) archBtn.onclick = async ()=>{ p.status='Arquivado'; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) arquivada.`); await saveDB(); renderAll(); toast('Recorte arquivado'); };
   });
 }
 
@@ -1350,7 +1386,7 @@ function renderPrazos(){
 
 function openPrazoModal(p, fromPub){
   const isNew = !p;
-  const d = p || {id:uid(), processo:fromPub?fromPub.processo:'', cliente:fromPub?fromPub.cliente:'', tribunal:fromPub?fromPub.tribunal:'', dataPublicacao:fromPub?fromPub.dataPublicacao:'', tipoPrazo:fromPub?fromPub.tipoPublicacao:'', prazoFatal:fromPub?fromPub.prazoFatal:'', origemPublicacaoId:fromPub?fromPub.refId:'', responsavel:'', status:'Novo', prioridade:'Média', observacao:'', link:'', concluidoEm:''};
+  const d = p || {id:uid(), processo:fromPub?fromPub.processo:'', cliente:fromPub?displayClientName(fromPub):'', tribunal:fromPub?fromPub.tribunal:'', dataPublicacao:fromPub?fromPub.dataPublicacao:'', tipoPrazo:fromPub?fromPub.tipoPublicacao:'', prazoFatal:fromPub?fromPub.prazoFatal:'', origemPublicacaoId:fromPub?fromPub.refId:'', responsavel:'', status:'Novo', prioridade:'Média', observacao:'', link:'', concluidoEm:''};
   const box = document.getElementById('modalBox');
   box.innerHTML = `
     <div class="modal-head"><h3>${isNew?'Novo prazo':'Editar prazo'}</h3><button class="close-x" id="mClose">✕</button></div>
@@ -1400,7 +1436,7 @@ function openPrazoModal(p, fromPub){
     if(isNew){
       DB.prazos.push(updated);
       logHist(`Novo prazo cadastrado: ${cliente} (${processo})${fromPub?' — origem: recorte ControlJus':''}`);
-      if(fromPub){ fromPub.prazoGeradoId = updated.id; logHist(`Recorte de ${fromPub.cliente} vinculado ao novo prazo.`); }
+      if(fromPub){ fromPub.prazoGeradoId = updated.id; logHist(`Recorte de ${displayClientName(fromPub)} vinculado ao novo prazo.`); }
     } else { const idx=DB.prazos.findIndex(x=>x.id===d.id); DB.prazos[idx]=updated; logHist(`Prazo de ${cliente} (${processo}) editado.`); }
     await saveDB(); hideModal(); renderAll(); toast('Prazo salvo');
   };
@@ -1630,7 +1666,7 @@ function renderAlertas(){
         return `<div class="prow b-${g.color}">
           ${ringHTML(dr, false)}
           <div class="info">
-            <div class="top-line"><span class="cliente">${esc(it.cliente)}</span><span class="tribunal-tag">${esc(isAudi?it.estado:it.tribunal)}</span></div>
+            <div class="top-line"><span class="cliente">${esc(isPub?displayClientName(it):it.cliente)}</span><span class="tribunal-tag">${esc(isAudi?it.estado:it.tribunal)}</span></div>
             <div class="proc">${esc(it.processo)}</div>
             <div class="desc">${esc(isPub?recortePreview(it.textoRecorte):(isAudi?it.tipo:it.tipoPrazo))}</div>
           </div>

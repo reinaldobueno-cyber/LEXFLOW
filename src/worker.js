@@ -535,24 +535,57 @@ function samePersonName(a, b){
   return Boolean(left && right && left === right);
 }
 
+function isKnownMonitoredLawyer(value){
+  const name = normalizePersonName(value);
+  return DEFAULT_DJEN_OABS.some(oab => {
+    const lawyer = normalizePersonName(oab.nome);
+    return lawyer && (name === lawyer || name.includes(lawyer));
+  });
+}
+
+function cleanPartyCandidate(value){
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\((?:OAB|ADV|ADVOGAD[OA]|AUTOR|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA])[^)]*\)\s*/gi, ' ')
+    .replace(/\s+R[ÉE]\s*\(?U?\)?\s*$/i, '')
+    .replace(/\s+(?:AUTOR(?:A)?|R[ÉE]U|PARTE\s+R[ÉE]|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA])\s*\(?[A-Z/]*\)?\s*$/i, '')
+    .replace(/\s+(?:ADVOGAD[OA]\(?S?\)?|OAB|PROCURADOR(?:A)?|DEFENSOR(?:A)?|PROMOTOR(?:A)?|MINIST[ÉE]RIO)\b[\s\S]*$/i, '')
+    .replace(/\s+-\s+.*$/i, '')
+    .replace(/[.,;:]+$/g, '')
+    .trim();
+}
+
+function isValidPartyCandidate(value){
+  const candidate = cleanPartyCandidate(value);
+  if(candidate.length < 3 || candidate.length > 80) return false;
+  if(isKnownMonitoredLawyer(candidate)) return false;
+  const normalized = normalizePersonName(candidate);
+  if(!/[A-Z]{2,}(?:\s+[A-Z]{2,})+/.test(normalized)) return false;
+  const blocked = ['ADVOGADO','ADVOGADA','OAB','PODER JUDICIARIO','TRIBUNAL','DIARIO DE JUSTICA','PROCESSO','PROCEDIMENTO','INTIMACAO','INTIMADO','INTIMADA','ARQUIVO','ARQUIVOS','DISPONIVEIS','INDISPONIVEIS','SEGREDO DE JUSTICA','DATA E ASSINATURA','ASSINATURA ELETRONICA','JUIZ','JUIZA','DE DIREITO','COMARCA','VARA','GABINETE','SENTENCA','DECISAO','DESPACHO','AUDIENCIA','DOCUMENTO','PUBLICADO','DISPONIBILIZADO'];
+  return !blocked.some(word => normalized.includes(word));
+}
+
+function bestPartyCandidate(values){
+  for(const value of values){
+    const candidate = cleanPartyCandidate(value);
+    if(isValidPartyCandidate(candidate)) return candidate;
+  }
+  return '';
+}
+
 function extractDjenPartyFromText(text){
   const raw = String(text ?? '').replace(/\s+/g, ' ').trim();
   if(!raw) return '';
-  const patterns = [
-    /\b(?:AUTOR(?:A)?|REQUERENTE|APELANTE|AGRAVANTE|EXEQUENTE|RECORRENTE|IMPETRANTE|INTERESSAD[OA])(?:\s*\([A-Z/]+\))*\s*:?\s*([^:;]{3,180})/i,
-    /\b(?:R[ÉE]U|REQUERID[OA]|APELAD[OA]|AGRAVAD[OA]|EXECUTAD[OA]|RECORRID[OA]|IMPETRAD[OA])(?:\s*\([A-Z/]+\))*\s*:?\s*([^:;]{3,180})/i
-  ];
-  for(const pattern of patterns){
-    const match = raw.match(pattern);
-    if(!match) continue;
-    const party = String(match[1] || '')
-      .replace(/\s+(?:ADVOGAD[OA]\(?S?\)?|OAB|PROCURADOR(?:A)?|DEFENSOR(?:A)?|MINIST[ÉE]RIO|AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA]|RECORRENTE|RECORRID[OA]|IMPETRANTE|IMPETRAD[OA]|INTERESSAD[OA])\b[\s\S]*$/i, '')
-      .replace(/\s+-\s+.*$/i, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if(party.length >= 3) return party.slice(0, 120);
-  }
-  return '';
+  const role = '(?:AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA]|RECORRENTE|RECORRID[OA]|IMPETRANTE|IMPETRAD[OA]|INTERESSAD[OA]|PACIENTE)';
+  const stop = '(?=\\s+(?:ADVOGAD[OA]\\(?S?\\)?|OAB|PROCURADOR(?:A)?|DEFENSOR(?:A)?|PROMOTOR(?:A)?|MINIST[ÉE]RIO|AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA]|AGRAVANTE|AGRAVAD[OA]|EXEQUENTE|EXECUTAD[OA]|RECORRENTE|RECORRID[OA]|IMPETRANTE|IMPETRAD[OA]|INTERESSAD[OA]|PACIENTE|RELATOR|JUIZ|JUIZA)\\b|$)';
+  const regex = new RegExp(`\\b${role}(?:\\s*\\([A-Z/]+\\))*\\s*:\\s*([\\s\\S]{3,160}?)${stop}`, 'gi');
+  const candidates = [];
+  let match;
+  while((match = regex.exec(raw))) candidates.push(match[1]);
+  const selected = bestPartyCandidate(candidates);
+  if(selected) return selected;
+  const inline = raw.match(/\b(?:AUTOR(?:A)?|R[ÉE]U|REQUERENTE|REQUERID[OA]|APELANTE|APELAD[OA])(?:\s*\([A-Z/]+\))*\s+([A-ZÁÉÍÓÚÃÕÇ][A-ZÁÉÍÓÚÃÕÇ'.-]+(?:\s+[A-ZÁÉÍÓÚÃÕÇ][A-ZÁÉÍÓÚÃÕÇ'.-]+){1,8})/);
+  return inline ? bestPartyCandidate([inline[1]]) : '';
 }
 
 function djenEndpoint(env){
@@ -583,10 +616,8 @@ function djenRange(requestUrl){
 function normalizeDjenComunicacao(item, oab, sourceUrl){
   const texto = stripHtml(item.texto || item.textoComunicacao || '');
   const inferredParty = extractDjenPartyFromText(texto);
-  let destinatario = String(item.nomeParte || item.destinatario || inferredParty || '').replace(/\s+/g, ' ').trim();
-  if(samePersonName(destinatario, oab.nome)){
-    destinatario = samePersonName(inferredParty, oab.nome) ? '' : inferredParty;
-  }
+  const rawDestinatario = String(item.nomeParte || item.destinatario || '').replace(/\s+/g, ' ').trim();
+  const destinatario = bestPartyCandidate([rawDestinatario, inferredParty]);
   return {
     refId:item.id ? `DJEN-${item.id}` : `DJEN-${oab.uf}-${oab.numero}-${item.numero_processo || crypto.randomUUID()}`,
     id:item.id || '',
