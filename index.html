@@ -387,6 +387,40 @@ const CONTROLJUS_ENDPOINT_MODE = 'lexflow_cloudflare_browser_run_controljus';
 const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 const LEXFLOW_DJEN_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/djen/comunicacoes';
 const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
+const LEGAL_CODES = [
+  {id:'cf', area:'Constitucional', name:'Constituição da República Federativa do Brasil de 1988', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm'},
+  {id:'cpc', area:'Civil', name:'Código de Processo Civil - Lei 13.105/2015', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2015/lei/l13105.htm'},
+  {id:'cpp', area:'Penal', name:'Código de Processo Penal - Decreto-Lei 3.689/1941', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/decreto-lei/del3689.htm'},
+  {id:'clt', area:'Trabalhista', name:'Consolidação das Leis do Trabalho - Decreto-Lei 5.452/1943', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm'},
+  {id:'ce', area:'Eleitoral', name:'Código Eleitoral - Lei 4.737/1965', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/leis/l4737compilado.htm'},
+  {id:'ctn', area:'Tributário', name:'Código Tributário Nacional - Lei 5.172/1966', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/leis/l5172compilado.htm'},
+  {id:'cc', area:'Civil', name:'Código Civil - Lei 10.406/2002', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/leis/2002/l10406compilada.htm'},
+  {id:'cp', area:'Penal', name:'Código Penal - Decreto-Lei 2.848/1940', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/decreto-lei/del2848compilado.htm'},
+  {id:'cpm', area:'Penal militar', name:'Código Penal Militar - Decreto-Lei 1.001/1969', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/decreto-lei/del1001.htm'},
+  {id:'cppm', area:'Penal militar', name:'Código de Processo Penal Militar - Decreto-Lei 1.002/1969', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/decreto-lei/del1002.htm'},
+  {id:'juizados', area:'Civil/Criminal', name:'Juizados Especiais - Lei 9.099/1995', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/leis/l9099.htm'},
+  {id:'lef', area:'Tributário', name:'Execução Fiscal - Lei 6.830/1980', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/leis/l6830.htm'}
+];
+const DEADLINE_RULES = [
+  {id:'civil-contrarrazoes-apelacao', area:'civil', codeId:'cpc', act:'Contrarrazões à apelação', days:15, count:'business', basis:'CPC, art. 1.010, §1º; contagem em dias úteis pelo art. 219', confidence:'alta', keywords:['CONTRARRAZOES A APELACAO','CONTRARRAZOES DE APELACAO','CONTRARRAZOES']},
+  {id:'civil-apelacao', area:'civil', codeId:'cpc', act:'Apelação', days:15, count:'business', basis:'CPC, art. 1.003, §5º', confidence:'media', keywords:['APELACAO','SENTENCA']},
+  {id:'civil-agravo', area:'civil', codeId:'cpc', act:'Agravo', days:15, count:'business', basis:'CPC, art. 1.003, §5º', confidence:'media', keywords:['AGRAVO','DECISAO INTERLOCUTORIA']},
+  {id:'civil-ed', area:'civil', codeId:'cpc', act:'Embargos de declaração', days:5, count:'business', basis:'CPC, art. 1.023; contagem em dias úteis pelo art. 219', confidence:'media', keywords:['EMBARGOS DE DECLARACAO','ED']},
+  {id:'civil-contestacao', area:'civil', codeId:'cpc', act:'Contestação', days:15, count:'business', basis:'CPC, art. 335', confidence:'media', keywords:['CONTESTACAO','CITACAO']},
+  {id:'civil-emenda-inicial', area:'civil', codeId:'cpc', act:'Emenda à inicial', days:15, count:'business', basis:'CPC, art. 321; contagem em dias úteis pelo art. 219', confidence:'media', keywords:['EMENDA A INICIAL','EMENDAR A INICIAL','PETICAO INICIAL']},
+  {id:'civil-manifestacao-generica', area:'civil', codeId:'cpc', act:'Manifestação', days:15, count:'business', basis:'Regra assistiva: prazo comum civil quando o ato não traz prazo específico; exige validação', confidence:'baixa', keywords:['MANIFESTACAO','MANIFESTAR','VISTA','INTIMACAO','DESPACHO','DECISAO','ACORDAO']},
+  {id:'trabalho-ro', area:'trabalhista', codeId:'clt', act:'Recurso ordinário', days:8, count:'business', basis:'CLT, art. 895; validar regra de dias úteis e norma aplicável do TST', confidence:'media', keywords:['RECURSO ORDINARIO']},
+  {id:'trabalho-rr', area:'trabalhista', codeId:'clt', act:'Recurso de revista', days:8, count:'business', basis:'CLT, art. 896; validar regra específica no caso concreto', confidence:'media', keywords:['RECURSO DE REVISTA']},
+  {id:'trabalho-agravo', area:'trabalhista', codeId:'clt', act:'Agravo trabalhista', days:8, count:'business', basis:'CLT, art. 897; validar espécie do agravo', confidence:'media', keywords:['AGRAVO DE PETICAO','AGRAVO DE INSTRUMENTO','AGRAVO']},
+  {id:'trabalho-ed', area:'trabalhista', codeId:'clt', act:'Embargos de declaração trabalhista', days:5, count:'business', basis:'CLT, art. 897-A', confidence:'media', keywords:['EMBARGOS DE DECLARACAO','ED']},
+  {id:'penal-apelacao', area:'penal', codeId:'cpp', act:'Apelação criminal', days:5, count:'calendar', basis:'CPP, art. 593; validar termo inicial e intimação', confidence:'media', keywords:['APELACAO CRIMINAL','APELACAO']},
+  {id:'penal-razoes', area:'penal', codeId:'cpp', act:'Razões/contrarrazões criminais', days:8, count:'calendar', basis:'CPP, art. 600; validar se é apresentação de razões ou contrarrazões', confidence:'media', keywords:['RAZOES','CONTRARRAZOES']},
+  {id:'penal-rese', area:'penal', codeId:'cpp', act:'Recurso em sentido estrito', days:5, count:'calendar', basis:'CPP, art. 586', confidence:'media', keywords:['RECURSO EM SENTIDO ESTRITO','RESE']},
+  {id:'penal-ed', area:'penal', codeId:'cpp', act:'Embargos de declaração criminais', days:2, count:'calendar', basis:'CPP, art. 619', confidence:'media', keywords:['EMBARGOS DE DECLARACAO','ED']},
+  {id:'eleitoral-geral', area:'eleitoral', codeId:'ce', act:'Recurso eleitoral', days:3, count:'calendar', basis:'Código Eleitoral, art. 258; regra geral sujeita a prazo especial', confidence:'baixa', keywords:['RECURSO','ELEITORAL']},
+  {id:'tributario-execucao-fiscal', area:'tributario', codeId:'lef', act:'Embargos/manifestação em execução fiscal', days:30, count:'calendar', basis:'Lei 6.830/1980, art. 16; validar marco de garantia/penhora, não apenas publicação', confidence:'baixa', keywords:['EXECUCAO FISCAL','EMBARGOS A EXECUCAO']},
+  {id:'penal-militar-validar', area:'penal_militar', codeId:'cppm', act:'Ato penal militar', days:null, count:'manual', basis:'Código de Processo Penal Militar; regra depende do ato específico', confidence:'baixa', keywords:['MILITAR','APELACAO','RECURSO','EMBARGOS']}
+];
 const isControlJusPrazo = p => Boolean(p && p.origemPublicacaoId);
 const isValidationPrazo = p => !isControlJusPrazo(p);
 const AUTH_STORAGE_KEY = 'lf:auth';
@@ -1119,6 +1153,7 @@ const VIEWS = [
   {id:'audiencias', label:'Agenda', icon:'◷', group:'main'},
   {id:'tarefas', label:'Tarefas', icon:'☑', group:'main'},
   {id:'alertas', label:'Alertas', icon:'▲', group:'main'},
+  {id:'base_prazos', label:'Base de Prazos', icon:'§', group:'main'},
   {id:'configuracoes', label:'Configurações', icon:'⚙', group:'main'},
   {id:'usuarios', label:'Usuários', icon:'◉', group:'main', managerOnly:true},
   {id:'historico', label:'Histórico', icon:'≡', group:'sec'},
@@ -1182,31 +1217,123 @@ function ringHTML(dias, done){
 }
 function pill(status, color){ return `<span class="pill st-${color}"><span class="dot"></span>${status}</span>`; }
 
+function legalCodeById(id){
+  return LEGAL_CODES.find(code => code.id === id) || {};
+}
+
+function processSegment(processo, index){
+  const match = cleanText(processo).match(/^\d{7}-\d{2}\.\d{4}\.(\d)\.(\d{2})\.(\d{4})$/);
+  if(!match) return '';
+  return match[index] || '';
+}
+
+function inferLegalArea(pub){
+  const text = normalizePersonName(`${pub?.tribunal || ''} ${pub?.tipoPublicacao || ''} ${pub?.textoRecorte || ''} ${pub?.observacoes || ''}`);
+  const justice = processSegment(pub?.processo, 1);
+  if(text.includes('TRT') || text.includes('TST') || text.includes('TRABALHO') || justice === '5') return {id:'trabalhista', label:'Trabalhista', reason:'ramo/vara trabalhista'};
+  if(text.includes('TRE') || text.includes('TSE') || text.includes('ELEITORAL') || justice === '6') return {id:'eleitoral', label:'Eleitoral', reason:'ramo eleitoral'};
+  if(text.includes('MILITAR') || text.includes('STM') || justice === '7' || justice === '9') return {id:'penal_militar', label:'Penal militar', reason:'ramo/vara militar'};
+  if(text.includes('CRIMINAL') || text.includes('CRIME') || text.includes('PENAL') || text.includes('HABEAS CORPUS') || text.includes('REU') || text.includes('APELANTE') && text.includes('PACIENTE')) return {id:'penal', label:'Penal', reason:'texto/vara criminal'};
+  if(text.includes('FAZENDA PUBLICA') || text.includes('EXECUCAO FISCAL') || text.includes('TRIBUT') || text.includes('FISCAL')) return {id:'tributario', label:'Tributário', reason:'fazenda pública/execução fiscal'};
+  return {id:'civil', label:'Civil', reason:'regra padrão quando não há ramo especial identificado'};
+}
+
+function inferDeadlineRule(pub, areaId){
+  const text = normalizePersonName(`${pub?.tipoPublicacao || ''} ${pub?.textoRecorte || ''} ${pub?.observacoes || ''}`);
+  const rules = DEADLINE_RULES.filter(rule => rule.area === areaId);
+  let best = null;
+  let bestScore = 0;
+  rules.forEach(rule=>{
+    const score = rule.keywords.reduce((acc, keyword)=> acc + (text.includes(keyword) ? keyword.length : 0), 0);
+    if(score > bestScore){ best = rule; bestScore = score; }
+  });
+  if(best) return best;
+  return rules.find(rule => rule.id.includes('manifestacao') || rule.id.includes('validar')) || null;
+}
+
+function isWeekend(date){
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+function nextCountableDay(date, business){
+  const d = new Date(date);
+  d.setDate(d.getDate() + 1);
+  if(!business) return d;
+  while(isWeekend(d)) d.setDate(d.getDate() + 1);
+  return d;
+}
+
+function addDeadlineDays(startDate, days, business){
+  if(!startDate || !days) return '';
+  const d = new Date(startDate);
+  let counted = 1;
+  while(counted < days){
+    d.setDate(d.getDate() + 1);
+    if(!business || !isWeekend(d)) counted++;
+  }
+  return d.toISOString().slice(0,10);
+}
+
+function deadlineSuggestion(pub){
+  const restricao = restrictedInfo(pub);
+  const area = inferLegalArea(pub);
+  const rule = inferDeadlineRule(pub, area.id);
+  const pubDate = parseDateLocal(pub?.dataPublicacao);
+  const hasCalculation = Boolean(rule && rule.days && pubDate);
+  const business = rule?.count === 'business';
+  const start = hasCalculation ? nextCountableDay(pubDate, business) : null;
+  const dueDate = hasCalculation ? addDeadlineDays(start, rule.days, business) : '';
+  const code = rule ? legalCodeById(rule.codeId) : null;
+  return {
+    area,
+    rule,
+    code,
+    dueDate,
+    startDate:start ? start.toISOString().slice(0,10) : '',
+    restricted:restricao.restricted,
+    restrictedReason:restricao.reason,
+    status: restricao.restricted ? 'auth' : (dueDate ? 'suggested' : 'needs_rule'),
+    confidence: rule?.confidence || 'baixa',
+    needsValidation:true
+  };
+}
+
+function deadlineSuggestionLabel(pub){
+  const suggestion = deadlineSuggestion(pub);
+  if(suggestion.restricted) return {label:'Requer autenticação', color:'vermelho'};
+  if(suggestion.dueDate) return {label:`Sugestão: ${fmtDate(suggestion.dueDate)}`, color:suggestion.confidence === 'alta' ? 'azul' : 'amarelo'};
+  if(suggestion.rule) return {label:'Regra exige validação', color:'amarelo'};
+  return {label:'Sem regra mapeada', color:'cinza'};
+}
+
+function suggestionDetailsHTML(pub){
+  const s = deadlineSuggestion(pub);
+  const codeLink = s.code?.url ? `<a class="link-audi" href="${esc(s.code.url)}" target="_blank" rel="noopener">${esc(s.code.name)}</a>` : 'Base legal não identificada';
+  const calc = s.dueDate
+    ? `<p><b>Data sugerida:</b> ${fmtDate(s.dueDate)} <span class="mono">(${s.rule.days} ${s.rule.count === 'business' ? 'dias úteis' : 'dias corridos'})</span></p>
+       <p><b>Início sugerido:</b> ${fmtDate(s.startDate)}. Contagem a partir do primeiro dia posterior à publicação; feriados locais ainda exigem validação.</p>`
+    : `<p><b>Data sugerida:</b> ainda não calculada. Falta regra específica ou data de publicação confiável.</p>`;
+  return `
+    <div class="path-card" style="box-shadow:none;">
+      <div class="path-tag">Inteligência de prazo · validação obrigatória</div>
+      <h4>${esc(s.rule?.act || 'Ato ainda não classificado')}</h4>
+      <p><b>Área inferida:</b> ${esc(s.area.label)} <span class="mono">(${esc(s.area.reason)})</span></p>
+      ${calc}
+      <p><b>Fundamento:</b> ${esc(s.rule?.basis || 'Não há fundamento mapeado para este ato.')}</p>
+      <p><b>Fonte normativa:</b> ${codeLink}</p>
+      <p><b>Confiança:</b> ${esc(s.confidence)}. O advogado deve validar antes de converter em prazo fatal definitivo.</p>
+      ${s.restricted ? `<p style="color:var(--vermelho); font-weight:700;">Restrito: ${esc(s.restrictedReason || 'requer autenticação')}.</p>` : ''}
+    </div>
+  `;
+}
+
 function publicationDeadlineInfo(pub){
+  if(pub?.prazoSugerido) return {label:`Sugestão: ${fmtDate(pub.prazoSugerido)}`, color:'azul'};
   const identified = cleanText(pub?.prazoIdentificado);
-  if(identified) return {label:identified, color:'vermelho'};
+  if(identified) return {label:identified, color:normalizePersonName(identified).includes('SUGERID') ? 'azul' : 'vermelho'};
   if(pub?.prazoFatal) return {label:`Prazo fatal em ${fmtDate(pub.prazoFatal)}`, color:'vermelho'};
-  if(isRestrictedPublication(pub)) return {label:'Requer autenticação', color:'vermelho'};
-
-  const text = normalizePersonName(`${pub?.tipoPublicacao || ''} ${pub?.textoRecorte || ''}`);
-  const possibleDeadline = [
-    'INTIMACAO',
-    'CITACAO',
-    'DESPACHO',
-    'DECISAO',
-    'ACORDAO',
-    'SENTENCA',
-    'MANIFESTACAO',
-    'CONTESTACAO',
-    'APELACAO',
-    'AGRAVO',
-    'RECURSO',
-    'EMENDA',
-    'VISTA'
-  ].some(term => text.includes(term));
-
-  if(possibleDeadline) return {label:'Requer análise de prazo', color:'amarelo'};
-  return {label:'Sem prazo automático', color:'cinza'};
+  return deadlineSuggestionLabel(pub);
 }
 
 function deadlineInfoTag(pub){
@@ -1350,11 +1477,13 @@ function openPubModal(p){
   const isNew = !p;
   const d = p || {id:uid(), refId:'PUB-'+uid(), dataPublicacao:'', processo:'', cliente:'', tribunal:'', tipoPublicacao:'', textoRecorte:'', prazoIdentificado:'', prazoFatal:'', status:'Novo', responsavel:'', observacoes:'', linkOrigem:CONTROLJUS_PRIVATE_ENDPOINT, advogadoMonitorado:'', prazoGeradoId:''};
   const restricao = restrictedInfo(d);
+  const sugestaoPrazo = deadlineSuggestion(d);
   const box = document.getElementById('modalBox');
   box.innerHTML = `
     <div class="modal-head"><h3>${isNew?'Novo recorte / publicação':'Editar recorte'}</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
       ${restricao.restricted ? `<div style="font-size:12px; background:#F5E2E0; color:var(--vermelho); padding:9px 10px; border-radius:7px; font-weight:700;">Restrito: ${esc(restricao.reason || 'requer fonte autenticada')}. Para completar os dados, será necessário acesso autorizado ao tribunal, Domicílio/PDPJ ou certificado/token do escritório.</div>` : ''}
+      ${suggestionDetailsHTML(d)}
       <div class="field-row">
         <div class="field"><label>Data da publicação</label><input type="date" id="mData" value="${esc(d.dataPublicacao)}"></div>
         <div class="field"><label>Tribunal</label><input id="mTribunal" value="${esc(d.tribunal)}"></div>
@@ -1380,11 +1509,13 @@ function openPubModal(p){
       <div class="field"><label>Link oficial / origem</label><input id="mLink" value="${esc(d.linkOrigem)}"></div>
       <div class="field"><label>Observações</label><textarea id="mObs">${esc(d.observacoes)}</textarea></div>
     </div>
-    <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar recorte</button></div>
+    <div class="modal-foot">${sugestaoPrazo.dueDate && !isNew ? `<button class="btn azul" id="mSuggestPrazo">Gerar prazo sugerido</button>` : ''}<button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar recorte</button></div>
   `;
   showModal();
   document.getElementById('mClose').onclick = hideModal;
   document.getElementById('mCancel').onclick = hideModal;
+  const suggestBtn = document.getElementById('mSuggestPrazo');
+  if(suggestBtn) suggestBtn.onclick = ()=>createSuggestedPrazoFromPublication(d);
   document.getElementById('mSave').onclick = async ()=>{
     const cliente = document.getElementById('mCliente').value.trim();
     const processo = document.getElementById('mProcesso').value.trim();
@@ -1407,6 +1538,46 @@ function openPubModal(p){
     else{ const idx=DB.publicacoes.findIndex(x=>x.id===d.id); DB.publicacoes[idx]=updated; logHist(`Recorte de ${cliente} editado.`); }
     await saveDB(); hideModal(); renderAll(); toast('Recorte salvo');
   };
+}
+
+async function createSuggestedPrazoFromPublication(pub){
+  const suggestion = deadlineSuggestion(pub);
+  if(!suggestion.dueDate || !suggestion.rule){ toast('Sem sugestão calculável para esta publicação'); return; }
+  const cliente = displayClientName(pub);
+  const prazo = {
+    id:uid(),
+    processo:pub.processo || '',
+    cliente,
+    tribunal:pub.tribunal || '',
+    dataPublicacao:pub.dataPublicacao || '',
+    tipoPrazo:`Sugestão: ${suggestion.rule.act}`,
+    prazoFatal:suggestion.dueDate,
+    origemPublicacaoId:pub.refId || pub.id || '',
+    responsavel:'',
+    status:'Em análise',
+    prioridade:suggestion.confidence === 'baixa' ? 'Alta' : 'Média',
+    observacao:[
+      `Prazo sugerido pelo LexFlow. Área: ${suggestion.area.label}.`,
+      `Fundamento: ${suggestion.rule.basis}.`,
+      `Contagem: ${suggestion.rule.days} ${suggestion.rule.count === 'business' ? 'dias úteis' : 'dias corridos'}, início sugerido em ${fmtDate(suggestion.startDate)}.`,
+      'Validar feriados locais, regra especial da vara/tribunal e termo inicial antes de tratar como prazo fatal definitivo.'
+    ].join(' '),
+    link:pub.linkOrigem || '',
+    concluidoEm:''
+  };
+  DB.prazos.push(prazo);
+  pub.status = 'Gerou prazo';
+  pub.prazoGeradoId = prazo.id;
+  pub.prazoSugerido = suggestion.dueDate;
+  pub.prazoIdentificado = `Prazo sugerido em ${fmtDate(suggestion.dueDate)}`;
+  pub.observacoes = [pub.observacoes, `Sugestão LexFlow: ${suggestion.rule.act}, ${fmtDate(suggestion.dueDate)}, ${suggestion.rule.basis}.`].filter(Boolean).join(' ');
+  logHist(`Prazo sugerido criado para ${cliente} (${pub.processo}): ${fmtDate(suggestion.dueDate)} — ${suggestion.rule.act}.`);
+  await saveDB();
+  hideModal();
+  currentView = 'prazos';
+  prazoFilters.showValidation = true;
+  renderAll();
+  toast('Prazo sugerido criado para validação');
 }
 
 /* ===================== PRAZOS ===================== */
@@ -1987,6 +2158,51 @@ function renderConfiguracoes(){
   document.getElementById('syncDjenSettings').onclick = ()=>syncDjenComunicacoes(true).catch(e=>toast(e.message));
 }
 
+function renderBasePrazos(){
+  const grouped = DEADLINE_RULES.reduce((acc, rule)=>{
+    const key = rule.area;
+    if(!acc[key]) acc[key] = [];
+    acc[key].push(rule);
+    return acc;
+  }, {});
+  document.getElementById('content').innerHTML = `
+    <div class="section-title">Catálogo normativo oficial <span class="cnt">${LEGAL_CODES.length} fontes</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Área</th><th>Norma</th><th>Fonte</th></tr></thead><tbody>
+      ${LEGAL_CODES.map(code=>`<tr>
+        <td><span class="tribunal-tag">${esc(code.area)}</span></td>
+        <td class="cliente">${esc(code.name)}</td>
+        <td><a class="link-audi" href="${esc(code.url)}" target="_blank" rel="noopener">${esc(code.source)} oficial</a></td>
+      </tr>`).join('')}
+    </tbody></table></div>
+
+    <div class="section-title">Regras assistivas de prazo <span class="cnt">${DEADLINE_RULES.length} regras</span></div>
+    <div class="path-cards">
+      <div class="path-card">
+        <div class="path-tag">Critério do motor</div>
+        <h4>Área + ato + fundamento</h4>
+        <p>O LexFlow cruza ramo/vara, tribunal, texto da publicação e tipo de ato para escolher uma regra candidata. O resultado nasce como sugestão validável.</p>
+      </div>
+      <div class="path-card">
+        <div class="path-tag">Ponto de controle</div>
+        <h4>Validação humana obrigatória</h4>
+        <p>Feriados locais, termo inicial, segredo de justiça, despacho com prazo próprio e regimentos internos devem ser conferidos antes de tratar a sugestão como prazo fatal definitivo.</p>
+      </div>
+    </div>
+    ${Object.keys(grouped).map(area=>`
+      <div class="section-title">${esc(area.replace('_',' '))} <span class="cnt">${grouped[area].length}</span></div>
+      <div class="table-wrap" style="margin-bottom:18px;"><table><thead><tr><th>Ato/peça</th><th>Dias</th><th>Contagem</th><th>Fundamento</th><th>Confiança</th></tr></thead><tbody>
+        ${grouped[area].map(rule=>`<tr>
+          <td class="cliente">${esc(rule.act)}</td>
+          <td>${rule.days ? esc(rule.days) : 'Validar'}</td>
+          <td>${rule.count === 'business' ? 'Dias úteis' : (rule.count === 'calendar' ? 'Dias corridos' : 'Manual')}</td>
+          <td>${esc(rule.basis)}</td>
+          <td>${pill(rule.confidence, rule.confidence === 'alta' ? 'verde' : (rule.confidence === 'media' ? 'amarelo' : 'laranja'))}</td>
+        </tr>`).join('')}
+      </tbody></table></div>
+    `).join('')}
+  `;
+}
+
 function renderUsuarios(){
   if(!isUserManager()){
     document.getElementById('content').innerHTML = `<div class="empty">Acesso restrito a administradores.</div>`;
@@ -2172,6 +2388,7 @@ const TITLES = {
   audiencias:['Agenda', 'Audiências por cliente, tribunal e modalidade'],
   tarefas:['Tarefas', 'Itens operacionais vinculados a processos, prazos e publicações'],
   alertas:['Central de Alertas', 'Tudo que exige atenção imediata, agrupado por urgência'],
+  base_prazos:['Base de Prazos', 'Códigos oficiais, regras assistivas e memória de cálculo validável'],
   configuracoes:['Configurações', 'Integrações, credenciais e preferências do escritório'],
   usuarios:['Usuários', 'Administração de escritórios, contratos e acessos'],
   historico:['Histórico de alterações', 'Registro de tudo que foi criado, editado, concluído ou arquivado'],
@@ -2194,6 +2411,7 @@ function renderAll(){
   else if(currentView==='audiencias') renderAudiencias();
   else if(currentView==='tarefas') renderTarefas();
   else if(currentView==='alertas') renderAlertas();
+  else if(currentView==='base_prazos') renderBasePrazos();
   else if(currentView==='configuracoes') renderConfiguracoes();
   else if(currentView==='usuarios') renderUsuarios();
   else if(currentView==='historico') renderHistorico();

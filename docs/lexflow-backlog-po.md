@@ -57,6 +57,7 @@ Legenda:
 - [x] Operacao de publicacoes deve mostrar apenas origem integrada.
 - [x] Advogado monitorado nunca deve aparecer como cliente do processo.
 - [x] Prazo fatal nao deve ser inventado quando a fonte nao entrega base suficiente.
+- [x] Prioridade critica definida: Motor de Prazos Validavel passa a ser o foco imediato.
 - [ ] Definir fonte autenticada principal para processos em segredo de justica.
 - [ ] Definir estrategia oficial para certificado digital A3.
 - [ ] Definir se aceitaremos certificado A1 como alternativa operacional.
@@ -95,7 +96,7 @@ Critérios de aceite:
 
 Objetivo: calcular prazos fatais com rastreabilidade.
 
-Status: `[ ]`
+Status: `[~]`
 
 Problema:
 
@@ -103,9 +104,11 @@ O DJEN entrega a comunicacao/publicacao, mas nao entrega o prazo fatal calculado
 
 Itens:
 
-- [ ] Modelar tabela/regra `tipos_de_prazo`.
-- [ ] Mapear tipo de ato -> prazo sugerido.
-- [ ] Configurar dias corridos vs dias uteis.
+- [x] Modelar base normativa inicial com codigos oficiais do Planalto.
+- [x] Modelar regra assistiva `area + ato + prazo + contagem + fundamento + confianca`.
+- [x] Mapear tipo de ato -> prazo sugerido para regras iniciais de Civil, Penal, Trabalhista, Eleitoral e Tributario.
+- [x] Configurar dias corridos vs dias uteis na regra.
+- [x] Criar sugestao de prazo na publicacao com fundamento e validacao obrigatoria.
 - [ ] Definir regra de inicio de contagem: disponibilizacao, publicacao, ciencia, juntada.
 - [ ] Integrar calendario de feriados nacionais.
 - [ ] Integrar feriados estaduais/tribunais.
@@ -307,8 +310,9 @@ Critérios de aceite:
 
 ### Sprint 3 - Motor de Prazo Validavel
 
-- [ ] Modelar memoria de calculo.
-- [ ] Criar prazo sugerido.
+- [x] Criar base normativa inicial a partir de codigos oficiais.
+- [x] Criar prazo sugerido com fundamento na publicacao.
+- [ ] Modelar memoria de calculo persistente e auditavel.
 - [ ] Criar validacao humana.
 - [ ] Criar alerta de prazo sem validacao.
 
@@ -323,15 +327,15 @@ Critérios de aceite:
 
 Sugestao de proximo item:
 
-`Sprint 1.2 - Melhorar detalhe da publicacao`
+`Sprint 3.1 - Motor de Prazo Validavel`
 
 Motivo:
 
-Depois de identificar publicacoes restritas, o usuario precisa abrir uma publicacao e entender claramente a fonte, o texto, o motivo da restricao, o advogado monitorado, a parte identificada e o proximo passo operacional.
+Este e o item mais critico do produto. O LexFlow precisa entregar uma sugestao de prazo com fundamento legal, considerando area do processo, vara/ramo, tipo de ato e base normativa, sempre exigindo validacao humana antes de virar prazo fatal definitivo.
 
 Critérios de aceite:
 
-- Modal/detalhe mostra texto completo com boa leitura.
-- Modal/detalhe mostra origem, motivo da restricao, advogado monitorado e parte identificada.
-- Usuario consegue gerar tarefa/prazo a partir do detalhe.
-- Publicacoes restritas deixam claro que precisam de fonte autenticada.
+- Publicacao mostra sugestao de prazo quando houver regra aplicavel.
+- Sugestao informa area inferida, ato/peca, fundamento, contagem e confianca.
+- Prazo sugerido criado fica em "Em analise" e exige validacao humana.
+- Base de Prazos mostra normas oficiais e regras assistivas cadastradas.
