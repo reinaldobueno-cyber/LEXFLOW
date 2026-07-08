@@ -2,9 +2,17 @@ import puppeteer from '@cloudflare/puppeteer';
 
 const CACHE_KEY = 'controljus:publicacoes:latest';
 const ERROR_KEY = 'controljus:last-error';
+const DJEN_CACHE_KEY = 'djen:comunicacoes:latest';
+const DJEN_ERROR_KEY = 'djen:last-error';
 const DEFAULT_CONTROLJUS_URLS = [
   'https://app.controljus.com.br/publicacoes/recortes',
   'https://app.controljus.com.br/publicacoes/recortes/arquivadas'
+];
+const DEFAULT_DJEN_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
+const DEFAULT_DJEN_OABS = [
+  {uf:'GO', numero:'60795', nome:'Igor Lazaro Pires Neto'},
+  {uf:'DF', numero:'59142', nome:'Igor Lazaro Pires Neto'},
+  {uf:'GO', numero:'74242', nome:'Luiz Fernando Correa Pires'}
 ];
 const DEFAULT_USER_SELECTOR = 'input[type="email"], input[name="email"], input[name="usuario"], input[name="login"], input[type="text"]';
 const DEFAULT_PASSWORD_SELECTOR = 'input[type="password"]';
@@ -31,6 +39,48 @@ function isoDate(value){
   return dt.toISOString().slice(0, 10);
 }
 
+function dateOnly(date){
+  const dt = new Date(date);
+  if(Number.isNaN(dt.getTime())) return '';
+  return dt.toISOString().slice(0, 10);
+}
+
+function addDays(date, days){
+  const dt = new Date(date);
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt;
+}
+
+function onlyDigits(value){
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function formatProcesso(value){
+  const digits = onlyDigits(value);
+  if(digits.length !== 20) return String(value || '');
+  return `${digits.slice(0,7)}-${digits.slice(7,9)}.${digits.slice(9,13)}.${digits.slice(13,14)}.${digits.slice(14,16)}.${digits.slice(16)}`;
+}
+
+function decodeEntities(text){
+  return String(text ?? '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&aacute;/gi, 'á').replace(/&eacute;/gi, 'é').replace(/&iacute;/gi, 'í').replace(/&oacute;/gi, 'ó').replace(/&uacute;/gi, 'ú')
+    .replace(/&Aacute;/g, 'Á').replace(/&Eacute;/g, 'É').replace(/&Iacute;/g, 'Í').replace(/&Oacute;/g, 'Ó').replace(/&Uacute;/g, 'Ú')
+    .replace(/&atilde;/gi, 'ã').replace(/&otilde;/gi, 'õ').replace(/&ccedil;/gi, 'ç')
+    .replace(/&agrave;/gi, 'à').replace(/&ecirc;/gi, 'ê').replace(/&ocirc;/gi, 'ô')
+    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+}
+
+function stripHtml(html){
+  return decodeEntities(String(html ?? '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim());
+}
+
 function detectPrazoText(text){
   const raw = String(text ?? '').replace(/\s+/g, ' ').trim();
   if(!raw) return '';
@@ -52,6 +102,164 @@ function detectPrazoText(text){
   }
   if(!matches.length) return '';
   return matches.length === 1 ? `Prazo mencionado: ${matches[0]} dias` : `Prazos mencionados: ${matches.join(', ')} dias`;
+}
+
+function djenEndpoint(env){
+  return (env.DJEN_ENDPOINT || DEFAULT_DJEN_ENDPOINT).trim();
+}
+
+function parseDjenOabs(env){
+  const configured = (env.DJEN_OABS || '').trim();
+  if(!configured) return DEFAULT_DJEN_OABS;
+  return configured.split(';').map(entry => {
+    const [uf, numero, ...nameParts] = entry.split(':').map(part => part.trim());
+    return {uf:(uf || '').toUpperCase(), numero:onlyDigits(numero), nome:nameParts.join(':') || `${uf} ${numero}`};
+  }).filter(oab => oab.uf && oab.numero);
+}
+
+function djenRange(requestUrl){
+  const url = new URL(requestUrl);
+  const today = new Date();
+  const end = url.searchParams.get('fim') || url.searchParams.get('dataFim') || dateOnly(today);
+  const start = url.searchParams.get('inicio') || url.searchParams.get('dataInicio') || dateOnly(addDays(end, -6));
+  return {start, end};
+}
+
+function normalizeDjenComunicacao(item, oab, sourceUrl){
+  const texto = stripHtml(item.texto || item.textoComunicacao || '');
+  return {
+    refId:item.id ? `DJEN-${item.id}` : `DJEN-${oab.uf}-${oab.numero}-${item.numero_processo || crypto.randomUUID()}`,
+    id:item.id || '',
+    source:'DJEN/CNJ',
+    dataDisponibilizacao:item.data_disponibilizacao || '',
+    dataPublicacao:item.data_publicacao || '',
+    tribunal:item.siglaTribunal || '',
+    orgao:item.nomeOrgao || '',
+    tipoComunicacao:item.tipoComunicacao || '',
+    processo:formatProcesso(item.numero_processo || item.processo || ''),
+    processoOriginal:item.numero_processo || '',
+    destinatario:item.nomeParte || item.destinatario || '',
+    advogado:{nome:oab.nome, uf:oab.uf, numero:oab.numero},
+    meio:item.meio || '',
+    texto,
+    link:item.link || sourceUrl,
+    prazoIdentificado:detectPrazoText(texto)
+  };
+}
+
+async function fetchDjenForOab(env, oab, start, end){
+  const url = new URL(djenEndpoint(env));
+  url.searchParams.set('numeroOab', oab.numero);
+  url.searchParams.set('ufOab', oab.uf);
+  url.searchParams.set('dataDisponibilizacaoInicio', start);
+  url.searchParams.set('dataDisponibilizacaoFim', end);
+  const response = await fetch(url.toString(), {headers:{Accept:'application/json'}});
+  if(!response.ok){
+    throw new Error(`DJEN ${oab.uf} ${oab.numero}: HTTP ${response.status}`);
+  }
+  const payload = await response.json();
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  return {
+    oab,
+    url:url.toString(),
+    count:payload.count ?? items.length,
+    items:items.map(item => normalizeDjenComunicacao(item, oab, url.toString()))
+  };
+}
+
+async function readDjenCache(env){
+  return await env.LEXFLOW_CACHE.get(DJEN_CACHE_KEY, {type:'json'});
+}
+
+async function writeDjenCache(env, payload){
+  await env.LEXFLOW_CACHE.put(DJEN_CACHE_KEY, JSON.stringify(payload));
+  await env.LEXFLOW_CACHE.delete(DJEN_ERROR_KEY);
+}
+
+async function writeDjenError(env, error){
+  await env.LEXFLOW_CACHE.put(DJEN_ERROR_KEY, JSON.stringify({
+    message:error.message || 'Erro ao sincronizar DJEN',
+    at:new Date().toISOString()
+  }));
+}
+
+async function readDjenError(env){
+  return await env.LEXFLOW_CACHE.get(DJEN_ERROR_KEY, {type:'json'});
+}
+
+async function refreshDjen(env, requestUrl = 'https://lexflow.local/api/djen/comunicacoes'){
+  const {start, end} = djenRange(requestUrl);
+  const oabs = parseDjenOabs(env);
+  const settled = await Promise.allSettled(oabs.map(oab => fetchDjenForOab(env, oab, start, end)));
+  const results = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
+  const errors = settled.filter(r => r.status === 'rejected').map(r => r.reason?.message || 'Erro desconhecido');
+  const comunicacoes = [...new Map(results.flatMap(result => result.items).map(item => [item.refId, item])).values()]
+    .sort((a, b) => String(b.dataDisponibilizacao).localeCompare(String(a.dataDisponibilizacao)) || String(b.refId).localeCompare(String(a.refId)));
+
+  if(!results.length && errors.length){
+    throw new Error(errors.join(' | '));
+  }
+
+  const payload = {
+    source:'DJEN/CNJ',
+    endpoint:djenEndpoint(env),
+    collectedAt:new Date().toISOString(),
+    periodo:{inicio:start, fim:end},
+    oabs,
+    comunicacoes,
+    diagnostics:{
+      requested:oabs.length,
+      successful:results.length,
+      failed:errors.length,
+      totalBruto:results.reduce((sum, result) => sum + Number(result.count || 0), 0),
+      errors
+    }
+  };
+  await writeDjenCache(env, payload);
+  return payload;
+}
+
+async function proxyDjenComunicacoes(request, env){
+  const url = new URL(request.url);
+  const force = url.searchParams.get('refresh') === '1';
+  const cached = await readDjenCache(env);
+  if(cached && !force){
+    return json({...cached, sync:{status:'cached_djen', comunicacoes:cached.comunicacoes?.length || 0}});
+  }
+  try{
+    const payload = await refreshDjen(env, request.url);
+    return json({...payload, sync:{status:'fresh_djen', comunicacoes:payload.comunicacoes.length}});
+  }catch(error){
+    await writeDjenError(env, error);
+    if(cached){
+      return json({...cached, sync:{status:'stale_djen_after_error', message:error.message}}, 202);
+    }
+    return json({
+      source:'DJEN/CNJ',
+      endpoint:djenEndpoint(env),
+      collectedAt:new Date().toISOString(),
+      comunicacoes:[],
+      sync:{status:'djen_error', message:error.message}
+    }, 503);
+  }
+}
+
+async function proxyDjenStatus(request, env){
+  const cached = await readDjenCache(env);
+  const lastError = await readDjenError(env);
+  return json({
+    source:'DJEN/CNJ',
+    endpoint:djenEndpoint(env),
+    oabs:parseDjenOabs(env),
+    cache:{
+      hasData:Boolean(cached),
+      collectedAt:cached?.collectedAt || null,
+      comunicacoes:cached?.comunicacoes?.length || 0,
+      periodo:cached?.periodo || null,
+      fresh:Boolean(cached)
+    },
+    lastError
+  });
 }
 
 function controlJusUrls(env){
@@ -390,6 +598,14 @@ async function proxyControlJusRefresh(request, env){
   return json(result, result.status || (result.ok ? 200 : 503));
 }
 
+async function proxyDjenRefresh(request, env){
+  if(request.method !== 'POST' && request.method !== 'GET'){
+    return json({error:'method_not_allowed'}, 405);
+  }
+  const response = await proxyDjenComunicacoes(new Request(`${new URL(request.url).origin}/api/djen/comunicacoes?refresh=1`), env);
+  return response;
+}
+
 export default {
   async fetch(request, env){
     if(request.method === 'OPTIONS') return new Response(null, {status:204, headers:jsonHeaders});
@@ -409,15 +625,25 @@ export default {
     if(url.pathname === '/api/controljus/publicacoes') return proxyControlJus(request, env);
     if(url.pathname === '/api/controljus/status') return proxyControlJusStatus(request, env);
     if(url.pathname === '/api/controljus/refresh') return proxyControlJusRefresh(request, env);
+    if(url.pathname === '/api/djen/comunicacoes') return proxyDjenComunicacoes(request, env);
+    if(url.pathname === '/api/djen/status') return proxyDjenStatus(request, env);
+    if(url.pathname === '/api/djen/refresh') return proxyDjenRefresh(request, env);
 
     return env.ASSETS.fetch(request);
   },
 
   async scheduled(controller, env, ctx){
     ctx.waitUntil(
-      refreshControlJusBackend(env, 'cloudflare_cron', controller.cron)
-        .then(result => console.log(JSON.stringify({event:'controljus_cron_sync', cron:controller.cron, result})))
-        .catch(error => console.error(JSON.stringify({event:'controljus_cron_sync_error', cron:controller.cron, message:error.message})))
+      Promise.allSettled([
+        refreshControlJusBackend(env, 'cloudflare_cron', controller.cron)
+          .then(result => console.log(JSON.stringify({event:'controljus_cron_sync', cron:controller.cron, result}))),
+        refreshDjen(env)
+          .then(result => console.log(JSON.stringify({event:'djen_cron_sync', cron:controller.cron, comunicacoes:result.comunicacoes.length})))
+      ]).then(results => {
+        results.filter(result => result.status === 'rejected').forEach(result => {
+          console.error(JSON.stringify({event:'cron_sync_error', cron:controller.cron, message:result.reason?.message || 'Erro desconhecido'}));
+        });
+      })
     );
   }
 };

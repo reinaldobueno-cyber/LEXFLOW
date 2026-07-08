@@ -9,6 +9,10 @@
   "observability": {
     "enabled": true
   },
+  "vars": {
+    "DJEN_ENDPOINT": "https://comunicaapi.pje.jus.br/api/v1/comunicacao",
+    "DJEN_OABS": "GO:60795:Igor Lazaro Pires Neto;DF:59142:Igor Lazaro Pires Neto;GO:74242:Luiz Fernando Correa Pires"
+  },
   "browser": {
     "binding": "BROWSER"
   },

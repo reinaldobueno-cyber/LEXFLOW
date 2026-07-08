@@ -300,6 +300,7 @@ const PUB_DONE = ['Concluído','Arquivado','Não gera prazo'];
 const CONTROLJUS_PRIVATE_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/controljus/publicacoes';
 const CONTROLJUS_ENDPOINT_MODE = 'lexflow_cloudflare_browser_run_controljus';
 const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
+const LEXFLOW_DJEN_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/djen/comunicacoes';
 const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
 const isControlJusPrazo = p => Boolean(p && p.origemPublicacaoId);
 const isValidationPrazo = p => !isControlJusPrazo(p);
@@ -405,6 +406,7 @@ function ensureFixedConfig(){
   if(DB.config.controlJusEndpoint !== CONTROLJUS_PRIVATE_ENDPOINT){ DB.config.controlJusEndpoint = CONTROLJUS_PRIVATE_ENDPOINT; changed = true; }
   if(DB.config.controlJusMode !== CONTROLJUS_ENDPOINT_MODE){ DB.config.controlJusMode = CONTROLJUS_ENDPOINT_MODE; changed = true; }
   if(DB.config.djenEndpoint !== DJEN_PUBLIC_ENDPOINT){ DB.config.djenEndpoint = DJEN_PUBLIC_ENDPOINT; changed = true; }
+  if(DB.config.lexflowDjenEndpoint !== LEXFLOW_DJEN_ENDPOINT){ DB.config.lexflowDjenEndpoint = LEXFLOW_DJEN_ENDPOINT; changed = true; }
   if(!DB.checklist){ DB.checklist = {}; changed = true; }
   ['exportBtn','tableCopy','apiEndpoints'].forEach(k=>{
     if(Object.prototype.hasOwnProperty.call(DB.checklist,k)){ delete DB.checklist[k]; changed = true; }
@@ -576,6 +578,10 @@ function controlJusSyncOk(){
   return ['fresh','fresh_native','cached','cached_native','stale_after_error'].includes(DB.config?.lastControlJusSyncStatus);
 }
 
+function djenSyncOk(){
+  return ['fresh_djen','cached_djen','stale_djen_after_error'].includes(DB.config?.lastDjenSyncStatus);
+}
+
 function syncErrorMessage(payload){
   const msg = payload?.sync?.message || payload?.error || payload?.lastError?.message || 'Falha ao sincronizar ControlJus';
   if(/CONTROLJUS_USER|CONTROLJUS_PASSWORD|credenciais/i.test(msg)){
@@ -613,9 +619,11 @@ function normalizeControlJusPublicacao(p){
   };
 }
 
-async function syncControlJusPublicacoes(force = true){
+async function syncControlJusPublicacoes(force = true, opts = {}){
   ensureFixedConfig();
-  toast('Sincronizando ControlJus...');
+  const silent = Boolean(opts.silent);
+  const preserveView = Boolean(opts.preserveView);
+  if(!silent) toast('Sincronizando ControlJus...');
   const url = new URL(DB.config.controlJusEndpoint);
   if(force) url.searchParams.set('refresh', '1');
   const res = await fetch(url.toString(), {headers:{'Accept':'application/json'}});
@@ -659,11 +667,106 @@ async function syncControlJusPublicacoes(force = true){
   DB.config.lastControlJusSyncError = '';
   logHist(`Sincronização ControlJus concluída: ${created} novos recortes, ${updated} campos atualizados, ${incoming.length} recebidos.`);
   await saveDB();
-  currentView = 'publicacoes';
-  dashboardFilter = null;
-  renderAll();
-  toast(created ? `${created} novos recortes importados` : 'ControlJus sincronizado');
+  if(!preserveView){
+    currentView = 'publicacoes';
+    dashboardFilter = null;
+    renderAll();
+  }
+  if(!silent) toast(created ? `${created} novos recortes importados` : 'ControlJus sincronizado');
   return {created, updated, total:incoming.length, status:DB.config.lastControlJusSyncStatus};
+}
+
+function normalizeDjenPublicacao(c){
+  const advogado = c.advogado ? `${c.advogado.nome || ''} OAB/${c.advogado.uf || ''} ${c.advogado.numero || ''}`.trim() : '';
+  const detalhes = [
+    c.orgao ? `Orgao: ${c.orgao}` : '',
+    c.meio ? `Meio: ${c.meio}` : '',
+    advogado
+  ].filter(Boolean).join(' | ');
+  return {
+    id:uid(),
+    refId:c.refId || `DJEN-${uid()}`,
+    dataPublicacao:c.dataPublicacao || c.dataDisponibilizacao || '',
+    processo:c.processo || c.processoOriginal || '',
+    cliente:c.destinatario || c.advogado?.nome || '',
+    tribunal:c.tribunal || '',
+    tipoPublicacao:c.tipoComunicacao || 'Comunicacao DJEN',
+    textoRecorte:cleanText(c.texto || ''),
+    prazoIdentificado:c.prazoIdentificado || '',
+    prazoFatal:'',
+    status:'Novo',
+    responsavel:'',
+    observacoes:detalhes,
+    linkOrigem:c.link || DB.config?.lexflowDjenEndpoint || LEXFLOW_DJEN_ENDPOINT,
+    controlJusId:'',
+    prazoGeradoId:''
+  };
+}
+
+async function syncDjenComunicacoes(force = true, opts = {}){
+  ensureFixedConfig();
+  const silent = Boolean(opts.silent);
+  const preserveView = Boolean(opts.preserveView);
+  if(!silent) toast('Sincronizando DJEN/CNJ...');
+  const url = new URL(DB.config.lexflowDjenEndpoint || LEXFLOW_DJEN_ENDPOINT);
+  if(force) url.searchParams.set('refresh', '1');
+  const res = await fetch(url.toString(), {headers:{'Accept':'application/json'}});
+  const payload = await res.json().catch(()=>({}));
+  if(!res.ok && res.status !== 202){
+    const msg = payload?.sync?.message || payload?.error || 'Falha ao sincronizar DJEN/CNJ';
+    DB.config.lastDjenSyncAt = new Date().toISOString();
+    DB.config.lastDjenSyncStatus = 'erro';
+    DB.config.lastDjenSyncError = msg;
+    logHist(`Sincronização DJEN/CNJ falhou: ${msg}`);
+    await saveDB();
+    throw new Error(msg);
+  }
+
+  const incoming = Array.isArray(payload.comunicacoes) ? payload.comunicacoes.map(normalizeDjenPublicacao) : [];
+  const byKey = new Map(DB.publicacoes.map(p=>[controlJusPublicacaoKey(p), p]));
+  let created = 0;
+  let updated = 0;
+
+  incoming.forEach(pub=>{
+    const key = controlJusPublicacaoKey(pub);
+    const existing = byKey.get(key);
+    if(!existing){
+      DB.publicacoes.push(pub);
+      byKey.set(key, pub);
+      created++;
+      return;
+    }
+    ['dataPublicacao','processo','cliente','tribunal','tipoPublicacao','textoRecorte','prazoIdentificado','observacoes','linkOrigem'].forEach(field=>{
+      if(pub[field] && existing[field] !== pub[field]){
+        existing[field] = pub[field];
+        updated++;
+      }
+    });
+  });
+
+  DB.config.lastDjenSyncAt = payload.collectedAt || new Date().toISOString();
+  DB.config.lastDjenSyncStatus = payload.sync?.status || (res.status === 202 ? 'processing' : 'fresh_djen');
+  DB.config.lastDjenSyncCount = incoming.length;
+  DB.config.lastDjenSyncError = payload.diagnostics?.errors?.length ? payload.diagnostics.errors.join(' | ') : '';
+  logHist(`Sincronização DJEN/CNJ concluída: ${created} novas comunicações, ${updated} campos atualizados, ${incoming.length} recebidas.`);
+  await saveDB();
+  if(!preserveView){
+    currentView = 'publicacoes';
+    dashboardFilter = null;
+    renderAll();
+  }
+  if(!silent) toast(created ? `${created} comunicações DJEN importadas` : 'DJEN/CNJ sincronizado');
+  return {created, updated, total:incoming.length, status:DB.config.lastDjenSyncStatus};
+}
+
+async function hydrateFromServerCache(){
+  ensureFixedConfig();
+  const results = await Promise.allSettled([
+    syncControlJusPublicacoes(false, {silent:true, preserveView:true}),
+    syncDjenComunicacoes(false, {silent:true, preserveView:true})
+  ]);
+  const changed = results.some(result => result.status === 'fulfilled');
+  if(changed) renderAll();
 }
 
 /* ===================== NAV ===================== */
@@ -1328,7 +1431,8 @@ function renderIntegracao(){
     <div class="section-title">Endpoints gravados</div>
     <div class="path-cards">
       <div class="path-card"><div class="path-tag">LexFlow Cloudflare · rota fixa</div><h4>Coletor Browser Run para recortes ControlJus</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Este é o endpoint operacional fixo do LexFlow. Ele roda na Cloudflare, usa Browser Run para acessar o ControlJus com credenciais autorizadas e mantém cache em KV.</p></div>
-      <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Endpoint público oficial validado para consulta DJEN/CNJ. Fica gravado para a fase de substituição gradual do ControlJus.</p></div>
+      <div class="path-card"><div class="path-tag">LexFlow Cloudflare · rota fixa</div><h4>Coletor DJEN/CNJ por OAB</h4><p><span class="mono">${DB.config.lexflowDjenEndpoint}</span></p><p>Rota operacional do LexFlow para consultar o DJEN por OAB, consolidar duplicidades e transformar comunicações oficiais em recortes.</p></div>
+      <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Endpoint público oficial validado para consulta DJEN/CNJ. O LexFlow consulta com filtros por OAB e data de disponibilização.</p></div>
     </div>
 
     <div class="section-title">Sincronização ControlJus</div>
@@ -1340,6 +1444,18 @@ function renderIntegracao(){
         ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${esc(DB.config.lastControlJusSyncError)}</p>` : ''}
         <p class="mono" style="font-size:11px; color:var(--ink-soft);">${controlJusSyncOk() ? 'Coletor ativo na Cloudflare. Recortes sincronizados via Browser Run.' : 'Secrets necessários: CONTROLJUS_USER e CONTROLJUS_PASSWORD'}</p>
         <p><button class="btn primary small" id="syncControlJusBtn">Sincronizar agora</button></p>
+      </div>
+    </div>
+
+    <div class="section-title">Sincronização DJEN/CNJ</div>
+    <div class="path-cards">
+      <div class="path-card">
+        <div class="path-tag">Status oficial CNJ</div>
+        <h4>${DB.config.lastDjenSyncAt ? `Última sincronização: ${fmtDateTime(DB.config.lastDjenSyncAt)}` : 'Aguardando primeira sincronização'}</h4>
+        <p>Último estado: <span class="mono">${DB.config.lastDjenSyncStatus || 'não iniciado'}</span> · Comunicações recebidas: <span class="mono">${DB.config.lastDjenSyncCount || 0}</span></p>
+        ${DB.config.lastDjenSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${esc(DB.config.lastDjenSyncError)}</p>` : ''}
+        <p class="mono" style="font-size:11px; color:var(--ink-soft);">${djenSyncOk() ? 'DJEN ativo. Consulta oficial por OAB e data de disponibilização.' : 'Carteira monitorada: OAB/GO 60795, OAB/DF 59142, OAB/GO 74242'}</p>
+        <p><button class="btn primary small" id="syncDjenBtn">Sincronizar DJEN</button></p>
       </div>
     </div>
 
@@ -1357,6 +1473,13 @@ function renderIntegracao(){
     btn.textContent = 'Sincronizando...';
     try{ await syncControlJusPublicacoes(true); }
     catch(e){ toast(e.message || 'Falha na sincronização'); renderIntegracao(); }
+  };
+  document.getElementById('syncDjenBtn').onclick = async ()=>{
+    const btn = document.getElementById('syncDjenBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sincronizando...';
+    try{ await syncDjenComunicacoes(true); }
+    catch(e){ toast(e.message || 'Falha na sincronização DJEN'); renderIntegracao(); }
   };
   document.querySelectorAll('.check-item input').forEach(cb=>{
     cb.onchange = async e=>{
@@ -1460,7 +1583,11 @@ function renderAll(){
 document.getElementById('menuBtn').onclick = ()=>document.getElementById('sidebar').classList.toggle('open');
 
 /* ===================== INIT ===================== */
-(async function init(){ await loadDB(); renderAll(); })();
+(async function init(){
+  await loadDB();
+  renderAll();
+  hydrateFromServerCache().catch(err=>console.warn('cache hydrate failed', err));
+})();
 </script>
 </body>
 </html>
