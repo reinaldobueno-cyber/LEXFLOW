@@ -108,6 +108,16 @@ async function encryptSecret(value, env){
   return {alg:'AES-GCM', iv:bytesToBase64Url(iv), data:bytesToBase64Url(encrypted)};
 }
 
+async function decryptSecret(encrypted, env){
+  if(!encrypted?.iv || !encrypted?.data) return '';
+  const decrypted = await crypto.subtle.decrypt(
+    {name:'AES-GCM', iv:base64UrlToBytes(encrypted.iv)},
+    await encryptionKey(env),
+    base64UrlToBytes(encrypted.data)
+  );
+  return new TextDecoder().decode(decrypted);
+}
+
 function maskSecret(value){
   if(!value) return '';
   return '••••••••';
@@ -588,8 +598,18 @@ function extractDjenPartyFromText(text){
   return inline ? bestPartyCandidate([inline[1]]) : '';
 }
 
-function djenEndpoint(env){
-  return (env.DJEN_ENDPOINT || DEFAULT_DJEN_ENDPOINT).trim();
+function djenEndpoint(env, settings = null){
+  return (settings?.integrations?.djen?.serviceUrl || env.DJEN_ENDPOINT || DEFAULT_DJEN_ENDPOINT).trim();
+}
+
+async function djenHeaders(env, settings = null){
+  const headers = {Accept:'application/json'};
+  const djen = settings?.integrations?.djen;
+  if(djen?.authType === 'token' && djen.tokenEncrypted){
+    const token = await decryptSecret(djen.tokenEncrypted, env);
+    if(token) headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 function parseDjenOabs(env, settings = null){
@@ -638,13 +658,13 @@ function normalizeDjenComunicacao(item, oab, sourceUrl){
   };
 }
 
-async function fetchDjenForOab(env, oab, start, end){
-  const url = new URL(djenEndpoint(env));
+async function fetchDjenForOab(env, oab, start, end, settings = null){
+  const url = new URL(djenEndpoint(env, settings));
   url.searchParams.set('numeroOab', oab.numero);
   url.searchParams.set('ufOab', oab.uf);
   url.searchParams.set('dataDisponibilizacaoInicio', start);
   url.searchParams.set('dataDisponibilizacaoFim', end);
-  const response = await fetch(url.toString(), {headers:{Accept:'application/json'}});
+  const response = await fetch(url.toString(), {headers:await djenHeaders(env, settings)});
   if(!response.ok){
     throw new Error(`DJEN ${oab.uf} ${oab.numero}: HTTP ${response.status}`);
   }
@@ -685,7 +705,7 @@ async function readDjenError(env, tenantId = MASTER_TENANT_ID){
 async function refreshDjen(env, requestUrl = 'https://lexflow.local/api/djen/comunicacoes', settings = null, tenantId = MASTER_TENANT_ID){
   const {start, end} = djenRange(requestUrl);
   const oabs = parseDjenOabs(env, settings);
-  const settled = await Promise.allSettled(oabs.map(oab => fetchDjenForOab(env, oab, start, end)));
+  const settled = await Promise.allSettled(oabs.map(oab => fetchDjenForOab(env, oab, start, end, settings)));
   const results = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
   const errors = settled.filter(r => r.status === 'rejected').map(r => r.reason?.message || 'Erro desconhecido');
   const comunicacoes = [...new Map(results.flatMap(result => result.items).map(item => [item.refId, item])).values()]
@@ -697,7 +717,7 @@ async function refreshDjen(env, requestUrl = 'https://lexflow.local/api/djen/com
 
   const payload = {
     source:'DJEN/CNJ',
-    endpoint:djenEndpoint(env),
+    endpoint:djenEndpoint(env, settings),
     collectedAt:new Date().toISOString(),
     periodo:{inicio:start, fim:end},
     oabs,
@@ -742,13 +762,14 @@ async function proxyDjenComunicacoes(request, env, auth = null){
 }
 
 async function proxyDjenStatus(request, env, auth = null){
+  const url = new URL(request.url);
   const tenantId = auth?.user?.role === 'master' && url.searchParams.get('tenantId') ? url.searchParams.get('tenantId') : (auth?.user?.tenantId || MASTER_TENANT_ID);
-  const settings = auth ? await env.LEXFLOW_CACHE.get(settingsKey(auth.user.tenantId), {type:'json'}) : null;
+  const settings = auth ? await env.LEXFLOW_CACHE.get(settingsKey(tenantId), {type:'json'}) : null;
   const cached = await readDjenCache(env, tenantId);
   const lastError = await readDjenError(env, tenantId);
   return json({
     source:'DJEN/CNJ',
-    endpoint:djenEndpoint(env),
+    endpoint:djenEndpoint(env, settings),
     oabs:parseDjenOabs(env, settings),
     cache:{
       hasData:Boolean(cached),
