@@ -49,6 +49,9 @@ O LexFlow deve parecer um SaaS juridico premium, confiavel e operacional. A inte
 - Cards de indicadores com borda superior colorida.
 - Numeros grandes, labels curtas.
 - Clique no card filtra a tela correspondente.
+- O topo deve responder "qual risco exige acao agora?".
+- A fila principal deve mostrar dono do risco, processo, motivo e acao direta.
+- Contadores so entram quando direcionam para uma decisao.
 
 ### Tabelas
 

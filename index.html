@@ -97,6 +97,58 @@ body.authenticated #loginScreen{display:none;}
 .card.c-amarelo .num{color:var(--amarelo);} .card.c-verde .num{color:var(--verde);}
 .card.c-ink .num{color:var(--ink);} .card.c-azul .num{color:var(--azul);}
 
+.dashboard-hero{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr); gap:18px; margin-bottom:22px;}
+.risk-panel{background:#101828; color:#F9FAFB; border-radius:10px; padding:24px 26px; box-shadow:0 18px 42px rgba(16,24,40,.16); min-height:190px; display:flex; flex-direction:column; justify-content:space-between;}
+.risk-eyebrow{font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:#A6B0C3; font-weight:800; margin-bottom:8px;}
+.risk-panel h2{font-family:'Source Serif 4', serif; font-size:30px; line-height:1.08; font-weight:800; max-width:760px;}
+.risk-panel p{font-size:13px; color:#C5CEDD; line-height:1.55; margin-top:10px; max-width:760px;}
+.risk-actions{display:flex; flex-wrap:wrap; gap:9px; margin-top:22px;}
+.risk-actions .btn{border-color:rgba(255,255,255,.16); background:#FFFFFF; color:#101828;}
+.risk-actions .btn.primary{background:#B9384F; border-color:#B9384F; color:#fff;}
+.risk-actions .btn:hover{background:#F2F4F7;}
+.risk-actions .btn.primary:hover{background:#A12F44; border-color:#A12F44;}
+.today-panel{background:var(--white); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:18px; display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.today-metric{border:1px solid var(--line); border-radius:8px; padding:14px; background:#F8FAFC;}
+.today-metric .metric-label{font-size:11px; color:var(--ink-soft); font-weight:800; text-transform:uppercase; letter-spacing:.04em;}
+.today-metric .metric-value{font-family:'Source Serif 4', serif; font-size:31px; font-weight:800; line-height:1; margin-top:6px;}
+.today-metric .metric-copy{font-size:11.5px; color:var(--ink-soft); margin-top:5px; line-height:1.35;}
+.decision-grid{display:grid; grid-template-columns:repeat(5, minmax(150px,1fr)); gap:12px; margin-bottom:26px;}
+.decision-card{background:var(--white); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:16px; cursor:pointer; transition:transform .12s, border-color .12s, box-shadow .12s; position:relative; overflow:hidden;}
+.decision-card:hover{transform:translateY(-2px); border-color:#C8D0DA; box-shadow:0 16px 34px rgba(16,24,40,.10);}
+.decision-card::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--cinza);}
+.decision-card.c-vermelho::before{background:var(--vermelho);}
+.decision-card.c-laranja::before{background:var(--laranja);}
+.decision-card.c-amarelo::before{background:var(--amarelo);}
+.decision-card.c-azul::before{background:var(--azul);}
+.decision-card.c-ink::before{background:var(--ink);}
+.decision-card .decision-label{font-size:11px; color:var(--ink-soft); font-weight:800; text-transform:uppercase; letter-spacing:.04em;}
+.decision-card .decision-value{font-family:'Source Serif 4', serif; font-size:30px; font-weight:800; line-height:1; margin-top:8px;}
+.decision-card .decision-copy{font-size:11.5px; color:var(--ink-soft); line-height:1.35; margin-top:7px; min-height:31px;}
+.decision-card .decision-link{font-size:11.5px; font-weight:800; color:var(--azul); margin-top:12px;}
+.dashboard-grid{display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:18px; align-items:start;}
+.command-list{display:flex; flex-direction:column; gap:10px;}
+.command-row{background:var(--white); border:1px solid var(--line); border-left:4px solid var(--cinza); border-radius:10px; padding:14px 16px; display:grid; grid-template-columns:54px minmax(0,1fr) auto; gap:14px; align-items:center; box-shadow:var(--shadow);}
+.command-row.b-vermelho{border-left-color:var(--vermelho);}
+.command-row.b-laranja{border-left-color:var(--laranja);}
+.command-row.b-amarelo{border-left-color:var(--amarelo);}
+.command-row.b-verde{border-left-color:var(--verde);}
+.command-row.b-cinza{border-left-color:var(--cinza);}
+.command-main{min-width:0;}
+.command-title{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13.5px; font-weight:800;}
+.command-title .cliente{max-width:720px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.command-meta{display:flex; flex-wrap:wrap; gap:8px; margin-top:5px; font-size:11.5px; color:var(--ink-soft);}
+.command-desc{font-size:12px; color:var(--ink-2); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.command-side{text-align:right; min-width:130px;}
+.command-side .due{font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-2); margin-bottom:7px;}
+.command-side .btn{min-height:30px; padding:5px 10px;}
+.insight-panel{background:var(--white); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:18px;}
+.insight-panel h3{font-family:'Source Serif 4', serif; font-size:18px; margin-bottom:10px;}
+.insight-list{display:flex; flex-direction:column; gap:10px;}
+.insight-item{border:1px solid var(--line); border-radius:8px; padding:12px; background:#F8FAFC;}
+.insight-item b{display:block; font-size:12.5px; margin-bottom:4px;}
+.insight-item span{font-size:11.5px; color:var(--ink-soft); line-height:1.4;}
+.insight-item button{margin-top:10px;}
+
 .section-title{font-family:'Source Serif 4', serif; font-size:17px; font-weight:700; margin:28px 0 12px 0; display:flex; align-items:center; gap:8px;}
 .section-title .cnt{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); background:#EEF2F6; padding:2px 8px; border-radius:999px;}
 
@@ -243,6 +295,18 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .check-item input{width:16px; height:16px; accent-color:var(--verde);}
 .check-item.checked span{text-decoration:line-through; color:var(--ink-soft);}
 @media (max-width: 860px){ .path-cards{grid-template-columns:1fr;} }
+@media (max-width: 1180px){
+  .dashboard-hero, .dashboard-grid{grid-template-columns:1fr;}
+  .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
+}
+@media (max-width: 680px){
+  .today-panel{grid-template-columns:1fr;}
+  .decision-grid{grid-template-columns:1fr;}
+  .risk-panel h2{font-size:25px;}
+  .command-row{grid-template-columns:44px minmax(0,1fr); align-items:start;}
+  .command-side{grid-column:2; text-align:left; display:flex; gap:8px; align-items:center;}
+  .command-title .cliente{white-space:normal;}
+}
 
 @media (max-width: 860px){
   .sidebar{position:fixed; left:0; top:0; z-index:90; transform:translateX(-100%); transition:transform .2s; box-shadow:0 0 30px rgba(0,0,0,0.3);}
@@ -1530,48 +1594,91 @@ function renderDashboard(){
   const pubsRestritas = activePubs.filter(isRestrictedPublication).length;
   const itensCriticos = vencidos + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&diasRestantes(a.data)===0).length + semRespTotal + pubsRestritas;
 
-  const cards = [
-    {n:vencidos, l:'Prazos vencidos', c:'vermelho', go:'prazos', filter:'prazos_vencidos'},
-    {n:hoje, l:'Vencem hoje', c:'vermelho', go:'prazos', filter:'prazos_hoje'},
-    {n:em3, l:'Próximos 3 dias', c:'laranja', go:'prazos', filter:'prazos_3'},
-    {n:em7, l:'Próximos 7 dias', c:'amarelo', go:'prazos', filter:'prazos_7'},
-    {n:pubSemTratamento, l:'Publicações sem tratamento', c:'azul', go:'publicacoes', filter:'pub_sem_tratamento'},
-    {n:pubsRestritas, l:'Publicações restritas', c:'vermelho', go:'publicacoes', filter:'pub_restritas'},
-    {n:tarefasSemResp, l:'Tarefas sem responsável', c:'ink', go:'tarefas', filter:'tarefas_sem_resp'},
-    {n:audiProximas, l:'Audiências próximas (7d)', c:'ink', go:'audiencias', filter:'audi_7'},
-    {n:itensCriticos, l:'Itens críticos', c:'vermelho', go:'alertas', filter:'criticos'},
-  ];
-
-  let html = `<div class="grid-cards">${cards.map(c=>`<div class="card c-${c.c}" data-go="${c.go}" data-filter="${c.filter}"><div class="num">${c.n}</div><div class="lbl">${c.l}</div></div>`).join('')}</div>`;
-
   const items = [];
   activePrazos.filter(p=>!PRAZO_DONE.includes(p.status)).forEach(p=>{
     const dr = diasRestantes(p.prazoFatal);
-    items.push({tipo:'Prazo', dr, cliente:p.cliente, processo:p.processo, tribunal:p.tribunal, desc:p.tipoPrazo, color:riskColor(dr,false), done:false});
+    items.push({tipo:'Prazo', dr, cliente:p.cliente, processo:p.processo, tribunal:p.tribunal, desc:p.tipoPrazo, color:riskColor(dr,false), done:false, dataRaw:p.prazoFatal, go:'prazos', filter:dr<0?'prazos_vencidos':(dr===0?'prazos_hoje':'prazos_7')});
   });
   activeAudi.filter(a=>!AUDI_DONE.includes(a.status)).forEach(a=>{
     const dr = diasRestantes(a.data);
-    items.push({tipo:'Audiência', dr, cliente:a.cliente, processo:a.processo, tribunal:a.estado, desc:`${a.tipo} · ${a.horario}`, color:riskColor(dr,false), done:false, dataRaw:a.data});
+    items.push({tipo:'Audiência', dr, cliente:a.cliente, processo:a.processo, tribunal:a.estado, desc:`${a.tipo} · ${a.horario}`, color:riskColor(dr,false), done:false, dataRaw:a.data, go:'audiencias', filter:'audi_7'});
   });
   items.sort((a,b)=> (a.dr??9999) - (b.dr??9999));
   const top = items.slice(0,10);
+  const riskLevel = itensCriticos > 20 ? 'Risco operacional alto' : (itensCriticos > 0 ? 'Atenção necessária' : 'Operação sob controle');
+  const riskCopy = itensCriticos > 20
+    ? 'Há volume relevante de itens críticos. Comece por prazos vencidos, publicações restritas e pendências sem responsável.'
+    : (itensCriticos > 0 ? 'Existem pontos que exigem decisão, mas a operação está manejável se tratados agora.' : 'Não há itens críticos no momento. Mantenha a sincronização ativa e acompanhe novas publicações.');
+  const decisions = [
+    {n:vencidos, l:'Prazos vencidos', copy:'Precisa de ação imediata ou justificativa.', c:'vermelho', go:'prazos', filter:'prazos_vencidos'},
+    {n:pubSemTratamento, l:'Publicações novas', copy:'Triar, gerar prazo ou arquivar.', c:'azul', go:'publicacoes', filter:'pub_sem_tratamento'},
+    {n:pubsRestritas, l:'Restritas', copy:'Exigem fonte autenticada/A3.', c:'vermelho', go:'publicacoes', filter:'pub_restritas'},
+    {n:semRespTotal, l:'Sem responsável', copy:'Risco de ninguém assumir.', c:'laranja', go:'alertas', filter:'criticos'},
+    {n:audiProximas, l:'Agenda 7d', copy:'Audiências próximas para preparar.', c:'ink', go:'audiencias', filter:'audi_7'}
+  ];
 
-  html += `<div class="section-title">Fila de prioridade crítica <span class="cnt">${items.length} itens ativos</span></div>`;
-  if(top.length===0){ html += `<div class="empty">Nenhum prazo ou audiência pendente. Tudo em dia.</div>`; }
-  else{
-    html += `<div class="plist">${top.map(it=>`
-      <div class="prow b-${it.color}">
-        ${ringHTML(it.dr, it.done)}
-        <div class="info">
-          <div class="top-line"><span class="cliente">${it.cliente}</span><span class="tribunal-tag">${it.tribunal}</span><span style="color:var(--ink-soft); font-weight:600; font-size:11px;">${it.tipo}</span></div>
-          <div class="proc">${it.processo}</div>
-          <div class="desc">${it.desc}</div>
+  let html = `
+    <div class="dashboard-hero">
+      <section class="risk-panel">
+        <div>
+          <div class="risk-eyebrow">Comando operacional</div>
+          <h2>${riskLevel}</h2>
+          <p>${riskCopy}</p>
         </div>
-        <div style="text-align:right; font-size:11.5px; color:var(--ink-soft); white-space:nowrap;">${it.tipo==='Prazo'? fmtDate(items.find(x=>x===it).dataRaw||null) : ''}</div>
-      </div>`).join('')}</div>`;
-  }
+        <div class="risk-actions">
+          <button class="btn primary" data-go="prazos" data-filter="prazos_vencidos">Tratar vencidos</button>
+          <button class="btn" data-go="publicacoes" data-filter="pub_sem_tratamento">Triar publicações</button>
+          <button class="btn" data-go="publicacoes" data-filter="pub_restritas">Ver restritas</button>
+        </div>
+      </section>
+      <aside class="today-panel">
+        <div class="today-metric"><div class="metric-label">Críticos</div><div class="metric-value" style="color:var(--vermelho);">${itensCriticos}</div><div class="metric-copy">itens exigem atenção</div></div>
+        <div class="today-metric"><div class="metric-label">Hoje</div><div class="metric-value" style="color:${hoje?'var(--vermelho)':'var(--ink)'};">${hoje}</div><div class="metric-copy">prazos vencem hoje</div></div>
+        <div class="today-metric"><div class="metric-label">3 dias</div><div class="metric-value" style="color:${em3?'var(--laranja)':'var(--ink)'};">${em3}</div><div class="metric-copy">janela curta</div></div>
+        <div class="today-metric"><div class="metric-label">7 dias</div><div class="metric-value">${audiProximas}</div><div class="metric-copy">audiências próximas</div></div>
+      </aside>
+    </div>
+
+    <div class="decision-grid">${decisions.map(c=>`
+      <div class="decision-card c-${c.c}" data-go="${c.go}" data-filter="${c.filter}">
+        <div class="decision-label">${c.l}</div>
+        <div class="decision-value">${c.n}</div>
+        <div class="decision-copy">${c.copy}</div>
+        <div class="decision-link">Abrir fila</div>
+      </div>`).join('')}
+    </div>
+
+    <div class="dashboard-grid">
+      <section>
+        <div class="section-title">Fila que decide o dia <span class="cnt">${items.length} itens ativos</span></div>
+        ${top.length===0 ? `<div class="empty">Nenhum prazo ou audiência pendente. Tudo em dia.</div>` : `
+          <div class="command-list">${top.map(it=>`
+            <div class="command-row b-${it.color}">
+              ${ringHTML(it.dr, it.done)}
+              <div class="command-main">
+                <div class="command-title"><span class="cliente">${esc(it.cliente)}</span><span class="tribunal-tag">${esc(it.tribunal)}</span><span class="pill st-${it.tipo==='Prazo'?'azul':'ink'}"><span class="dot"></span>${it.tipo}</span></div>
+                <div class="command-meta"><span class="proc">${esc(it.processo)}</span><span>${it.dr<0?'Vencido':(it.dr===0?'Vence hoje':`Faltam ${it.dr} dias`)}</span></div>
+                <div class="command-desc">${esc(it.desc)}</div>
+              </div>
+              <div class="command-side">
+                <div class="due">${fmtDate(it.dataRaw)}</div>
+                <button class="btn small" data-go="${it.go}" data-filter="${it.filter}">Abrir</button>
+              </div>
+            </div>`).join('')}</div>
+        `}
+      </section>
+      <aside class="insight-panel">
+        <h3>Próximas decisões</h3>
+        <div class="insight-list">
+          <div class="insight-item"><b>Publicações sem tratamento</b><span>${pubSemTratamento} itens precisam virar prazo, tarefa ou descarte.</span><button class="btn small" data-go="publicacoes" data-filter="pub_sem_tratamento">Abrir</button></div>
+          <div class="insight-item"><b>Acesso restrito</b><span>${pubsRestritas} publicações dependem de fonte autenticada ou agente A3.</span><button class="btn small" data-go="publicacoes" data-filter="pub_restritas">Abrir</button></div>
+          <div class="insight-item"><b>Responsabilidade</b><span>${semRespTotal} itens críticos ainda não têm dono definido.</span><button class="btn small" data-go="alertas" data-filter="criticos">Ver alertas</button></div>
+        </div>
+      </aside>
+    </div>
+  `;
   document.getElementById('content').innerHTML = html;
-  document.querySelectorAll('.card[data-go]').forEach(c=>c.onclick=()=>{ openDashboardFilter(c.dataset.go, c.dataset.filter); });
+  document.querySelectorAll('[data-go][data-filter]').forEach(c=>c.onclick=()=>{ openDashboardFilter(c.dataset.go, c.dataset.filter); });
 }
 
 /* ===================== PUBLICAÇÕES / RECORTES ===================== */

@@ -304,6 +304,7 @@ Itens:
 - [x] Definir direcao visual em documento proprio.
 - [x] Trocar base visual quente/bege por base neutra SaaS.
 - [x] Melhorar sidebar, topbar, cards, tabelas, formularios e modais.
+- [x] Reestruturar dashboard como tela de decisao operacional.
 - [ ] Substituir caracteres soltos de acao por icones consistentes.
 - [ ] Criar tela de detalhe de publicacao com hierarquia visual propria.
 - [ ] Criar componente visual dedicado para memoria de calculo de prazo.
