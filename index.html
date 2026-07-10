@@ -191,22 +191,41 @@ tbody tr.archived{opacity:.55;}
 td.proc{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
 td.cliente{font-weight:600;}
 td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
-.pub-table{table-layout:fixed; min-width:1620px;}
-.pub-table th:nth-child(1){width:92px;}
-.pub-table th:nth-child(2){width:105px;}
-.pub-table th:nth-child(3){width:200px;}
-.pub-table th:nth-child(4){width:180px;}
-.pub-table th:nth-child(5){width:150px;}
-.pub-table th:nth-child(6){width:78px;}
-.pub-table th:nth-child(7){width:110px;}
-.pub-table th:nth-child(8){width:360px;}
-.pub-table th:nth-child(9){width:190px;}
-.pub-table th:nth-child(10){width:140px;}
-.pub-table th:nth-child(11){width:108px;}
-.pub-table th:nth-child(12){width:107px;}
-.pub-table td:nth-child(10), .pub-table td:nth-child(11), .pub-table td:nth-child(12){vertical-align:middle;}
-.recorte-preview{display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; line-height:1.35;}
+.pub-table{table-layout:fixed; min-width:1390px;}
+.pub-table th:nth-child(1){width:88px;}
+.pub-table th:nth-child(2){width:104px;}
+.pub-table th:nth-child(3){width:190px;}
+.pub-table th:nth-child(4){width:170px;}
+.pub-table th:nth-child(5){width:145px;}
+.pub-table th:nth-child(6){width:74px;}
+.pub-table th:nth-child(7){width:88px;}
+.pub-table th:nth-child(8){width:380px;}
+.pub-table th:nth-child(9){width:255px;}
+.pub-table th:nth-child(10){width:168px;}
+.pub-table th:last-child, .pub-table td.pub-ops{position:sticky; right:0; z-index:2; background:var(--white); box-shadow:-10px 0 18px rgba(16,24,40,.05);}
+.pub-table thead th:last-child{z-index:4; background:#F8FAFC;}
+.pub-table td.pub-ops{vertical-align:middle;}
+.pub-table tr:hover td.pub-ops{background:#F9FAFB;}
+.recorte-preview{display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; line-height:1.38; color:var(--ink-2);}
 .recorte-meta{display:block; margin-top:4px; font-size:10.5px; color:var(--azul); font-weight:600;}
+.recorte-open{all:unset; cursor:pointer; display:inline-flex; margin-top:7px; font-size:11px; color:var(--azul); font-weight:800;}
+.recorte-open:hover{text-decoration:underline;}
+.pub-action-card{border:1px solid #E4E7EC; background:#F8FAFC; border-radius:8px; padding:9px 10px; display:flex; flex-direction:column; gap:7px;}
+.pub-action-card.auth{border-color:#F3B8B0; background:#FFF7F5;}
+.pub-action-card.ok{border-color:#B7DFD0; background:#F0FBF6;}
+.pub-action-card.warn{border-color:#F3D59B; background:#FFFAEB;}
+.pub-action-title{font-size:12px; font-weight:800; line-height:1.25; color:var(--ink);}
+.pub-action-meta{font-size:11px; color:var(--ink-soft); line-height:1.35;}
+.pub-action-meta b{color:var(--ink-2);}
+.pub-action-buttons{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+.pub-ops-box{display:flex; flex-direction:column; gap:7px; align-items:flex-start;}
+.pub-ops-box .status-select{width:132px;}
+.pub-resp{font-size:10.5px; color:var(--ink-soft);}
+.pub-detail-row td{background:#FBFCFE; padding:0 12px 14px 12px;}
+.pub-detail{display:grid; grid-template-columns:minmax(280px,1.05fr) minmax(340px,1.4fr); gap:12px; border:1px solid var(--line); border-top:none; border-radius:0 0 8px 8px; padding:14px; box-shadow:inset 0 1px 0 rgba(255,255,255,.75);}
+.pub-detail-card{background:var(--white); border:1px solid var(--line); border-radius:8px; padding:13px;}
+.pub-detail-card h4{font-family:'Source Serif 4',serif; font-size:15px; margin-bottom:8px;}
+.pub-full-text{max-height:260px; overflow:auto; white-space:pre-wrap; color:var(--ink-2); font-size:12px; line-height:1.48;}
 .origin-tag{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; background:#EEF2F6; color:var(--azul);}
 .origin-tag.djen{background:#ECFDF3; color:var(--verde);}
 .origin-tag.controljus{background:#EFF8FF; color:var(--azul);}
@@ -217,7 +236,7 @@ td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
 .restriction-tag::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor;}
 .row-actions{white-space:nowrap;}
 .pub-table td.row-actions{display:table-cell;}
-.row-actions-inner{display:flex; gap:4px; align-items:center; justify-content:flex-start;}
+.row-actions-inner{display:flex; gap:4px; align-items:center; justify-content:flex-start; flex-wrap:wrap;}
 a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
 a.link-audi:hover{text-decoration:underline;}
 
@@ -298,6 +317,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 @media (max-width: 1180px){
   .dashboard-hero, .dashboard-grid{grid-template-columns:1fr;}
   .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
+  .pub-detail{grid-template-columns:1fr;}
 }
 @media (max-width: 680px){
   .today-panel{grid-template-columns:1fr;}
@@ -1528,6 +1548,48 @@ function deadlineInfoTag(pub){
   return pill(info.label, info.color);
 }
 
+function publicationActionCard(pub){
+  const s = deadlineSuggestion(pub);
+  const ruleTitle = s.rule?.act || 'Ato ainda não classificado';
+  const basis = s.rule?.basis || 'Sem regra normativa mapeada para cálculo automático.';
+  const due = s.restricted
+    ? 'Requer autenticação'
+    : (s.dueDate ? `Prazo sugerido: ${fmtDate(s.dueDate)}` : 'Sem prazo automático');
+  const cardClass = s.restricted ? 'auth' : (s.dueDate && s.confidence !== 'baixa' ? 'ok' : 'warn');
+  const confidence = s.confidence || 'baixa';
+  return `
+    <div class="pub-action-card ${cardClass}">
+      <div>
+        <div class="pub-action-title">${esc(due)}</div>
+        <div class="pub-action-meta">${esc(ruleTitle)} · confiança ${esc(confidence)}</div>
+      </div>
+      <div class="pub-action-meta"><b>Base:</b> ${esc(basis)}</div>
+      ${s.restricted ? `<div class="pub-action-meta"><b>Restrição:</b> ${esc(s.restrictedReason || 'conteúdo exige fonte autenticada')}</div>` : ''}
+      <div class="pub-action-buttons">
+        <button class="btn small ghost" data-act="details">${pubExpandedRows.has(pub.id) ? 'Ocultar análise' : 'Ver análise'}</button>
+        ${s.dueDate ? `<button class="btn small azul" data-act="suggest">Gerar prazo</button>` : ''}
+        ${s.restricted ? `<button class="btn small azul" data-act="a3">Abrir A3</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function publicationDetailRow(pub){
+  return `
+    <tr class="pub-detail-row" data-detail-for="${pub.id}">
+      <td colspan="10">
+        <div class="pub-detail">
+          <div class="pub-detail-card">
+            <h4>Texto completo da publicação</h4>
+            <div class="pub-full-text">${esc(cleanText(pub.textoRecorte || 'Texto não informado.'))}</div>
+          </div>
+          <div>${suggestionDetailsHTML(pub)}</div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
 function validationStatusLabel(status){
   return ({
     calculado_lexflow:'Calculado LexFlow',
@@ -1683,6 +1745,7 @@ function renderDashboard(){
 
 /* ===================== PUBLICAÇÕES / RECORTES ===================== */
 let pubFilters = {status:'', cliente:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
+const pubExpandedRows = new Set();
 
 function renderPublicacoes(){
   let rows = publicacoesOperacionais();
@@ -1704,15 +1767,15 @@ function renderPublicacoes(){
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
   </div>`;
   html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
-    <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo / ação</th><th>Status</th><th>Responsável</th><th></th>
+    <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Publicação</th><th>Prazo / inteligência</th><th>Tratamento</th>
   </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhuma publicação de integração encontrada. Esta tela mostra apenas dados sincronizados por fontes conectadas ao LexFlow.</div></td></tr>`; }
+  if(rows.length===0){ html += `<tr><td colspan="10"><div class="empty">Nenhuma publicação de integração encontrada. Esta tela mostra apenas dados sincronizados por fontes conectadas ao LexFlow.</div></td></tr>`; }
   rows.forEach(p=>{
     const archived = PUB_ARCHIVED.includes(p.status);
     const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
     const preview = recortePreview(p.textoRecorte);
     const recorteLen = cleanText(p.textoRecorte).length;
-    html += `<tr data-id="${p.id}" class="${archived?'archived':''}">
+    html += `<tr data-id="${p.id}" class="pub-main ${archived?'archived':''}">
       <td>${esc(fmtDate(p.dataPublicacao))}</td>
       <td><div class="origin-stack">${originTag(p)}${restrictionTag(p)}</div></td>
       <td class="cliente">${esc(displayClientName(p))}</td>
@@ -1720,17 +1783,19 @@ function renderPublicacoes(){
       <td class="proc">${esc(p.processo || '—')}</td>
       <td><span class="tribunal-tag">${esc(p.tribunal || '—')}</span></td>
       <td>${esc(p.tipoPublicacao || '—')}</td>
-      <td class="texto"><div class="recorte-preview">${esc(preview)}</div>${recorteLen>360?'<span class="recorte-meta">Texto completo no editar</span>':''}</td>
-      <td>${deadlineInfoTag(p)}</td>
-      <td><select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td>${p.responsavel ? esc(p.responsavel) : '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
-      <td class="row-actions"><div class="row-actions-inner">
+      <td class="texto"><div class="recorte-preview">${esc(preview)}</div>${recorteLen>360?`<button class="recorte-open" data-act="details">${pubExpandedRows.has(p.id)?'Ocultar texto completo':'Ver texto completo e análise'}</button>`:''}</td>
+      <td>${publicationActionCard(p)}</td>
+      <td class="pub-ops"><div class="pub-ops-box">
+        <select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select>
+        <div class="pub-resp">${p.responsavel ? `Resp.: ${esc(p.responsavel)}` : '<span style="color:var(--vermelho);">sem responsável</span>'}</div>
+        <div class="row-actions-inner">
         ${canGerarPrazo?`<button class="btn small azul" data-act="genprazo">Gerar prazo →</button>`:''}
-        ${isRestrictedPublication(p)?`<button class="btn small azul" data-act="a3">Abrir A3</button>`:''}
         <button class="btn small ghost" data-act="edit">✎</button>
         ${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}
+        </div>
       </div></td>
     </tr>`;
+    if(pubExpandedRows.has(p.id)) html += publicationDetailRow(p);
   });
   html += `</tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
@@ -1740,12 +1805,20 @@ function renderPublicacoes(){
   document.getElementById('fRestritas').onchange = e=>{pubFilters.showRestricted=e.target.checked; renderPublicacoes();};
   document.getElementById('fArch').onchange = e=>{pubFilters.showArchived=e.target.checked; renderPublicacoes();};
   document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(pubFilters.sort===s) pubFilters.dir*=-1; else {pubFilters.sort=s; pubFilters.dir=-1;} renderPublicacoes(); });
-  document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
+  document.querySelectorAll('tbody tr.pub-main[data-id]').forEach(tr=>{
     const id=tr.dataset.id; const p = DB.publicacoes.find(x=>x.id===id);
     const stSel = tr.querySelector('[data-act="status"]');
     if(stSel) stSel.onchange = async e=>{ const old=p.status; p.status=e.target.value; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) alterada: ${old} → ${p.status}`); await saveDB(); renderAll(); toast('Status atualizado'); };
     const genBtn = tr.querySelector('[data-act="genprazo"]');
     if(genBtn) genBtn.onclick = ()=>openPrazoModal(null, p);
+    const detailsBtns = tr.querySelectorAll('[data-act="details"]');
+    detailsBtns.forEach(btn=>btn.onclick = ()=>{
+      if(pubExpandedRows.has(id)) pubExpandedRows.delete(id);
+      else pubExpandedRows.add(id);
+      renderPublicacoes();
+    });
+    const suggestBtn = tr.querySelector('[data-act="suggest"]');
+    if(suggestBtn) suggestBtn.onclick = ()=>createSuggestedPrazoFromPublication(p);
     const a3Btn = tr.querySelector('[data-act="a3"]');
     if(a3Btn) a3Btn.onclick = ()=>openRestrictedWithA3(p);
     tr.querySelector('[data-act="edit"]').onclick = ()=>openPubModal(p);
