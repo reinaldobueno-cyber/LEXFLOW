@@ -444,6 +444,13 @@ async function handleSettings(request, env, auth){
         frequency:body.djen?.frequency || current.integrations?.djen?.frequency || 'manual',
         oabs:Array.isArray(body.djen?.oabs) ? body.djen.oabs.map(oab => ({uf:String(oab.uf || '').toUpperCase(), numero:onlyDigits(oab.numero), nome:String(oab.nome || '')})).filter(oab => oab.uf && oab.numero) : (current.integrations?.djen?.oabs || []),
         tokenEncrypted:current.integrations?.djen?.tokenEncrypted || null
+      },
+      a3:{
+        mode:body.a3?.mode || current.integrations?.a3?.mode || 'local_agent',
+        localAgentUrl:body.a3?.localAgentUrl || current.integrations?.a3?.localAgentUrl || 'lexflow-a3://open',
+        status:body.a3?.status || current.integrations?.a3?.status || 'not_installed',
+        requireConsent:body.a3?.requireConsent !== undefined ? Boolean(body.a3.requireConsent) : (current.integrations?.a3?.requireConsent ?? true),
+        allowedCourts:Array.isArray(body.a3?.allowedCourts) ? body.a3.allowedCourts.map(item => String(item || '').trim().toUpperCase()).filter(Boolean) : (current.integrations?.a3?.allowedCourts || [])
       }
     },
     updatedAt:nowIso(),

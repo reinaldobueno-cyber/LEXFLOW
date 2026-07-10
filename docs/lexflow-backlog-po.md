@@ -166,7 +166,7 @@ Critérios de aceite:
 
 Objetivo: permitir integracoes que exigem certificado digital fisico sem quebrar a arquitetura SaaS.
 
-Status: `[!]`
+Status: `[~]`
 
 Restricao tecnica:
 
@@ -175,7 +175,7 @@ Um certificado A3/token fisico fica conectado a uma maquina local e depende de d
 Arquiteturas possiveis:
 
 1. Agente local LexFlow Desktop
-   - [ ] Pequeno app instalado no computador do escritorio.
+   - [~] Pequeno app instalado no computador do escritorio.
    - [ ] Acessa o certificado A3 pelo navegador/sistema local.
    - [ ] Sincroniza apenas metadados/documentos autorizados com o LexFlow.
    - [ ] Ideal para token fisico A3.
@@ -197,9 +197,12 @@ Arquiteturas possiveis:
 
 Decisao pendente:
 
+- [x] Para A3, o caminho definido e agente local; Cloudflare Worker nao acessa USB/token fisico.
 - [ ] O escritorio aceita usar A1 para integracoes automaticas?
-- [ ] Se nao, precisamos construir agente local A3.
 - [ ] Quais tribunais realmente exigem A3 para os dados que faltam?
+- [x] Preparar Configuracoes do LexFlow para URL/protocolo do Agente Local A3.
+- [x] Criar acao `Abrir A3` em publicacoes restritas.
+- [x] Documentar arquitetura do Agente Local A3.
 
 Critérios de aceite:
 

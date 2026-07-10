@@ -389,6 +389,7 @@ const CONTROLJUS_PRIVATE_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/
 const CONTROLJUS_ENDPOINT_MODE = 'lexflow_cloudflare_browser_run_controljus';
 const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 const LEXFLOW_DJEN_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/djen/comunicacoes';
+const LEXFLOW_A3_AGENT_DEFAULT = 'lexflow-a3://open';
 const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
 const LEGAL_CODES = [
   {id:'cf', area:'Constitucional', name:'Constituição da República Federativa do Brasil de 1988', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm'},
@@ -582,7 +583,10 @@ function seedData(){
   ], checklist:{controlJusEndpoint:false, authenticatedSession:false, webserviceContract:false}, config:{
     controlJusEndpoint: CONTROLJUS_PRIVATE_ENDPOINT,
     controlJusMode: CONTROLJUS_ENDPOINT_MODE,
-    djenEndpoint: DJEN_PUBLIC_ENDPOINT
+    djenEndpoint: DJEN_PUBLIC_ENDPOINT,
+    a3AgentUrl: LEXFLOW_A3_AGENT_DEFAULT,
+    a3AgentStatus: 'not_installed',
+    a3RequireConsent: true
   }};
 }
 
@@ -595,6 +599,9 @@ function ensureFixedConfig(){
   if(DB.config.controlJusMode !== CONTROLJUS_ENDPOINT_MODE){ DB.config.controlJusMode = CONTROLJUS_ENDPOINT_MODE; changed = true; }
   if(DB.config.djenEndpoint !== DJEN_PUBLIC_ENDPOINT){ DB.config.djenEndpoint = DJEN_PUBLIC_ENDPOINT; changed = true; }
   if(DB.config.lexflowDjenEndpoint !== LEXFLOW_DJEN_ENDPOINT){ DB.config.lexflowDjenEndpoint = LEXFLOW_DJEN_ENDPOINT; changed = true; }
+  if(!DB.config.a3AgentUrl){ DB.config.a3AgentUrl = LEXFLOW_A3_AGENT_DEFAULT; changed = true; }
+  if(!DB.config.a3AgentStatus){ DB.config.a3AgentStatus = 'not_installed'; changed = true; }
+  if(typeof DB.config.a3RequireConsent !== 'boolean'){ DB.config.a3RequireConsent = true; changed = true; }
   if(!DB.checklist){ DB.checklist = {}; changed = true; }
   ['exportBtn','tableCopy','apiEndpoints'].forEach(k=>{
     if(Object.prototype.hasOwnProperty.call(DB.checklist,k)){ delete DB.checklist[k]; changed = true; }
@@ -847,6 +854,50 @@ function isRestrictedPublication(pub){
 function restrictionTag(pub){
   const info = restrictedInfo(pub);
   return info.restricted ? `<span class="restriction-tag" title="${esc(info.reason || 'Requer fonte autenticada')}">Restrito</span>` : '';
+}
+
+function a3AgentConfig(){
+  return {
+    url:DB.config?.a3AgentUrl || LEXFLOW_A3_AGENT_DEFAULT,
+    status:DB.config?.a3AgentStatus || 'not_installed',
+    requireConsent:DB.config?.a3RequireConsent !== false
+  };
+}
+
+function buildA3AgentUrl(pub){
+  const cfg = a3AgentConfig();
+  const base = cleanText(cfg.url) || LEXFLOW_A3_AGENT_DEFAULT;
+  const params = {
+    action:'open_restricted_file',
+    processo:pub?.processo || '',
+    tribunal:pub?.tribunal || '',
+    publicacaoId:pub?.refId || pub?.id || '',
+    origem:publicacaoOrigem(pub),
+    motivo:restrictedInfo(pub).reason || 'Conteúdo restrito',
+    tenantId:currentTenantId()
+  };
+  try{
+    const url = new URL(base);
+    Object.entries(params).forEach(([key, value])=>url.searchParams.set(key, value));
+    return url.toString();
+  }catch(e){
+    const sep = base.includes('?') ? '&' : '?';
+    return base + sep + new URLSearchParams(params).toString();
+  }
+}
+
+async function openRestrictedWithA3(pub){
+  const cfg = a3AgentConfig();
+  const target = buildA3AgentUrl(pub);
+  if(cfg.requireConsent && !confirm(`Abrir fonte autenticada com certificado A3 para o processo ${pub?.processo || ''}?`)){
+    return;
+  }
+  if(cfg.status !== 'installed'){
+    toast('Configure o Agente Local A3 em Configurações');
+  }
+  logHist(`Solicitação A3 preparada para ${displayClientName(pub)} (${pub.processo}). O certificado físico deve autorizar o acesso no computador do advogado.`);
+  await saveDB();
+  window.location.href = target;
 }
 
 function normalizePersonName(value){
@@ -1567,6 +1618,7 @@ function renderPublicacoes(){
       <td>${p.responsavel ? esc(p.responsavel) : '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
       <td class="row-actions"><div class="row-actions-inner">
         ${canGerarPrazo?`<button class="btn small azul" data-act="genprazo">Gerar prazo →</button>`:''}
+        ${isRestrictedPublication(p)?`<button class="btn small azul" data-act="a3">Abrir A3</button>`:''}
         <button class="btn small ghost" data-act="edit">✎</button>
         ${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}
       </div></td>
@@ -1586,6 +1638,8 @@ function renderPublicacoes(){
     if(stSel) stSel.onchange = async e=>{ const old=p.status; p.status=e.target.value; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) alterada: ${old} → ${p.status}`); await saveDB(); renderAll(); toast('Status atualizado'); };
     const genBtn = tr.querySelector('[data-act="genprazo"]');
     if(genBtn) genBtn.onclick = ()=>openPrazoModal(null, p);
+    const a3Btn = tr.querySelector('[data-act="a3"]');
+    if(a3Btn) a3Btn.onclick = ()=>openRestrictedWithA3(p);
     tr.querySelector('[data-act="edit"]').onclick = ()=>openPubModal(p);
     const archBtn = tr.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{ p.status='Arquivado'; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) arquivada.`); await saveDB(); renderAll(); toast('Recorte arquivado'); };
@@ -1628,11 +1682,13 @@ function openPubModal(p){
       <div class="field"><label>Link oficial / origem</label><input id="mLink" value="${esc(d.linkOrigem)}"></div>
       <div class="field"><label>Observações</label><textarea id="mObs">${esc(d.observacoes)}</textarea></div>
     </div>
-    <div class="modal-foot">${sugestaoPrazo.dueDate && !isNew ? `<button class="btn azul" id="mSuggestPrazo">Gerar prazo sugerido</button>` : ''}<button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar recorte</button></div>
+    <div class="modal-foot">${restricao.restricted && !isNew ? `<button class="btn azul" id="mOpenA3">Abrir arquivo via A3</button>` : ''}${sugestaoPrazo.dueDate && !isNew ? `<button class="btn azul" id="mSuggestPrazo">Gerar prazo sugerido</button>` : ''}<button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar recorte</button></div>
   `;
   showModal();
   document.getElementById('mClose').onclick = hideModal;
   document.getElementById('mCancel').onclick = hideModal;
+  const openA3Btn = document.getElementById('mOpenA3');
+  if(openA3Btn) openA3Btn.onclick = ()=>openRestrictedWithA3(d);
   const suggestBtn = document.getElementById('mSuggestPrazo');
   if(suggestBtn) suggestBtn.onclick = ()=>createSuggestedPrazoFromPublication(d);
   document.getElementById('mSave').onclick = async ()=>{
@@ -2282,18 +2338,54 @@ function renderConfiguracoes(){
       </div>
       <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="syncDjenSettings">Sincronizar agora</button><button class="btn primary" id="saveSettings2">Salvar configuração</button></div>
     </div>
+
+    <div class="section-title">Certificado Digital A3 / Token físico</div>
+    <div class="path-cards">
+      <div class="path-card">
+        <div class="path-tag">Arquitetura segura</div>
+        <h4>Agente Local LexFlow A3</h4>
+        <p>O Worker na Cloudflare não acessa USB/token físico. Para arquivos restritos, o LexFlow aciona um agente local instalado no computador do advogado, que usa o certificado A3 autorizado no navegador ou no driver local.</p>
+        <p>O PIN do certificado não é salvo no LexFlow. Quando necessário, deve ser informado localmente no computador do advogado.</p>
+      </div>
+      <div class="path-card">
+        <div class="path-tag">Fluxo operacional</div>
+        <h4>Publicação restrita -> Abrir A3</h4>
+        <p>Em publicações marcadas como restritas, o botão Abrir A3 envia processo, tribunal, origem e motivo da restrição para o agente local. O agente então abre a fonte autenticada do tribunal para visualizar ou baixar o arquivo permitido.</p>
+      </div>
+    </div>
+    <div class="table-wrap" style="padding:18px;">
+      <div class="field-row">
+        <div class="field"><label>Modo de acesso</label><select id="cfgA3Mode"><option value="local_agent">Agente local com A3</option><option value="a1_future">Certificado A1 futuro</option><option value="official_api">API oficial/token futuro</option></select></div>
+        <div class="field"><label>Status do agente</label><select id="cfgA3Status"><option value="not_installed">Não instalado</option><option value="installed">Instalado</option><option value="disabled">Desativado</option></select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>URL/protocolo do agente local</label><input id="cfgA3Url" placeholder="${LEXFLOW_A3_AGENT_DEFAULT}"></div>
+        <div class="field"><label>Tribunais autorizados</label><input id="cfgA3Courts" placeholder="TJGO, TJMG, PJE, SEEU"></div>
+      </div>
+      <label class="chk" style="margin-top:8px;"><input type="checkbox" id="cfgA3Consent"> Exigir confirmação do usuário antes de abrir fonte autenticada</label>
+      <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="testA3Agent">Testar agente local</button><button class="btn primary" id="saveSettingsA3">Salvar A3</button></div>
+    </div>
   `;
   document.getElementById('content').innerHTML = html;
 
   fetchSettings().then(settings=>{
     const c = settings.integrations?.controljus || {};
     const d = settings.integrations?.djen || {};
+    const a3 = settings.integrations?.a3 || {};
     document.getElementById('cfgControlUrl').value = c.baseUrl || '';
     document.getElementById('cfgDjenAuth').value = d.authType || 'public';
     document.getElementById('cfgDjenUrl').value = d.serviceUrl || DJEN_PUBLIC_ENDPOINT;
     document.getElementById('cfgDjenFreq').value = d.frequency || 'manual';
     const oabs = d.oabs?.length ? d.oabs : defaultOabs;
     document.getElementById('cfgDjenOabs').value = oabs.map(o=>`${o.uf || ''} ${o.numero || ''} ${o.nome || ''}`.trim()).join('\n');
+    document.getElementById('cfgA3Mode').value = a3.mode || 'local_agent';
+    document.getElementById('cfgA3Status').value = a3.status || 'not_installed';
+    document.getElementById('cfgA3Url').value = a3.localAgentUrl || LEXFLOW_A3_AGENT_DEFAULT;
+    document.getElementById('cfgA3Courts').value = (a3.allowedCourts || []).join(', ');
+    document.getElementById('cfgA3Consent').checked = a3.requireConsent !== false;
+    DB.config.a3AgentUrl = a3.localAgentUrl || LEXFLOW_A3_AGENT_DEFAULT;
+    DB.config.a3AgentStatus = a3.status || 'not_installed';
+    DB.config.a3RequireConsent = a3.requireConsent !== false;
   }).catch(e=>toast(e.message));
 
   function parseOabs(){
@@ -2305,9 +2397,11 @@ function renderConfiguracoes(){
   }
 
   async function saveSettingsFromForm(){
+    const a3Courts = document.getElementById('cfgA3Courts').value.split(/[,;\n]+/).map(item=>item.trim().toUpperCase()).filter(Boolean);
     const body = {
       controljus:{apiKey:document.getElementById('cfgControlKey').value.trim(), baseUrl:document.getElementById('cfgControlUrl').value.trim()},
-      djen:{authType:document.getElementById('cfgDjenAuth').value, token:document.getElementById('cfgDjenToken').value.trim(), serviceUrl:document.getElementById('cfgDjenUrl').value.trim(), frequency:document.getElementById('cfgDjenFreq').value, oabs:parseOabs()}
+      djen:{authType:document.getElementById('cfgDjenAuth').value, token:document.getElementById('cfgDjenToken').value.trim(), serviceUrl:document.getElementById('cfgDjenUrl').value.trim(), frequency:document.getElementById('cfgDjenFreq').value, oabs:parseOabs()},
+      a3:{mode:document.getElementById('cfgA3Mode').value, status:document.getElementById('cfgA3Status').value, localAgentUrl:document.getElementById('cfgA3Url').value.trim() || LEXFLOW_A3_AGENT_DEFAULT, requireConsent:document.getElementById('cfgA3Consent').checked, allowedCourts:a3Courts}
     };
     const suffix = isMaster() && AUTH.activeTenantId ? `?tenantId=${encodeURIComponent(AUTH.activeTenantId)}` : '';
     const res = await apiFetch('/api/settings' + suffix, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -2315,16 +2409,28 @@ function renderConfiguracoes(){
     if(!res.ok) throw new Error(payload.message || 'Falha ao salvar configuração');
     document.getElementById('cfgControlKey').value = '';
     document.getElementById('cfgDjenToken').value = '';
+    DB.config.a3AgentUrl = body.a3.localAgentUrl;
+    DB.config.a3AgentStatus = body.a3.status;
+    DB.config.a3RequireConsent = body.a3.requireConsent;
+    await saveDB();
     toast('Configuração salva');
   }
   document.getElementById('saveSettings').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
   document.getElementById('saveSettings2').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
+  document.getElementById('saveSettingsA3').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
   document.getElementById('testControlJus').onclick = async ()=>{
     const res = await apiFetch('/api/integrations/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'controljus'})});
     const payload = await res.json().catch(()=>({}));
     toast(payload.message || 'Teste registrado');
   };
   document.getElementById('syncDjenSettings').onclick = ()=>syncDjenComunicacoes(true).catch(e=>toast(e.message));
+  document.getElementById('testA3Agent').onclick = ()=>{
+    const url = document.getElementById('cfgA3Url').value.trim() || LEXFLOW_A3_AGENT_DEFAULT;
+    DB.config.a3AgentUrl = url;
+    DB.config.a3AgentStatus = document.getElementById('cfgA3Status').value;
+    toast(url.startsWith('http') ? 'Teste local preparado. O agente deve responder neste endereço.' : 'Protocolo do agente preparado. O navegador deve solicitar abertura do app.');
+    window.location.href = buildA3AgentUrl({processo:'TESTE-A3', tribunal:'TESTE', refId:'TESTE', source:'LexFlow', textoRecorte:'Teste de agente A3'});
+  };
 }
 
 function renderBasePrazos(){
