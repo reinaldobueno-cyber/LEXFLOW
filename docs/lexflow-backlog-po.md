@@ -293,6 +293,29 @@ Critérios de aceite:
 - Toda sugestao tem justificativa.
 - Baixa confianca vira alerta, nao automacao.
 
+## Epic 9 - Design System e Experiencia SaaS
+
+Status: `[~]`
+
+Objetivo: transformar o LexFlow de prototipo funcional em produto juridico SaaS confiavel, vendavel e agradavel de operar todos os dias.
+
+Itens:
+
+- [x] Definir direcao visual em documento proprio.
+- [x] Trocar base visual quente/bege por base neutra SaaS.
+- [x] Melhorar sidebar, topbar, cards, tabelas, formularios e modais.
+- [ ] Substituir caracteres soltos de acao por icones consistentes.
+- [ ] Criar tela de detalhe de publicacao com hierarquia visual propria.
+- [ ] Criar componente visual dedicado para memoria de calculo de prazo.
+- [ ] Revisar mobile/responsividade das tabelas grandes.
+- [ ] Criar estados vazios especificos por modulo.
+
+Critérios de aceite:
+
+- O usuario deve sentir que esta usando um SaaS juridico profissional, nao uma planilha.
+- Tabelas precisam ser densas, legiveis e alinhadas.
+- Elementos criticos devem aparecer por hierarquia visual, nao por improviso.
+
 ## Ordem Recomendada dos Proximos Itens
 
 ### Sprint 1 - Higiene da Inbox Integrada
