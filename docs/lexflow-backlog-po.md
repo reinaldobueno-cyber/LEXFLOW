@@ -109,11 +109,11 @@ Itens:
 - [x] Mapear tipo de ato -> prazo sugerido para regras iniciais de Civil, Penal, Trabalhista, Eleitoral e Tributario.
 - [x] Configurar dias corridos vs dias uteis na regra.
 - [x] Criar sugestao de prazo na publicacao com fundamento, confianca e memoria de calculo.
-- [ ] Definir regra de inicio de contagem: disponibilizacao, publicacao, ciencia, juntada.
-- [ ] Integrar calendario de feriados nacionais.
+- [x] Definir regra de inicio de contagem inicial: publicacao oficial como base para sugestao DJEN/recorte.
+- [x] Integrar calendario inicial de feriados nacionais fixos.
 - [ ] Integrar feriados estaduais/tribunais.
-- [ ] Registrar base do calculo: data inicial, dias, calendario usado, regra e fonte oficial.
-- [ ] Criar status de confianca: calculado LexFlow, revisao recomendada, sem regra confiavel.
+- [x] Registrar base do calculo: data inicial, dias, calendario usado, regra e fonte oficial.
+- [x] Criar status de confianca: calculado LexFlow, revisao recomendada, sem regra confiavel.
 - [ ] Permitir recontagem manual com justificativa.
 - [ ] Alertar quando prazo tiver baixa confianca, termo inicial sensivel ou dados incompletos.
 
@@ -312,7 +312,7 @@ Critérios de aceite:
 
 - [x] Criar base normativa inicial a partir de codigos oficiais.
 - [x] Criar prazo sugerido com fundamento na publicacao.
-- [ ] Modelar memoria de calculo persistente e auditavel.
+- [x] Modelar memoria de calculo persistente e auditavel.
 - [ ] Criar validacao humana.
 - [ ] Criar alerta de prazo sem validacao.
 

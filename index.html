@@ -234,6 +234,8 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .path-card .path-tag{font-size:10px; text-transform:uppercase; font-weight:700; letter-spacing:.05em; color:var(--selo);}
 .path-card h4{font-family:'Source Serif 4',serif; font-size:15.5px; margin:6px 0 8px 0;}
 .path-card p{font-size:12.5px; color:var(--ink-soft); line-height:1.55;}
+.calc-factors{margin:4px 0 0 16px; color:var(--ink-soft); font-size:11.5px; line-height:1.45;}
+.calc-factors li{margin:2px 0;}
 .checklist{display:flex; flex-direction:column; gap:2px;}
 .check-item{display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid var(--line); font-size:13px;}
 .check-item:last-child{border-bottom:none;}
@@ -401,6 +403,17 @@ const LEGAL_CODES = [
   {id:'cppm', area:'Penal militar', name:'Código de Processo Penal Militar - Decreto-Lei 1.002/1969', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/decreto-lei/del1002.htm'},
   {id:'juizados', area:'Civil/Criminal', name:'Juizados Especiais - Lei 9.099/1995', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/leis/l9099.htm'},
   {id:'lef', area:'Tributário', name:'Execução Fiscal - Lei 6.830/1980', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/leis/l6830.htm'}
+];
+const NATIONAL_HOLIDAYS = [
+  {month:1, day:1, name:'Confraternização Universal'},
+  {month:4, day:21, name:'Tiradentes'},
+  {month:5, day:1, name:'Dia do Trabalho'},
+  {month:9, day:7, name:'Independência do Brasil'},
+  {month:10, day:12, name:'Nossa Senhora Aparecida'},
+  {month:11, day:2, name:'Finados'},
+  {month:11, day:15, name:'Proclamação da República'},
+  {month:11, day:20, name:'Consciência Negra'},
+  {month:12, day:25, name:'Natal'}
 ];
 const DEADLINE_RULES = [
   {id:'civil-contrarrazoes-apelacao', area:'civil', codeId:'cpc', act:'Contrarrazões à apelação', days:15, count:'business', basis:'CPC, art. 1.010, §1º; contagem em dias úteis pelo art. 219', confidence:'alta', keywords:['CONTRARRAZOES A APELACAO','CONTRARRAZOES DE APELACAO','CONTRARRAZOES']},
@@ -1240,17 +1253,28 @@ function inferLegalArea(pub){
   return {id:'civil', label:'Civil', reason:'regra padrão quando não há ramo especial identificado'};
 }
 
+function keywordMatches(text, keywords = []){
+  return keywords.filter(keyword => text.includes(keyword));
+}
+
 function inferDeadlineRule(pub, areaId){
   const text = normalizePersonName(`${pub?.tipoPublicacao || ''} ${pub?.textoRecorte || ''} ${pub?.observacoes || ''}`);
   const rules = DEADLINE_RULES.filter(rule => rule.area === areaId);
   let best = null;
   let bestScore = 0;
+  let bestMatches = [];
   rules.forEach(rule=>{
-    const score = rule.keywords.reduce((acc, keyword)=> acc + (text.includes(keyword) ? keyword.length : 0), 0);
-    if(score > bestScore){ best = rule; bestScore = score; }
+    const matches = keywordMatches(text, rule.keywords);
+    const score = matches.reduce((acc, keyword)=> acc + keyword.length, 0);
+    if(score > bestScore){
+      best = rule;
+      bestScore = score;
+      bestMatches = matches;
+    }
   });
-  if(best) return best;
-  return rules.find(rule => rule.id.includes('manifestacao') || rule.id.includes('validar')) || null;
+  if(best) return {rule:best, score:bestScore, matches:bestMatches};
+  const fallback = rules.find(rule => rule.id.includes('manifestacao') || rule.id.includes('validar')) || null;
+  return fallback ? {rule:fallback, score:0, matches:[]} : {rule:null, score:0, matches:[]};
 }
 
 function isWeekend(date){
@@ -1258,46 +1282,84 @@ function isWeekend(date){
   return day === 0 || day === 6;
 }
 
+function isNationalHoliday(date){
+  return NATIONAL_HOLIDAYS.some(item => item.month === date.getMonth() + 1 && item.day === date.getDate());
+}
+
+function countableBlocker(date){
+  if(isWeekend(date)) return 'fim de semana';
+  const holiday = NATIONAL_HOLIDAYS.find(item => item.month === date.getMonth() + 1 && item.day === date.getDate());
+  return holiday ? holiday.name : '';
+}
+
+function isCountableDay(date, business){
+  return !business || !countableBlocker(date);
+}
+
 function nextCountableDay(date, business){
   const d = new Date(date);
   d.setDate(d.getDate() + 1);
   if(!business) return d;
-  while(isWeekend(d)) d.setDate(d.getDate() + 1);
+  while(!isCountableDay(d, business)) d.setDate(d.getDate() + 1);
   return d;
 }
 
-function addDeadlineDays(startDate, days, business){
-  if(!startDate || !days) return '';
+function calculateDeadline(startDate, days, business){
+  if(!startDate || !days) return {dueDate:'', countedDays:[], skippedDays:[]};
   const d = new Date(startDate);
+  const countedDays = [d.toISOString().slice(0,10)];
+  const skippedDays = [];
   let counted = 1;
   while(counted < days){
     d.setDate(d.getDate() + 1);
-    if(!business || !isWeekend(d)) counted++;
+    if(isCountableDay(d, business)){
+      counted++;
+      countedDays.push(d.toISOString().slice(0,10));
+    }else{
+      skippedDays.push({date:d.toISOString().slice(0,10), reason:countableBlocker(d)});
+    }
   }
-  return d.toISOString().slice(0,10);
+  return {dueDate:d.toISOString().slice(0,10), countedDays, skippedDays};
 }
 
 function deadlineSuggestion(pub){
   const restricao = restrictedInfo(pub);
   const area = inferLegalArea(pub);
-  const rule = inferDeadlineRule(pub, area.id);
+  const ruleMatch = inferDeadlineRule(pub, area.id);
+  const rule = ruleMatch.rule;
   const pubDate = parseDateLocal(pub?.dataPublicacao);
   const hasCalculation = Boolean(rule && rule.days && pubDate);
   const business = rule?.count === 'business';
   const start = hasCalculation ? nextCountableDay(pubDate, business) : null;
-  const dueDate = hasCalculation ? addDeadlineDays(start, rule.days, business) : '';
+  const calculation = hasCalculation ? calculateDeadline(start, rule.days, business) : {dueDate:'', countedDays:[], skippedDays:[]};
   const code = rule ? legalCodeById(rule.codeId) : null;
+  const factors = [
+    `Área inferida: ${area.label} (${area.reason})`,
+    rule ? `Regra candidata: ${rule.act}` : 'Nenhuma regra candidata encontrada',
+    ruleMatch.matches.length ? `Termos encontrados: ${ruleMatch.matches.join(', ')}` : 'Sem termo específico forte no texto',
+    pubDate ? `Data-base: publicação em ${fmtDate(pub?.dataPublicacao)}` : 'Sem data de publicação confiável',
+    business ? 'Calendário: dias úteis com finais de semana e feriados nacionais fixos' : 'Calendário: dias corridos',
+    restricao.restricted ? `Restrição: ${restricao.reason || 'requer autenticação'}` : 'Conteúdo público suficiente para triagem inicial'
+  ];
   return {
     area,
     rule,
     code,
-    dueDate,
+    dueDate:calculation.dueDate,
     startDate:start ? start.toISOString().slice(0,10) : '',
+    termInitial:'publicacao',
+    termInitialLabel:'publicação oficial',
+    calendar:business ? 'dias_uteis_nacionais_v1' : 'dias_corridos_v1',
+    countedDays:calculation.countedDays,
+    skippedDays:calculation.skippedDays,
+    matchedKeywords:ruleMatch.matches,
+    score:ruleMatch.score,
+    factors,
     restricted:restricao.restricted,
     restrictedReason:restricao.reason,
-    status: restricao.restricted ? 'auth' : (dueDate ? 'suggested' : 'needs_rule'),
+    status: restricao.restricted ? 'auth' : (calculation.dueDate ? 'suggested' : 'needs_rule'),
     confidence: rule?.confidence || 'baixa',
-    needsReview: rule?.confidence === 'baixa' || !dueDate
+    needsReview: rule?.confidence === 'baixa' || !calculation.dueDate || ruleMatch.score === 0
   };
 }
 
@@ -1312,10 +1374,16 @@ function deadlineSuggestionLabel(pub){
 function suggestionDetailsHTML(pub){
   const s = deadlineSuggestion(pub);
   const codeLink = s.code?.url ? `<a class="link-audi" href="${esc(s.code.url)}" target="_blank" rel="noopener">${esc(s.code.name)}</a>` : 'Base legal não identificada';
+  const skipped = s.skippedDays?.length
+    ? `<p><b>Dias não contados:</b> ${s.skippedDays.map(item => `${fmtDate(item.date)} (${item.reason})`).join(', ')}</p>`
+    : '';
   const calc = s.dueDate
     ? `<p><b>Data sugerida:</b> ${fmtDate(s.dueDate)} <span class="mono">(${s.rule.days} ${s.rule.count === 'business' ? 'dias úteis' : 'dias corridos'})</span></p>
-       <p><b>Início sugerido:</b> ${fmtDate(s.startDate)}. Contagem a partir do primeiro dia posterior à publicação; feriados locais serão uma camada própria do motor.</p>`
+       <p><b>Termo inicial:</b> ${esc(s.termInitialLabel)} em ${fmtDate(pub?.dataPublicacao)}. <b>Primeiro dia contado:</b> ${fmtDate(s.startDate)}.</p>
+       <p><b>Calendário usado:</b> ${s.rule.count === 'business' ? 'dias úteis com fins de semana e feriados nacionais fixos' : 'dias corridos'}.</p>
+       ${skipped}`
     : `<p><b>Data sugerida:</b> ainda não calculada. Falta regra específica ou data de publicação confiável.</p>`;
+  const factors = s.factors?.length ? `<ul class="calc-factors">${s.factors.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>` : '';
   return `
     <div class="path-card" style="box-shadow:none;">
       <div class="path-tag">Inteligência de prazo · cálculo LexFlow</div>
@@ -1325,6 +1393,7 @@ function suggestionDetailsHTML(pub){
       <p><b>Fundamento:</b> ${esc(s.rule?.basis || 'Não há fundamento mapeado para este ato.')}</p>
       <p><b>Fonte normativa:</b> ${codeLink}</p>
       <p><b>Confiança:</b> ${esc(s.confidence)}. Quando a confiança for baixa, o LexFlow marca revisão recomendada; quando houver regra confiável, entrega o prazo calculado.</p>
+      ${factors}
       ${s.restricted ? `<p style="color:var(--vermelho); font-weight:700;">Restrito: ${esc(s.restrictedReason || 'requer autenticação')}.</p>` : ''}
     </div>
   `;
@@ -1617,12 +1686,21 @@ async function createSuggestedPrazoFromPublication(pub){
     contagem:suggestion.rule.count,
     diasPrazo:suggestion.rule.days,
     inicioContagem:suggestion.startDate,
+    termoInicial:suggestion.termInitial,
+    termoInicialDescricao:suggestion.termInitialLabel,
+    calendarioCalculo:suggestion.calendar,
+    palavrasChaveEncontradas:suggestion.matchedKeywords,
+    diasContados:suggestion.countedDays,
+    diasNaoContados:suggestion.skippedDays,
+    fatoresCalculo:suggestion.factors,
+    pontuacaoRegra:suggestion.score,
     confirmadoPor:'',
     confirmadoEm:'',
     observacao:[
       `Prazo calculado pelo LexFlow. Área: ${suggestion.area.label}.`,
       `Fundamento: ${suggestion.rule.basis}.`,
       `Contagem: ${suggestion.rule.days} ${suggestion.rule.count === 'business' ? 'dias úteis' : 'dias corridos'}, início sugerido em ${fmtDate(suggestion.startDate)}.`,
+      `Calendário: ${suggestion.rule.count === 'business' ? 'dias úteis nacionais v1' : 'dias corridos v1'}.`,
       suggestion.confidence === 'baixa' ? 'Revisão recomendada por baixa confiança, termo inicial sensível ou regra genérica.' : 'Regra aplicada automaticamente pelo motor normativo do LexFlow.'
     ].join(' '),
     link:pub.linkOrigem || '',
@@ -1737,14 +1815,23 @@ function renderPrazos(){
 function openPrazoModal(p, fromPub){
   const isNew = !p;
   const d = p || {id:uid(), processo:fromPub?fromPub.processo:'', cliente:fromPub?displayClientName(fromPub):'', tribunal:fromPub?fromPub.tribunal:'', dataPublicacao:fromPub?fromPub.dataPublicacao:'', tipoPrazo:fromPub?fromPub.tipoPublicacao:'', prazoFatal:fromPub?fromPub.prazoFatal:'', origemPublicacaoId:fromPub?fromPub.refId:'', responsavel:'', status:'Novo', prioridade:'Média', observacao:'', link:'', concluidoEm:''};
+  const fatoresCalculo = Array.isArray(d.fatoresCalculo) && d.fatoresCalculo.length
+    ? `<ul class="calc-factors">${d.fatoresCalculo.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`
+    : '';
+  const diasNaoContados = Array.isArray(d.diasNaoContados) && d.diasNaoContados.length
+    ? `<p><b>Dias não contados:</b> ${d.diasNaoContados.map(item => `${fmtDate(item.date)} (${esc(item.reason)})`).join(', ')}</p>`
+    : '';
   const memoriaMotor = d.motorPrazo ? `
     <div class="path-card" style="box-shadow:none;">
       <div class="path-tag">Memória do motor de prazos</div>
       <h4>${esc(d.regraPrazoAto || d.tipoPrazo)}</h4>
       <p><b>Área:</b> ${esc(d.areaDireito || '—')} · <b>Confiança:</b> ${esc(d.confianca || '—')} · <b>Status:</b> ${esc(validationStatusLabel(d.validacaoStatus))}</p>
       <p><b>Fundamento:</b> ${esc(d.fundamentoLegal || '—')}</p>
-      <p><b>Contagem:</b> ${esc(d.diasPrazo || '—')} ${d.contagem === 'business' ? 'dias úteis' : (d.contagem === 'calendar' ? 'dias corridos' : 'manual')} · início sugerido em ${fmtDate(d.inicioContagem)}</p>
+      <p><b>Termo inicial:</b> ${esc(d.termoInicialDescricao || 'publicação oficial')} · <b>primeiro dia contado:</b> ${fmtDate(d.inicioContagem)}</p>
+      <p><b>Contagem:</b> ${esc(d.diasPrazo || '—')} ${d.contagem === 'business' ? 'dias úteis' : (d.contagem === 'calendar' ? 'dias corridos' : 'manual')} · <b>calendário:</b> ${esc(d.calendarioCalculo || '—')}</p>
+      ${diasNaoContados}
       ${d.fonteLegal ? `<p><b>Fonte:</b> <a class="link-audi" href="${esc(d.fonteLegal)}" target="_blank" rel="noopener">norma oficial</a></p>` : ''}
+      ${fatoresCalculo}
       ${d.confirmadoEm ? `<p><b>Confirmado por:</b> ${esc(d.confirmadoPor || '—')} em ${fmtDateTime(d.confirmadoEm)}</p>` : '<p><b>Entrega:</b> calculada pelo LexFlow. Revisão só é recomendada quando a confiança estiver baixa.</p>'}
     </div>
   ` : '';
