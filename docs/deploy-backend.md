@@ -56,7 +56,7 @@ npx wrangler secret put CONTROLJUS_BACKEND_TOKEN
 
 `CONTROLJUS_BACKEND_URL` pode ser a base do backend ou a rota completa `/api/controljus/publicacoes`.
 
-Depois, no LexFlow, clique em `Sincronizar ControlJus`.
+Depois, no LexFlow, clique em `Sincronizar fontes` e escolha a fonte privada quando quiser atualizar ControlJus.
 
 ## Local
 

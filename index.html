@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>LexFlow — Camada de Execução sobre o ControlJus</title>
+<title>LexFlow — Publicações, prazos e inteligência jurídica</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -361,7 +361,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
       <div class="seal">§</div>
       <div class="brand-text"><div class="t1">LexFlow</div><div class="t2">Prazos, Audiências & Publicações</div></div>
     </div>
-    <div class="tagline">O <b>ControlJus</b> informa. O <b>LexFlow</b> cobra, organiza e evita perda de prazo.</div>
+    <div class="tagline">Fontes oficiais e integrações alimentam. O <b>LexFlow</b> interpreta, calcula e cobra execução.</div>
     <div class="nav" id="nav"></div>
     <div class="sidebar-foot">Painel de comando jurídico<br>MVP · dados locais deste navegador</div>
   </div>
@@ -374,7 +374,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
       </div>
       <div class="topbar-actions">
         <span class="session-chip" id="sessionChip"></span>
-        <button class="btn" id="importBtn">Sincronizar ControlJus</button>
+        <button class="btn" id="importBtn">Sincronizar fontes</button>
         <button class="btn" id="exportBtn">⇩ Exportar CSV</button>
         <button class="btn" id="logoutBtn">Sair</button>
       </div>
@@ -501,8 +501,8 @@ const DEADLINE_RULES = [
   {id:'tributario-execucao-fiscal', area:'tributario', codeId:'lef', act:'Embargos/manifestação em execução fiscal', days:30, count:'calendar', basis:'Lei 6.830/1980, art. 16; marco de garantia/penhora pode prevalecer sobre publicação', confidence:'baixa', keywords:['EXECUCAO FISCAL','EMBARGOS A EXECUCAO']},
   {id:'penal-militar-validar', area:'penal_militar', codeId:'cppm', act:'Ato penal militar', days:null, count:'manual', basis:'Código de Processo Penal Militar; regra depende do ato específico', confidence:'baixa', keywords:['MILITAR','APELACAO','RECURSO','EMBARGOS']}
 ];
-const isControlJusPrazo = p => Boolean(p && p.origemPublicacaoId);
-const isValidationPrazo = p => !isControlJusPrazo(p);
+const isIntegratedPrazo = p => Boolean(p && p.origemPublicacaoId);
+const isValidationPrazo = p => !isIntegratedPrazo(p);
 const AUTH_STORAGE_KEY = 'lf:auth';
 let AUTH = {token:'', user:null};
 
@@ -614,7 +614,7 @@ function seedData(){
     return {id:uid(), data:`${yy}-${mm}-${dd}`, horario, cliente, processo, estado, tipo, modalidade, link, responsavel:'', preposto:'', status:'Agendada', observacoes:''};
   });
 
-  // Recortes/publicações simulados do ControlJus — alguns já geraram os prazos acima, outros ainda não tratados
+  // Recortes/publicações simulados de fonte integrada — alguns já geraram os prazos acima, outros ainda não tratados
   const pubsRaw = [
     {data:"15 de junho de 2026", cliente:"THAISA ALBUQUERQUE BARROS DA SILVA E ULISSES GOMES DE PAULA JUNIOR", processo:"0039538-04.2025.8.17.8201", tribunal:"TJPE", tipo:"Decisão", texto:"Fica a parte intimada para comprovar o cumprimento integral da sentença no prazo legal, sob pena das medidas executivas cabíveis.", status:"Gerou prazo", prazoFatal:"06 de julho de 2026"},
     {data:"16 de junho de 2026", cliente:"CARLOS FERNANDO BATISTA", processo:"5511728-03.2026.8.09.0051", tribunal:"TJGO", tipo:"Despacho", texto:"Determino a emenda à petição inicial, com indicação precisa dos pontos controvertidos, no prazo assinalado.", status:"Gerou prazo", prazoFatal:"07 de julho de 2026"},
@@ -644,7 +644,7 @@ function seedData(){
   });
 
   return {dataVersion: APP_DATA_VERSION, prazos, audiencias, tarefas:[], publicacoes, historico:[
-    {ts:new Date().toISOString(), texto:'Sistema iniciado. Prazos e audiências carregados; recortes simulados até a conexão autorizada com o endpoint fixo do ControlJus ser ativada.'}
+    {ts:new Date().toISOString(), texto:'Sistema iniciado. Prazos, audiências e publicações carregados. Fontes conectadas alimentarão a operação sem importação manual.'}
   ], checklist:{controlJusEndpoint:false, authenticatedSession:false, webserviceContract:false}, config:{
     controlJusEndpoint: CONTROLJUS_PRIVATE_ENDPOINT,
     controlJusMode: CONTROLJUS_ENDPOINT_MODE,
@@ -853,7 +853,7 @@ function djenSyncOk(){
 }
 
 function syncErrorMessage(payload){
-  const msg = payload?.sync?.message || payload?.error || payload?.lastError?.message || 'Falha ao sincronizar ControlJus';
+  const msg = payload?.sync?.message || payload?.error || payload?.lastError?.message || 'Falha ao sincronizar fonte privada';
   if(/CONTROLJUS_USER|CONTROLJUS_PASSWORD|credenciais/i.test(msg)){
     return 'Credenciais pendentes: configure CONTROLJUS_USER e CONTROLJUS_PASSWORD nos secrets da Cloudflare.';
   }
@@ -1098,7 +1098,7 @@ function normalizeControlJusPublicacao(p){
     processo:p.processo || '',
     cliente,
     tribunal:p.tribunal || '',
-    tipoPublicacao:p.tipoPublicacao || 'Recorte ControlJus',
+    tipoPublicacao:p.tipoPublicacao || 'Publicação de fonte privada',
     textoRecorte,
     prazoIdentificado:p.prazoIdentificado || '',
     prazoFatal:p.prazoFatal || '',
@@ -1119,7 +1119,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
   ensureFixedConfig();
   const silent = Boolean(opts.silent);
   const preserveView = Boolean(opts.preserveView);
-  if(!silent) toast('Sincronizando ControlJus...');
+  if(!silent) toast('Sincronizando fonte privada...');
   const url = new URL(DB.config.controlJusEndpoint);
   if(force) url.searchParams.set('refresh', '1');
   if(isMaster() && AUTH.activeTenantId) url.searchParams.set('tenantId', AUTH.activeTenantId);
@@ -1130,7 +1130,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
     DB.config.lastControlJusSyncAt = new Date().toISOString();
     DB.config.lastControlJusSyncStatus = /credenciais/i.test(msg) ? 'credenciais_pendentes' : 'erro';
     DB.config.lastControlJusSyncError = msg;
-    logHist(`Sincronização ControlJus falhou: ${msg}`);
+    logHist(`Sincronização da fonte privada falhou: ${msg}`);
     await saveDB();
     throw new Error(msg);
   }
@@ -1163,14 +1163,14 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
   DB.config.lastControlJusSyncStatus = payload.sync?.status || (res.status === 202 ? 'processing' : 'fresh');
   DB.config.lastControlJusSyncCount = incoming.length;
   DB.config.lastControlJusSyncError = '';
-  logHist(`Sincronização ControlJus concluída: ${created} novos recortes, ${updated} campos atualizados, ${incoming.length} recebidos.`);
+  logHist(`Sincronização da fonte privada concluída: ${created} novas publicações, ${updated} campos atualizados, ${incoming.length} recebidas.`);
   await saveDB();
   if(!preserveView){
     currentView = 'publicacoes';
     dashboardFilter = null;
     renderAll();
   }
-  if(!silent) toast(created ? `${created} novos recortes importados` : 'ControlJus sincronizado');
+  if(!silent) toast(created ? `${created} novas publicações integradas` : 'Fonte privada sincronizada');
   return {created, updated, total:incoming.length, status:DB.config.lastControlJusSyncStatus};
 }
 
@@ -1287,14 +1287,14 @@ const VIEWS = [
   {id:'configuracoes', label:'Configurações', icon:'⚙', group:'main'},
   {id:'usuarios', label:'Usuários', icon:'◉', group:'main', managerOnly:true},
   {id:'historico', label:'Histórico', icon:'≡', group:'sec'},
-  {id:'integracao', label:'Integração ControlJus', icon:'⇄', group:'sec'},
+  {id:'integracao', label:'Integrações', icon:'⇄', group:'sec'},
 ];
 let currentView = 'dashboard';
 let dashboardFilter = null;
 
 function computeAlertCount(){
   let crit = 0;
-  DB.prazos.filter(isControlJusPrazo).forEach(p=>{ if(PRAZO_DONE.includes(p.status)) return; const dr=diasRestantes(p.prazoFatal); if(dr!==null && dr<=0) crit++; });
+  DB.prazos.filter(isIntegratedPrazo).forEach(p=>{ if(PRAZO_DONE.includes(p.status)) return; const dr=diasRestantes(p.prazoFatal); if(dr!==null && dr<=0) crit++; });
   DB.audiencias.forEach(a=>{ if(AUDI_DONE.includes(a.status)) return; const dr=diasRestantes(a.data); if(dr!==null && dr>=0 && dr<=1) crit++; });
   crit += publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status) && isRestrictedPublication(p)).length;
   crit += DB.prazos.filter(p=>!PRAZO_DONE.includes(p.status) && PRAZO_REVIEW_RECOMMENDED.includes(p.validacaoStatus)).length;
@@ -1310,7 +1310,7 @@ function renderNav(){
     VIEWS.filter(v=>v.group===g && (!v.managerOnly || isUserManager())).forEach(v=>{
       let badge='';
       if(v.id==='publicacoes'){ const pubs=publicacoesOperacionais(); const n=pubs.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${pubs.length}</span>`; }
-      if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
+      if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>isIntegratedPrazo(p) && !PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
       if(v.id==='audiencias') badge = `<span class="badge">${DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status)).length}</span>`;
       if(v.id==='tarefas') badge = `<span class="badge">${DB.tarefas.filter(t=>!TAREFA_DONE.includes(t.status)).length}</span>`;
       if(v.id==='alertas' && critCount>0) badge = `<span class="badge crit">${critCount}</span>`;
@@ -1578,7 +1578,7 @@ async function confirmLexflowDeadline(prazo){
 
 /* ===================== DASHBOARD EXECUTIVO ===================== */
 function renderDashboard(){
-  const activePrazos = DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_ARCHIVED.includes(p.status));
+  const activePrazos = DB.prazos.filter(p=>isIntegratedPrazo(p) && !PRAZO_ARCHIVED.includes(p.status));
   const activeAudi = DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status));
   const activeTarefas = DB.tarefas.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
   const activePubs = publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status));
@@ -1706,7 +1706,7 @@ function renderPublicacoes(){
   html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
     <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Recorte</th><th>Prazo / ação</th><th>Status</th><th>Responsável</th><th></th>
   </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhuma publicação de integração encontrada. Esta tela mostra apenas dados sincronizados por DJEN ou ControlJus.</div></td></tr>`; }
+  if(rows.length===0){ html += `<tr><td colspan="12"><div class="empty">Nenhuma publicação de integração encontrada. Esta tela mostra apenas dados sincronizados por fontes conectadas ao LexFlow.</div></td></tr>`; }
   rows.forEach(p=>{
     const archived = PUB_ARCHIVED.includes(p.status);
     const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
@@ -1891,7 +1891,7 @@ let prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, s
 function renderPrazos(){
   const respSet = [...new Set(DB.prazos.map(p=>p.responsavel).filter(Boolean))];
   let rows = DB.prazos.slice();
-  if(!prazoFilters.showValidation) rows = rows.filter(isControlJusPrazo);
+  if(!prazoFilters.showValidation) rows = rows.filter(isIntegratedPrazo);
   if(!prazoFilters.showArchived) rows = rows.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
   if(dashboardFilter==='prazos_vencidos') rows = rows.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)<0);
   if(dashboardFilter==='prazos_hoje') rows = rows.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)===0);
@@ -1932,7 +1932,7 @@ function renderPrazos(){
       <td class="cliente">${p.cliente}</td>
       <td class="proc">${p.processo}</td>
       <td><span class="tribunal-tag">${p.tribunal}</span></td>
-      <td>${p.origemPublicacaoId?`<span class="pill st-azul"><span class="dot"></span>ControlJus</span>`:'<span class="pill st-cinza"><span class="dot"></span>Validação</span>'}</td>
+      <td>${p.origemPublicacaoId?`<span class="pill st-azul"><span class="dot"></span>Integrada</span>`:'<span class="pill st-cinza"><span class="dot"></span>Validação</span>'}</td>
       <td>${fmtDate(p.dataPublicacao)}</td>
       <td>${esc(p.tipoPrazo)}${p.fundamentoLegal?`<div class="recorte-meta">${esc(p.fundamentoLegal)}</div>`:''}</td>
       <td>${validationPill(p)}</td>
@@ -2003,7 +2003,7 @@ function openPrazoModal(p, fromPub){
   box.innerHTML = `
     <div class="modal-head"><h3>${isNew?'Novo prazo':'Editar prazo'}</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
-      ${fromPub?`<div style="font-size:12px; background:#E1EAF2; color:var(--azul); padding:8px 10px; border-radius:7px;">Gerado a partir do recorte do ControlJus de ${fmtDate(fromPub.dataPublicacao)}.</div>`:''}
+      ${fromPub?`<div style="font-size:12px; background:#EFF8FF; color:var(--azul); padding:8px 10px; border-radius:7px;">Gerado a partir da publicação integrada de ${fmtDate(fromPub.dataPublicacao)}.</div>`:''}
       ${memoriaMotor}
       <div class="field-row">
         <div class="field"><label>Cliente</label><input id="mCliente" value="${d.cliente}"></div>
@@ -2050,7 +2050,7 @@ function openPrazoModal(p, fromPub){
     };
     if(isNew){
       DB.prazos.push(updated);
-      logHist(`Novo prazo cadastrado: ${cliente} (${processo})${fromPub?' — origem: recorte ControlJus':''}`);
+      logHist(`Novo prazo cadastrado: ${cliente} (${processo})${fromPub?' — origem: publicação integrada':''}`);
       if(fromPub){ fromPub.prazoGeradoId = updated.id; logHist(`Recorte de ${displayClientName(fromPub)} vinculado ao novo prazo.`); }
     } else { const idx=DB.prazos.findIndex(x=>x.id===d.id); DB.prazos[idx]=updated; logHist(`Prazo de ${cliente} (${processo}) editado.`); }
     await saveDB(); hideModal(); renderAll(); toast('Prazo salvo');
@@ -2255,7 +2255,7 @@ function openTaskModal(t){
 
 /* ===================== ALERTAS ===================== */
 function renderAlertas(){
-  const activePrazos = DB.prazos.filter(p=>isControlJusPrazo(p) && !PRAZO_DONE.includes(p.status));
+  const activePrazos = DB.prazos.filter(p=>isIntegratedPrazo(p) && !PRAZO_DONE.includes(p.status));
   const activeAudi = DB.audiencias.filter(a=>!AUDI_DONE.includes(a.status));
   const activePubs = publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status));
 
@@ -2310,39 +2310,39 @@ function renderIntegracao(){
   ensureFixedConfig();
   const cl = DB.checklist;
   const checklistItems = [
-    {key:'controlJusEndpoint', label:'Endpoint fixo do ControlJus gravado no LexFlow'},
+    {key:'controlJusEndpoint', label:'Rota fixa de fontes conectadas gravada no LexFlow'},
     {key:'authenticatedSession', label:'Sessão autorizada do escritório validada para consultar recortes'},
-    {key:'webserviceContract', label:'Coletor Cloudflare Browser Run configurado com credenciais autorizadas'},
+    {key:'webserviceContract', label:'Coletores de integração configurados com credenciais autorizadas'},
   ];
   let html = `
     <div class="roadmap-hero">
-      <div class="eyebrow">Frase-chave do projeto</div>
-      <div class="frase">O <b>ControlJus</b> informa; o <b>LexFlow</b> cobra, organiza e evita perda de prazo. Este painel não substitui o ControlJus — ele é a camada de execução em cima dele.</div>
+      <div class="eyebrow">Estratégia de integração</div>
+      <div class="frase">O <b>LexFlow</b> centraliza DJEN/CNJ, ControlJus, fontes autenticadas e certificado A3 para transformar publicações em prazos, tarefas e cobrança de execução.</div>
     </div>
 
-    <div class="section-title">Roteiro de integração</div>
+    <div class="section-title">Roteiro de fontes</div>
     <div class="steps">
-      <div class="step done"><div class="step-num">1</div><div><h4>Protótipo <span class="tag">concluído</span></h4><p>Dashboard, prazos, audiências, tarefas, publicações e alertas já funcionam com dados locais do navegador.</p></div></div>
-      <div class="step wip"><div class="step-num">2</div><div><h4>Endpoint fixo <span class="tag">em andamento</span></h4><p>O LexFlow usa uma rota fixa na Cloudflare. O usuário não escolhe arquivo, não cola endpoint e não alimenta planilha intermediária.</p></div></div>
-      <div class="step todo"><div class="step-num">3</div><div><h4>Credenciais autorizadas <span class="tag">próximo</span></h4><p>Ao configurar os secrets do ControlJus na Cloudflare, o coletor Browser Run passa a buscar os recortes automaticamente.</p></div></div>
+      <div class="step done"><div class="step-num">1</div><div><h4>Fontes públicas <span class="tag">ativo</span></h4><p>DJEN/CNJ por OAB alimenta publicações oficiais e comunica restrições quando o conteúdo exige autenticação.</p></div></div>
+      <div class="step wip"><div class="step-num">2</div><div><h4>Fontes privadas <span class="tag">em andamento</span></h4><p>ControlJus continua como fonte conectada, mas não é o centro do produto. Ele convive com DJEN e outras origens.</p></div></div>
+      <div class="step todo"><div class="step-num">3</div><div><h4>Acesso autenticado <span class="tag">próximo</span></h4><p>Agente Local A3 e portais dos tribunais completam dados restritos de forma autorizada.</p></div></div>
     </div>
 
-    <div class="section-title">Endpoints gravados</div>
+    <div class="section-title">Fontes gravadas</div>
     <div class="path-cards">
-      <div class="path-card"><div class="path-tag">LexFlow Cloudflare · rota fixa</div><h4>Coletor Browser Run para recortes ControlJus</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Este é o endpoint operacional fixo do LexFlow. Ele roda na Cloudflare, usa Browser Run para acessar o ControlJus com credenciais autorizadas e mantém cache em KV.</p></div>
+      <div class="path-card"><div class="path-tag">LexFlow Cloudflare · fonte privada</div><h4>ControlJus / Aviso Urgente</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Fonte transitória e complementar. O LexFlow consome quando autorizada, mas a inteligência de prazo e cobrança fica no LexFlow.</p></div>
       <div class="path-card"><div class="path-tag">LexFlow Cloudflare · rota fixa</div><h4>Coletor DJEN/CNJ por OAB</h4><p><span class="mono">${DB.config.lexflowDjenEndpoint}</span></p><p>Rota operacional do LexFlow para consultar o DJEN por OAB, consolidar duplicidades e transformar comunicações oficiais em recortes.</p></div>
-      <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Endpoint público oficial validado para consulta DJEN/CNJ. O LexFlow consulta com filtros por OAB e data de disponibilização.</p></div>
+      <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Fonte oficial pública. O LexFlow consulta por OAB e data de disponibilização, sem depender de recorte intermediado.</p></div>
     </div>
 
-    <div class="section-title">Sincronização ControlJus</div>
+    <div class="section-title">Sincronização de fonte privada</div>
     <div class="path-cards">
       <div class="path-card">
         <div class="path-tag">Status</div>
         <h4>${DB.config.lastControlJusSyncAt ? `Última sincronização: ${fmtDateTime(DB.config.lastControlJusSyncAt)}` : 'Aguardando primeira sincronização'}</h4>
-        <p>Último estado: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Recortes recebidos: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
+        <p>Último estado: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Publicações recebidas: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
         ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${esc(DB.config.lastControlJusSyncError)}</p>` : ''}
-        <p class="mono" style="font-size:11px; color:var(--ink-soft);">${controlJusSyncOk() ? 'Coletor ativo na Cloudflare. Recortes sincronizados via Browser Run.' : 'Secrets necessários: CONTROLJUS_USER e CONTROLJUS_PASSWORD'}</p>
-        <p><button class="btn primary small" id="syncControlJusBtn">Sincronizar agora</button></p>
+        <p class="mono" style="font-size:11px; color:var(--ink-soft);">${controlJusSyncOk() ? 'Fonte privada ativa na Cloudflare. Recortes sincronizados via Browser Run.' : 'Opcional: configure CONTROLJUS_USER e CONTROLJUS_PASSWORD se quiser consumir esta fonte.'}</p>
+        <p><button class="btn primary small" id="syncControlJusBtn">Sincronizar fonte privada</button></p>
       </div>
     </div>
 
@@ -2383,7 +2383,7 @@ function renderIntegracao(){
   document.querySelectorAll('.check-item input').forEach(cb=>{
     cb.onchange = async e=>{
       DB.checklist[e.target.dataset.k] = e.target.checked;
-      logHist(`Checklist de integração ControlJus atualizado: "${checklistItems.find(c=>c.key===e.target.dataset.k).label}" → ${e.target.checked?'sim':'não'}`);
+      logHist(`Checklist de integrações atualizado: "${checklistItems.find(c=>c.key===e.target.dataset.k).label}" → ${e.target.checked?'sim':'não'}`);
       await saveDB(); renderIntegracao(); toast('Checklist salvo');
     };
   });
@@ -2419,7 +2419,7 @@ function renderConfiguracoes(){
       </div>
     </div>
 
-    <div class="section-title">Integração ControlJus</div>
+    <div class="section-title">Fonte privada: ControlJus / Aviso Urgente</div>
     <div class="table-wrap" style="padding:18px;">
       <div class="field-row">
         <div class="field"><label>API Key</label><input id="cfgControlKey" type="password" placeholder="Nova chave ou deixe em branco"></div>
@@ -2444,7 +2444,7 @@ function renderConfiguracoes(){
         <label>OABs monitoradas (uma por linha)</label>
         <textarea id="cfgDjenOabs" style="min-height:96px;" placeholder="GO 12345 Nome do advogado&#10;SP 98765 Nome do advogado"></textarea>
       </div>
-      <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="syncDjenSettings">Sincronizar agora</button><button class="btn primary" id="saveSettings2">Salvar configuração</button></div>
+      <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="syncDjenSettings">Sincronizar DJEN</button><button class="btn primary" id="saveSettings2">Salvar configuração</button></div>
     </div>
 
     <div class="section-title">Certificado Digital A3 / Token físico</div>
@@ -2710,37 +2710,44 @@ document.getElementById('importBtn').onclick = ()=>{
   ensureFixedConfig();
   const box = document.getElementById('modalBox');
   box.innerHTML = `
-    <div class="modal-head"><h3>Sincronizar ControlJus</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-head"><h3>Sincronizar fontes</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
-      <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">O LexFlow usa endpoint fixo gravado. Não haverá escolha de arquivo, importação manual ou cópia e cola de endereço.</p>
+      <p style="font-size:13px; color:var(--ink-2); line-height:1.5;">O LexFlow usa rotas fixas para DJEN/CNJ, fontes privadas autorizadas e futuras fontes autenticadas. Não haverá escolha de arquivo, importação manual ou cópia e cola de endereço.</p>
       <div class="path-card" style="box-shadow:none;">
-        <div class="path-tag">LexFlow Cloudflare · rota fixa</div>
-        <h4>Coletor Browser Run para recortes ControlJus</h4>
+        <div class="path-tag">CNJ · fonte oficial pública</div>
+        <h4>DJEN / Comunicações Processuais</h4>
+        <p><span class="mono">${DB.config.lexflowDjenEndpoint}</span></p>
+      </div>
+      <div class="path-card" style="box-shadow:none;">
+        <div class="path-tag">Fonte privada complementar</div>
+        <h4>ControlJus / Aviso Urgente</h4>
         <p><span class="mono">${DB.config.controlJusEndpoint}</span></p>
       </div>
       <div class="path-card" style="box-shadow:none;">
-        <div class="path-tag">Última sincronização</div>
+        <div class="path-tag">Última sincronização da fonte privada</div>
         <h4>${DB.config.lastControlJusSyncAt ? fmtDateTime(DB.config.lastControlJusSyncAt) : 'Ainda não executada'}</h4>
-        <p>Status: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Recortes: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
-        ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${esc(DB.config.lastControlJusSyncError)}</p>` : `<p class="mono" style="font-size:11px; color:var(--ink-soft);">${controlJusSyncOk() ? 'Coletor ativo na Cloudflare. Recortes sincronizados via Browser Run.' : 'Para ativar: configurar CONTROLJUS_USER e CONTROLJUS_PASSWORD nos secrets da Cloudflare.'}</p>`}
-      </div>
-      <div class="path-card" style="box-shadow:none;">
-        <div class="path-tag">CNJ · público oficial</div>
-        <h4>DJEN / Comunicações Processuais</h4>
-        <p><span class="mono">${DB.config.djenEndpoint}</span></p>
+        <p>Status: <span class="mono">${DB.config.lastControlJusSyncStatus || 'não iniciado'}</span> · Publicações: <span class="mono">${DB.config.lastControlJusSyncCount || 0}</span></p>
+        ${DB.config.lastControlJusSyncError ? `<p style="color:var(--vermelho); font-weight:600;">${esc(DB.config.lastControlJusSyncError)}</p>` : `<p class="mono" style="font-size:11px; color:var(--ink-soft);">${controlJusSyncOk() ? 'Fonte privada ativa na Cloudflare.' : 'Opcional: configurar CONTROLJUS_USER e CONTROLJUS_PASSWORD nos secrets da Cloudflare.'}</p>`}
       </div>
     </div>
-    <div class="modal-foot"><button class="btn" id="mGo">Ver integração</button><button class="btn primary" id="mSync">Sincronizar agora</button></div>
+    <div class="modal-foot"><button class="btn" id="mGo">Ver integrações</button><button class="btn" id="mSyncPrivate">Sincronizar fonte privada</button><button class="btn primary" id="mSyncDjen">Sincronizar DJEN</button></div>
   `;
   showModal();
   document.getElementById('mClose').onclick = hideModal;
   document.getElementById('mGo').onclick = ()=>{ hideModal(); currentView='integracao'; renderAll(); };
-  document.getElementById('mSync').onclick = async ()=>{
-    const btn = document.getElementById('mSync');
+  document.getElementById('mSyncPrivate').onclick = async ()=>{
+    const btn = document.getElementById('mSyncPrivate');
     btn.disabled = true;
     btn.textContent = 'Sincronizando...';
     try{ await syncControlJusPublicacoes(true); hideModal(); }
     catch(e){ toast(e.message || 'Falha na sincronização'); btn.disabled = false; btn.textContent = 'Tentar novamente'; }
+  };
+  document.getElementById('mSyncDjen').onclick = async ()=>{
+    const btn = document.getElementById('mSyncDjen');
+    btn.disabled = true;
+    btn.textContent = 'Sincronizando...';
+    try{ await syncDjenComunicacoes(true); hideModal(); }
+    catch(e){ toast(e.message || 'Falha na sincronização DJEN'); btn.disabled = false; btn.textContent = 'Tentar novamente'; }
   };
 };
 
@@ -2775,7 +2782,7 @@ const TITLES = {
   configuracoes:['Configurações', 'Integrações, credenciais e preferências do escritório'],
   usuarios:['Usuários', 'Administração de escritórios, contratos e acessos'],
   historico:['Histórico de alterações', 'Registro de tudo que foi criado, editado, concluído ou arquivado'],
-  integracao:['Integração ControlJus', 'Roteiro para conectar de verdade o LexFlow ao ControlJus'],
+  integracao:['Integrações', 'Fontes oficiais, privadas e autenticadas conectadas ao LexFlow'],
 };
 function renderAll(){
   let changed = false;

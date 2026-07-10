@@ -102,7 +102,7 @@ Enquanto `CONTROLJUS_USER` e `CONTROLJUS_PASSWORD` nao estiverem configurados, a
 
 ## Sincronizacao
 
-O botao `Sincronizar ControlJus` do LexFlow chama:
+O botao `Sincronizar fontes` do LexFlow pode chamar a fonte privada ControlJus em:
 
 ```text
 https://lexflow.reinaldo-bueno.workers.dev/api/controljus/publicacoes?refresh=1

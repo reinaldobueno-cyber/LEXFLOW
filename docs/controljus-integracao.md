@@ -37,7 +37,7 @@ npm run dev
 http://localhost:8787
 ```
 
-6. Clique em `Conectar ControlJus` e depois em `Sincronizar agora`.
+6. Clique em `Sincronizar fontes` e escolha a sincronizacao da fonte privada.
 
 A rota usada pelo painel e:
 
@@ -74,7 +74,7 @@ node tools/controljus-fetch.mjs
 ```
 
 5. O coletor gera um arquivo em `data/controljus-recortes-*.json`.
-6. No LexFlow, clique em `Conectar ControlJus` e importe esse arquivo.
+6. No LexFlow, use a area de integracoes apenas para validacao tecnica. A operacao final nao deve depender de importacao manual.
 
 ## Proxima validacao
 
@@ -86,4 +86,4 @@ O primeiro acesso real deve confirmar:
 - se existe exportacao CSV/Excel oficial no ControlJus;
 - se ha paginacao/filtros de data que precisam ser percorridos.
 
-Depois dessa validacao, o backend deve ser publicado em ambiente privado e configurado no modal `Conectar ControlJus`.
+Depois dessa validacao, o backend deve ser publicado em ambiente privado e configurado como fonte privada em `Integracoes`.
