@@ -171,8 +171,6 @@ async function ensureMasterUser(env){
   if(!email || !password) return {configured:false};
 
   const existingUserId = await env.LEXFLOW_CACHE.get(userEmailKey(email));
-  if(existingUserId) return {configured:true};
-
   const tenant = {
     id:MASTER_TENANT_ID,
     name:'LexFlow Master',
@@ -180,6 +178,27 @@ async function ensureMasterUser(env){
     status:'active',
     createdAt:nowIso()
   };
+  await env.LEXFLOW_CACHE.put(tenantKey(tenant.id), JSON.stringify(tenant));
+
+  if(existingUserId){
+    const existingUser = await env.LEXFLOW_CACHE.get(userKey(existingUserId), {type:'json'});
+    if(existingUser){
+      const nextUser = {
+        ...existingUser,
+        email,
+        name:env.MASTER_ADMIN_NAME || existingUser.name || 'Reinaldo',
+        role:'master',
+        status:'active',
+        passwordHash:await hashPassword(password),
+        updatedAt:nowIso()
+      };
+      await env.LEXFLOW_CACHE.put(userKey(existingUserId), JSON.stringify(nextUser));
+      await env.LEXFLOW_CACHE.put(userEmailKey(email), existingUserId);
+      await auditLog(env, tenant.id, nextUser, 'user.bootstrap_master', {email, action:'updated'});
+      return {configured:true, user:nextUser};
+    }
+  }
+
   const user = {
     id:crypto.randomUUID(),
     tenantId:tenant.id,
@@ -191,11 +210,10 @@ async function ensureMasterUser(env){
     createdAt:nowIso(),
     updatedAt:nowIso()
   };
-  await env.LEXFLOW_CACHE.put(tenantKey(tenant.id), JSON.stringify(tenant));
   await env.LEXFLOW_CACHE.put(userKey(user.id), JSON.stringify(user));
   await env.LEXFLOW_CACHE.put(userEmailKey(email), user.id);
-  await auditLog(env, tenant.id, user, 'user.bootstrap_master', {email});
-  return {configured:true};
+  await auditLog(env, tenant.id, user, 'user.bootstrap_master', {email, action:'created'});
+  return {configured:true, user};
 }
 
 function authTokenFromRequest(request){
