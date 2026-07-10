@@ -2,6 +2,7 @@
   "scripts": {
     "start": "node server.mjs",
     "dev": "node server.mjs",
+    "a3:agent": "node tools/a3-local-agent.mjs",
     "controljus:fetch": "node tools/controljus-fetch.mjs",
     "build:cloudflare": "node tools/build-cloudflare.mjs",
     "dev:cloudflare": "npm run build:cloudflare && wrangler dev",

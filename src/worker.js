@@ -41,6 +41,8 @@ function userEmailKey(email){ return `user-email:${String(email || '').trim().to
 function sessionKey(token){ return `session:${token}`; }
 function settingsKey(tenantId){ return `settings:${tenantId}`; }
 function auditKey(tenantId, id = crypto.randomUUID()){ return `audit:${tenantId}:${Date.now()}:${id}`; }
+function a3RequestKey(tenantId, id){ return `a3-request:${tenantId}:${id}`; }
+function a3RequestPrefix(tenantId){ return `a3-request:${tenantId}:`; }
 
 function bytesToBase64Url(bytes){
   let str = '';
@@ -121,6 +123,10 @@ async function decryptSecret(encrypted, env){
 function maskSecret(value){
   if(!value) return '';
   return '••••••••';
+}
+
+function safeText(value, max = 500){
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
 async function readBody(request){
@@ -447,7 +453,7 @@ async function handleSettings(request, env, auth){
       },
       a3:{
         mode:body.a3?.mode || current.integrations?.a3?.mode || 'local_agent',
-        localAgentUrl:body.a3?.localAgentUrl || current.integrations?.a3?.localAgentUrl || 'lexflow-a3://open',
+        localAgentUrl:body.a3?.localAgentUrl || current.integrations?.a3?.localAgentUrl || 'http://127.0.0.1:48731/open',
         status:body.a3?.status || current.integrations?.a3?.status || 'not_installed',
         requireConsent:body.a3?.requireConsent !== undefined ? Boolean(body.a3.requireConsent) : (current.integrations?.a3?.requireConsent ?? true),
         allowedCourts:Array.isArray(body.a3?.allowedCourts) ? body.a3.allowedCourts.map(item => String(item || '').trim().toUpperCase()).filter(Boolean) : (current.integrations?.a3?.allowedCourts || [])
@@ -476,6 +482,91 @@ async function handleIntegrationTest(request, env, auth){
   const body = await readBody(request);
   await auditLog(env, auth.user.tenantId, auth.user, 'integration.test', {type:body.type || 'unknown'});
   return json({ok:true, message:'Estrutura de teste registrada. A validacao real sera feita pelo conector especifico.'});
+}
+
+function appendAgentParams(base, params){
+  const cleanBase = safeText(base, 500) || 'http://127.0.0.1:48731/open';
+  try{
+    const url = new URL(cleanBase);
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, String(value || '')));
+    return url.toString();
+  }catch(error){
+    const sep = cleanBase.includes('?') ? '&' : '?';
+    return `${cleanBase}${sep}${new URLSearchParams(params).toString()}`;
+  }
+}
+
+async function handleA3Requests(request, env, auth){
+  const url = new URL(request.url);
+  const tenantId = auth.user.role === 'master' && url.searchParams.get('tenantId')
+    ? url.searchParams.get('tenantId')
+    : auth.user.tenantId;
+  if(auth.user.role !== 'master' && tenantId !== auth.user.tenantId) return json({error:'forbidden'}, 403);
+
+  if(request.method === 'GET'){
+    const id = url.searchParams.get('id');
+    if(id){
+      const item = await env.LEXFLOW_CACHE.get(a3RequestKey(tenantId, id), {type:'json'});
+      if(!item) return json({error:'not_found'}, 404);
+      return json({request:item});
+    }
+    const list = await env.LEXFLOW_CACHE.list({prefix:a3RequestPrefix(tenantId)});
+    const rows = await Promise.all(list.keys.slice(-50).map(key => env.LEXFLOW_CACHE.get(key.name, {type:'json'})));
+    return json({items:rows.filter(Boolean).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))});
+  }
+
+  if(request.method !== 'POST') return json({error:'method_not_allowed'}, 405);
+  const body = await readBody(request);
+  const settings = await env.LEXFLOW_CACHE.get(settingsKey(tenantId), {type:'json'}) || {tenantId, integrations:{}};
+  const a3 = settings.integrations?.a3 || {};
+  const publicacao = body.publicacao || {};
+  const id = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const record = {
+    id,
+    tenantId,
+    actorUserId:auth.user.id,
+    actorEmail:auth.user.email,
+    status:'requested',
+    action:'open_restricted_file',
+    processo:safeText(publicacao.processo, 80),
+    tribunal:safeText(publicacao.tribunal, 40).toUpperCase(),
+    publicacaoId:safeText(publicacao.publicacaoId || publicacao.refId || publicacao.id, 120),
+    origem:safeText(publicacao.origem, 40),
+    motivo:safeText(publicacao.motivo, 300),
+    sourceUrl:safeText(publicacao.sourceUrl || publicacao.linkOrigem, 1000),
+    agent:{
+      mode:a3.mode || 'local_agent',
+      configuredStatus:a3.status || 'not_installed',
+      allowedCourts:Array.isArray(a3.allowedCourts) ? a3.allowedCourts : []
+    },
+    createdAt:nowIso(),
+    expiresAt
+  };
+  if(!record.processo && !record.sourceUrl){
+    return json({error:'invalid_a3_request', message:'Informe processo ou link de origem para abrir a fonte autenticada.'}, 400);
+  }
+  await env.LEXFLOW_CACHE.put(a3RequestKey(tenantId, id), JSON.stringify(record), {expirationTtl:60 * 60 * 24 * 7});
+  await auditLog(env, tenantId, auth.user, 'a3.request.create', {
+    requestId:id,
+    processo:record.processo,
+    tribunal:record.tribunal,
+    publicacaoId:record.publicacaoId,
+    origem:record.origem
+  });
+  const agentLaunchUrl = appendAgentParams(a3.localAgentUrl || 'http://127.0.0.1:48731/open', {
+    action:record.action,
+    requestId:id,
+    processo:record.processo,
+    tribunal:record.tribunal,
+    publicacaoId:record.publicacaoId,
+    origem:record.origem,
+    motivo:record.motivo,
+    tenantId,
+    sourceUrl:record.sourceUrl,
+    lexflowUrl:url.origin
+  });
+  return json({ok:true, request:record, agentLaunchUrl}, 201);
 }
 
 function sleep(ms){
@@ -1205,6 +1296,7 @@ export default {
       if(url.pathname === '/api/settings') return handleSettings(request, env, auth);
       if(url.pathname === '/api/audit-log') return handleAuditLog(request, env, auth);
       if(url.pathname === '/api/integrations/test') return handleIntegrationTest(request, env, auth);
+      if(url.pathname === '/api/a3/requests') return handleA3Requests(request, env, auth);
       if(url.pathname === '/api/controljus/publicacoes') return proxyControlJus(request, env, auth);
       if(url.pathname === '/api/controljus/status') return proxyControlJusStatus(request, env, auth);
       if(url.pathname === '/api/controljus/refresh') return proxyControlJusRefresh(request, env, auth);

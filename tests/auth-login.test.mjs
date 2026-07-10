@@ -31,6 +31,16 @@ async function loginWith(env, email, password){
   return {status: response.status, body: await response.json()};
 }
 
+async function authedJson(env, token, url, body){
+  const request = new Request(url, {
+    method: 'POST',
+    headers: {'content-type': 'application/json', authorization: `Bearer ${token}`},
+    body: JSON.stringify(body)
+  });
+  const response = await worker.fetch(request, env);
+  return {status: response.status, body: await response.json()};
+}
+
 test('recreates the master user hash when the configured password changes', async () => {
   const cache = createCache();
   const env = {
@@ -47,4 +57,32 @@ test('recreates the master user hash when the configured password changes', asyn
   const secondLogin = await loginWith(env, 'admin@lexflow.com', 'senha-nova');
   assert.equal(secondLogin.status, 200);
   assert.equal(secondLogin.body.user?.email, 'admin@lexflow.com');
+});
+
+test('creates an audited A3 local-agent request for restricted publications', async () => {
+  const cache = createCache();
+  const env = {
+    LEXFLOW_CACHE: cache,
+    MASTER_ADMIN_EMAIL: 'admin@lexflow.com',
+    MASTER_ADMIN_PASSWORD: 'senha-a3'
+  };
+
+  const login = await loginWith(env, 'admin@lexflow.com', 'senha-a3');
+  assert.equal(login.status, 200);
+
+  const result = await authedJson(env, login.body.token, 'https://example.com/api/a3/requests', {
+    publicacao:{
+      processo:'5588081-07.2026.8.09.0012',
+      tribunal:'TJGO',
+      publicacaoId:'DJEN-123',
+      origem:'DJEN',
+      motivo:'Arquivos digitais indisponiveis',
+      sourceUrl:'https://comunicaapi.pje.jus.br/api/v1/comunicacao/abc'
+    }
+  });
+
+  assert.equal(result.status, 201);
+  assert.equal(result.body.request?.processo, '5588081-07.2026.8.09.0012');
+  assert.match(result.body.agentLaunchUrl, /^http:\/\/127\.0\.0\.1:48731\/open\?/);
+  assert.match(result.body.agentLaunchUrl, /requestId=/);
 });

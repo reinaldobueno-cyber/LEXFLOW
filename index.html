@@ -472,7 +472,7 @@ const CONTROLJUS_PRIVATE_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/
 const CONTROLJUS_ENDPOINT_MODE = 'lexflow_cloudflare_browser_run_controljus';
 const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 const LEXFLOW_DJEN_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/djen/comunicacoes';
-const LEXFLOW_A3_AGENT_DEFAULT = 'lexflow-a3://open';
+const LEXFLOW_A3_AGENT_DEFAULT = 'http://127.0.0.1:48731/open';
 const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
 const LEGAL_CODES = [
   {id:'cf', area:'Constitucional', name:'Constituição da República Federativa do Brasil de 1988', source:'Planalto', url:'https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm'},
@@ -952,12 +952,15 @@ function buildA3AgentUrl(pub){
   const base = cleanText(cfg.url) || LEXFLOW_A3_AGENT_DEFAULT;
   const params = {
     action:'open_restricted_file',
+    requestId:pub?.a3RequestId || '',
     processo:pub?.processo || '',
     tribunal:pub?.tribunal || '',
     publicacaoId:pub?.refId || pub?.id || '',
     origem:publicacaoOrigem(pub),
     motivo:restrictedInfo(pub).reason || 'Conteúdo restrito',
-    tenantId:currentTenantId()
+    tenantId:currentTenantId(),
+    sourceUrl:pub?.linkOrigem || '',
+    lexflowUrl:window.location.origin
   };
   try{
     const url = new URL(base);
@@ -969,18 +972,59 @@ function buildA3AgentUrl(pub){
   }
 }
 
+function buildA3HealthUrl(){
+  const base = cleanText(document.getElementById('cfgA3Url')?.value || DB.config?.a3AgentUrl || LEXFLOW_A3_AGENT_DEFAULT);
+  try{
+    const url = new URL(base || LEXFLOW_A3_AGENT_DEFAULT);
+    url.pathname = '/health';
+    url.search = '';
+    return url.toString();
+  }catch(e){
+    return 'http://127.0.0.1:48731/health';
+  }
+}
+
 async function openRestrictedWithA3(pub){
   const cfg = a3AgentConfig();
-  const target = buildA3AgentUrl(pub);
   if(cfg.requireConsent && !confirm(`Abrir fonte autenticada com certificado A3 para o processo ${pub?.processo || ''}?`)){
     return;
   }
   if(cfg.status !== 'installed'){
     toast('Configure o Agente Local A3 em Configurações');
   }
-  logHist(`Solicitação A3 preparada para ${displayClientName(pub)} (${pub.processo}). O certificado físico deve autorizar o acesso no computador do advogado.`);
+  let target = buildA3AgentUrl(pub);
+  let requestId = '';
+  try{
+    const res = await apiFetch('/api/a3/requests', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        publicacao:{
+          id:pub?.id || '',
+          refId:pub?.refId || '',
+          publicacaoId:pub?.refId || pub?.id || '',
+          processo:pub?.processo || '',
+          tribunal:pub?.tribunal || '',
+          origem:publicacaoOrigem(pub),
+          motivo:restrictedInfo(pub).reason || 'Conteúdo restrito',
+          sourceUrl:pub?.linkOrigem || '',
+          linkOrigem:pub?.linkOrigem || ''
+        }
+      })
+    });
+    const payload = await res.json().catch(()=>({}));
+    if(res.ok && payload.agentLaunchUrl){
+      target = payload.agentLaunchUrl;
+      requestId = payload.request?.id || '';
+    }else if(payload.message){
+      toast(payload.message);
+    }
+  }catch(e){
+    toast('Backend A3 indisponível; abrindo agente local direto');
+  }
+  logHist(`Solicitação A3 preparada${requestId?` (${requestId})`:''} para ${displayClientName(pub)} (${pub.processo}). O certificado físico deve autorizar o acesso no computador do advogado.`);
   await saveDB();
-  window.location.href = target;
+  window.open(target, '_blank', 'noopener');
 }
 
 function normalizePersonName(value){
@@ -2614,11 +2658,23 @@ function renderConfiguracoes(){
   };
   document.getElementById('syncDjenSettings').onclick = ()=>syncDjenComunicacoes(true).catch(e=>toast(e.message));
   document.getElementById('testA3Agent').onclick = ()=>{
-    const url = document.getElementById('cfgA3Url').value.trim() || LEXFLOW_A3_AGENT_DEFAULT;
-    DB.config.a3AgentUrl = url;
-    DB.config.a3AgentStatus = document.getElementById('cfgA3Status').value;
-    toast(url.startsWith('http') ? 'Teste local preparado. O agente deve responder neste endereço.' : 'Protocolo do agente preparado. O navegador deve solicitar abertura do app.');
-    window.location.href = buildA3AgentUrl({processo:'TESTE-A3', tribunal:'TESTE', refId:'TESTE', source:'LexFlow', textoRecorte:'Teste de agente A3'});
+    const btn = document.getElementById('testA3Agent');
+    const healthUrl = buildA3HealthUrl();
+    btn.disabled = true;
+    btn.textContent = 'Testando...';
+    fetch(healthUrl)
+      .then(res=>res.ok ? res.json() : Promise.reject(new Error('Agente local não respondeu')))
+      .then(async ()=>{
+        document.getElementById('cfgA3Status').value = 'installed';
+        DB.config.a3AgentStatus = 'installed';
+        await saveSettingsFromForm();
+        toast('Agente Local A3 ativo');
+      })
+      .catch(()=>toast('Agente Local A3 não encontrado. Rode: npm run a3:agent'))
+      .finally(()=>{
+        btn.disabled = false;
+        btn.textContent = 'Testar agente local';
+      });
   };
 }
 

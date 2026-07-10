@@ -175,10 +175,10 @@ Um certificado A3/token fisico fica conectado a uma maquina local e depende de d
 Arquiteturas possiveis:
 
 1. Agente local LexFlow Desktop
-   - [~] Pequeno app instalado no computador do escritorio.
-   - [ ] Acessa o certificado A3 pelo navegador/sistema local.
+   - [x] Pequeno app instalado/rodando no computador do escritorio.
+   - [~] Acessa o certificado A3 pelo navegador/sistema local.
    - [ ] Sincroniza apenas metadados/documentos autorizados com o LexFlow.
-   - [ ] Ideal para token fisico A3.
+   - [x] Ideal para token fisico A3.
 
 2. Coletor dedicado em servidor com certificado instalado
    - [ ] VPS/Windows/Render/Railway com navegador e certificado configurado.
@@ -203,12 +203,14 @@ Decisao pendente:
 - [x] Preparar Configuracoes do LexFlow para URL/protocolo do Agente Local A3.
 - [x] Criar acao `Abrir A3` em publicacoes restritas.
 - [x] Documentar arquitetura do Agente Local A3.
+- [x] Criar backend `/api/a3/requests` para registrar solicitacoes A3 por tenant/usuario.
+- [x] Criar prototipo Node do Agente Local A3 em `tools/a3-local-agent.mjs`.
 
 Critérios de aceite:
 
 - A3 nunca e tratado como segredo de servidor comum.
 - PIN nunca e armazenado sem decisao explicita e segura.
-- Toda coleta via certificado tem auditoria.
+- Toda solicitacao via certificado tem auditoria.
 - Usuario sabe quando precisa deixar agente local ativo.
 
 ## Epic 5 - Dashboard e Alertas
