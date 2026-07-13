@@ -300,6 +300,35 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .filter-chipbar{display:flex; gap:7px; flex-wrap:wrap; margin:-5px 0 14px 0;}
 .filter-chip{border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 10px; font-size:11.5px; font-weight:800; color:var(--ink-2); cursor:pointer;}
 .filter-chip.active{background:#EFF8FF; border-color:#B2DDFF; color:var(--azul);}
+.publication-workspace{display:grid; grid-template-columns:minmax(420px,.92fr) minmax(440px,1.08fr); gap:16px; align-items:start;}
+.publication-inbox{display:flex; flex-direction:column; gap:10px;}
+.publication-card{border:1px solid var(--line); background:#fff; border-radius:10px; padding:14px; box-shadow:var(--shadow); cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s; display:grid; grid-template-columns:84px minmax(0,1fr); gap:12px;}
+.publication-card:hover{border-color:#C8D0DA; transform:translateY(-1px);}
+.publication-card.active{border-color:#84CAFF; box-shadow:0 0 0 3px rgba(40,100,166,.10), var(--shadow);}
+.publication-date{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
+.publication-main{min-width:0; display:flex; flex-direction:column; gap:7px;}
+.publication-topline{display:flex; justify-content:space-between; gap:8px; align-items:flex-start;}
+.publication-client{font-size:13.5px; font-weight:900; color:var(--ink); line-height:1.25;}
+.publication-proc{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);}
+.publication-summary{font-size:12px; color:var(--ink-2); line-height:1.45; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+.publication-tags{display:flex; flex-wrap:wrap; gap:5px; align-items:center;}
+.publication-detail{position:sticky; top:112px; border:1px solid var(--line); background:#fff; border-radius:12px; box-shadow:var(--shadow); overflow:hidden;}
+.publication-detail-head{padding:18px 20px; border-bottom:1px solid var(--line); background:#F8FAFC; display:flex; justify-content:space-between; gap:14px; align-items:flex-start;}
+.publication-detail-title{font-size:17px; font-weight:900; line-height:1.25;}
+.publication-detail-sub{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); margin-top:5px;}
+.publication-detail-body{padding:18px 20px; display:flex; flex-direction:column; gap:16px;}
+.decision-panel{border:1px solid var(--line); border-radius:10px; padding:14px; background:#FBFCFE; display:flex; flex-direction:column; gap:12px;}
+.decision-panel.warn{border-color:#F3D59B; background:#FFFAEB;}
+.decision-panel.ok{border-color:#B7DFD0; background:#F0FBF6;}
+.decision-panel.auth{border-color:#F3B8B0; background:#FFF7F5;}
+.decision-head{display:flex; justify-content:space-between; gap:10px; align-items:flex-start;}
+.decision-title{font-size:14px; font-weight:900; color:var(--ink);}
+.decision-meta{font-size:12px; color:var(--ink-soft); line-height:1.45;}
+.decision-actions{display:flex; flex-wrap:wrap; gap:8px;}
+.publication-form-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.publication-mini-text{border:1px solid var(--line); border-radius:10px; padding:12px; background:#fff; max-height:220px; overflow:auto;}
+.publication-mini-text h4{font-family:'Source Serif 4',serif; font-size:15px; margin-bottom:8px;}
+.publication-secondary-actions{display:flex; flex-wrap:wrap; gap:8px; padding-top:2px;}
 .source-status{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap;}
 .source-status.ok{background:#ECFDF3; color:var(--verde);}
 .source-status.warn{background:#FFFAEB; color:#A15C00;}
@@ -429,7 +458,8 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .check-item:last-child{border-bottom:none;}
 .check-item input{width:16px; height:16px; accent-color:var(--verde);}
 .check-item.checked span{text-decoration:line-through; color:var(--ink-soft);}
-@media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary,.archive-summary,.archive-card,.archive-coverage,.help-grid{grid-template-columns:1fr;} .archive-counts{justify-content:flex-start;} }
+@media (max-width: 1100px){ .publication-workspace{grid-template-columns:1fr;} .publication-detail{position:static;} }
+@media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary,.archive-summary,.archive-card,.archive-coverage,.help-grid,.publication-form-row{grid-template-columns:1fr;} .archive-counts{justify-content:flex-start;} }
 @media (max-width: 1180px){
   .dashboard-hero, .dashboard-grid{grid-template-columns:1fr;}
   .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
@@ -2351,6 +2381,76 @@ function publicationMatchesQuickFilter(pub, quick){
   return true;
 }
 
+function publicationDetailPanelHTML(p){
+  if(!p) return `<section class="publication-detail"><div class="empty">Selecione uma publicação para analisar.</div></section>`;
+  const s = deadlineSuggestion(p);
+  const linkStatus = sourceLinkStatus(p);
+  const restricted = isRestrictedPublication(p);
+  const panelClass = restricted ? 'auth' : (s.dueDate && s.confidence !== 'baixa' ? 'ok' : 'warn');
+  const dueLabel = restricted ? 'Requer autenticação' : (s.dueDate ? `Prazo sugerido: ${fmtDate(s.dueDate)}` : 'Sem prazo automático');
+  const canGerarPrazo = p.status === 'Gerou prazo' && !p.prazoGeradoId;
+  return `
+    <section class="publication-detail" data-selected-pub="${esc(p.id)}">
+      <div class="publication-detail-head">
+        <div>
+          <div class="publication-detail-title">${esc(displayClientName(p))}</div>
+          <div class="publication-detail-sub">${esc(p.processo || 'sem processo')} · ${esc(p.tribunal || 'sem tribunal')}</div>
+        </div>
+        <div class="origin-stack">${originTag(p)}${restrictionTag(p)}</div>
+      </div>
+      <div class="publication-detail-body">
+        <div class="decision-panel ${panelClass}">
+          <div class="decision-head">
+            <div>
+              <div class="decision-title">${esc(dueLabel)}</div>
+              <div class="decision-meta">${esc(s.rule?.act || p.tipoPublicacao || 'Ato ainda não classificado')} · confiança ${esc(s.confidence || 'baixa')}</div>
+            </div>
+            ${deadlineInfoTag(p)}
+          </div>
+          <div class="decision-meta"><b>Base:</b> ${esc(s.rule?.basis || 'Sem regra normativa mapeada para cálculo automático.')}</div>
+          ${restricted ? `<div class="decision-meta"><b>Restrição:</b> ${esc(restrictedInfo(p).reason || 'conteúdo exige fonte autenticada')} · ${esc(linkStatus.label)}</div>` : ''}
+          <div class="decision-actions">
+            ${s.dueDate ? `<button class="btn primary" data-detail-act="suggest">Gerar prazo</button>` : (canGerarPrazo ? `<button class="btn primary" data-detail-act="genprazo">Gerar prazo</button>` : '')}
+            <button class="btn" data-detail-act="details">Ver análise completa</button>
+            <button class="btn" data-detail-act="task">Criar tarefa</button>
+            ${restricted && linkStatus.state === 'ok' ? `<button class="btn azul" data-detail-act="a3">Abrir fonte oficial</button>` : ''}
+          </div>
+        </div>
+
+        <div class="publication-form-row">
+          <div class="field">
+            <label>Status de tratamento</label>
+            <select class="status-select" id="pubDetailStatus">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select>
+          </div>
+          <div class="field">
+            <label>Responsável</label>
+            ${responsibleAssignHTML(p, 'Responsável')}
+          </div>
+        </div>
+
+        <div class="analysis-meta-grid">
+          <div class="analysis-kv"><div class="k">Publicação</div><div class="v">${esc(fmtDate(p.dataPublicacao))}</div></div>
+          <div class="analysis-kv"><div class="k">Tipo</div><div class="v">${esc(p.tipoPublicacao || '—')}</div></div>
+          <div class="analysis-kv"><div class="k">Advogado</div><div class="v">${esc(p.advogadoMonitorado || '—')}</div></div>
+          <div class="analysis-kv"><div class="k">Fonte</div><div class="v">${esc(publicacaoOrigem(p))}</div></div>
+        </div>
+
+        <div class="publication-mini-text">
+          <h4>Texto da publicação</h4>
+          <div class="analysis-full-text">${formattedPublicationTextHTML(p.textoRecorte)}</div>
+        </div>
+
+        <div class="publication-secondary-actions">
+          <button class="channel-action whatsapp" data-detail-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button>
+          ${officialA3Target(p) ? `<a class="btn" href="${esc(officialA3Target(p))}" target="_blank" rel="noopener">Ver URL de origem</a>` : ''}
+          <button class="btn" data-detail-act="edit">Editar dados</button>
+          ${!PUB_ARCHIVED.includes(p.status) ? `<button class="btn danger" data-detail-act="archive">Arquivar</button>` : ''}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderPublicacoes(){
   let rows = publicacoesOperacionais();
   if(dashboardFilter==='pub_sem_tratamento') rows = rows.filter(p=>PUB_UNTREATED.includes(p.status));
@@ -2362,6 +2462,8 @@ function renderPublicacoes(){
   if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
   if(pubFilters.cliente) rows = rows.filter(p=>String(p.cliente||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.processo||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.advogadoMonitorado||'').toLowerCase().includes(pubFilters.cliente.toLowerCase()));
   rows.sort((a,b)=>{ let va=parseDateLocal(a[pubFilters.sort])||new Date(0), vb=parseDateLocal(b[pubFilters.sort])||new Date(0); if(va<vb) return -1*pubFilters.dir; if(va>vb) return 1*pubFilters.dir; return 0; });
+  const selected = rows.find(p=>p.id === pubFilters.selectedId) || rows[0] || null;
+  if(selected) pubFilters.selectedId = selected.id;
 
   const allRows = publicacoesOperacionais().filter(p=>pubFilters.showArchived || !PUB_ARCHIVED.includes(p.status));
   const quickFilters = [
@@ -2386,43 +2488,30 @@ function renderPublicacoes(){
     <button class="filter-chip ${!pubFilters.quick?'active':''}" data-quick="">Todos <span class="mono">${allRows.length}</span></button>
     ${quickFilters.map(item=>`<button class="filter-chip ${pubFilters.quick===item.id?'active':''}" data-quick="${esc(item.id)}">${esc(item.label)} <span class="mono">${item.count}</span></button>`).join('')}
   </div>`;
-  html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
-    <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Publicação</th><th>Prazo / inteligência</th><th>Tratamento</th>
-  </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="10"><div class="empty">Nenhuma publicação de integração encontrada. Esta tela mostra apenas dados sincronizados por fontes conectadas ao LexFlow.</div></td></tr>`; }
-  rows.forEach(p=>{
-    const archived = PUB_ARCHIVED.includes(p.status);
-    const canGerarPrazo = p.status==='Gerou prazo' && !p.prazoGeradoId;
+  if(rows.length===0){
+    html += `<div class="empty">Nenhuma publicação de integração encontrada. Esta tela mostra apenas dados sincronizados por fontes conectadas ao LexFlow.</div>`;
+  } else {
+    html += `<div class="publication-workspace">
+      <section class="publication-inbox">
+        ${rows.map(p=>{
     const preview = recortePreview(p.textoRecorte);
-    const recorteLen = cleanText(p.textoRecorte).length;
-    html += `<tr data-id="${p.id}" class="pub-main ${archived?'archived':''}">
-      <td>${esc(fmtDate(p.dataPublicacao))}</td>
-      <td><div class="origin-stack">${originTag(p)}${restrictionTag(p)}</div></td>
-      <td class="cliente">${esc(displayClientName(p))}</td>
-      <td>${esc(p.advogadoMonitorado || '—')}</td>
-      <td class="proc">${esc(p.processo || '—')}</td>
-      <td><span class="tribunal-tag">${esc(p.tribunal || '—')}</span></td>
-      <td>${esc(p.tipoPublicacao || '—')}</td>
-      <td class="texto"><div class="recorte-preview">${esc(preview)}</div>${recorteLen>360?`<button class="recorte-open" data-act="details">Ver texto completo e análise</button>`:''}</td>
-      <td>${publicationActionCard(p)}</td>
-      <td class="pub-ops"><div class="pub-ops-box">
-        <select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select>
-        ${responsibleAssignHTML(p, 'Responsável')}
-        <div class="row-actions-inner">
-        <details class="action-menu">
-          <summary>Ações</summary>
-          <div class="menu-panel">
-            ${canGerarPrazo?`<button class="ops-action primary" data-act="genprazo"><span class="mark lex">L</span>Gerar prazo</button>`:''}
-            <button class="channel-action whatsapp" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button>
-            <button class="ops-action" data-act="edit"><span class="mark lex">L</span>Editar dados</button>
-            ${!archived?`<button class="ops-action" data-act="archive" title="Arquivar sem excluir"><span class="mark neutral">A</span>Arquivar</button>`:''}
-          </div>
-        </details>
-        </div>
-      </div></td>
-    </tr>`;
-  });
-  html += `</tbody></table></div>`;
+          return `<article class="publication-card ${selected?.id===p.id?'active':''}" data-pub-card="${esc(p.id)}">
+            <div class="publication-date">${esc(fmtDate(p.dataPublicacao))}</div>
+            <div class="publication-main">
+              <div class="publication-topline">
+                <div class="publication-client">${esc(displayClientName(p))}</div>
+                ${deadlineInfoTag(p)}
+              </div>
+              <div class="publication-proc">${esc(p.processo || 'sem processo')} · ${esc(p.tribunal || 'sem tribunal')}</div>
+              <div class="publication-tags">${originTag(p)}${restrictionTag(p)}<span class="tribunal-tag">${esc(p.tipoPublicacao || 'sem tipo')}</span></div>
+              <div class="publication-summary">${esc(preview)}</div>
+            </div>
+          </article>`;
+        }).join('')}
+      </section>
+      ${publicationDetailPanelHTML(selected)}
+    </div>`;
+  }
   document.getElementById('content').innerHTML = html;
 
   document.getElementById('fCliente').oninput = e=>{pubFilters.cliente=e.target.value; renderPublicacoes();};
@@ -2431,30 +2520,31 @@ function renderPublicacoes(){
   document.getElementById('fRestritas').onchange = e=>{pubFilters.showRestricted=e.target.checked; renderPublicacoes();};
   document.getElementById('fArch').onchange = e=>{pubFilters.showArchived=e.target.checked; renderPublicacoes();};
   document.querySelectorAll('[data-quick]').forEach(btn=>btn.onclick=()=>{ pubFilters.quick = btn.dataset.quick || ''; renderPublicacoes(); });
-  document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(pubFilters.sort===s) pubFilters.dir*=-1; else {pubFilters.sort=s; pubFilters.dir=-1;} renderPublicacoes(); });
-  document.querySelectorAll('tbody tr.pub-main[data-id]').forEach(tr=>{
-    const id=tr.dataset.id; const p = DB.publicacoes.find(x=>x.id===id);
-    const stSel = tr.querySelector('[data-act="status"]');
-    if(stSel) stSel.onchange = async e=>{ const old=p.status; p.status=e.target.value; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) alterada: ${old} → ${p.status}`); await saveDB(); renderAll(); toast('Status atualizado'); };
-    const genBtn = tr.querySelector('[data-act="genprazo"]');
-    if(genBtn) genBtn.onclick = ()=>openPrazoModal(null, p);
-    const detailsBtns = tr.querySelectorAll('[data-act="details"]');
-    detailsBtns.forEach(btn=>btn.onclick = ()=>openPublicationAnalysisModal(p));
-    const suggestBtn = tr.querySelector('[data-act="suggest"]');
-    if(suggestBtn) suggestBtn.onclick = ()=>createSuggestedPrazoFromPublication(p);
-    const taskBtn = tr.querySelector('[data-act="task"]');
-    if(taskBtn) taskBtn.onclick = ()=>createTaskFromPublication(p);
-    const a3Btn = tr.querySelector('[data-act="a3"]');
-    if(a3Btn) a3Btn.onclick = ()=>openRestrictedWithA3(p);
-    const whatsBtn = tr.querySelector('[data-act="whatsapp"]');
-    if(whatsBtn) whatsBtn.onclick = ()=>openWhatsAppShare('prazo', {cliente:displayClientName(p), processo:p.processo, tipoPrazo:p.tipoPublicacao || 'Publicação', prazoFatal:p.prazoFatal, responsavel:p.responsavel});
-    const respInput = tr.querySelector('[data-act="resp-input"]');
-    const respSave = tr.querySelector('[data-act="resp-save"]');
-    if(respInput && respSave) respSave.onclick = ()=>saveInlineResponsible(p, respInput.value, `Publicação de ${displayClientName(p)} (${p.processo})`);
-    tr.querySelector('[data-act="edit"]').onclick = ()=>openPubModal(p);
-    const archBtn = tr.querySelector('[data-act="archive"]');
-    if(archBtn) archBtn.onclick = async ()=>{ p.status='Arquivado'; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) arquivada.`); await saveDB(); renderAll(); toast('Recorte arquivado'); };
+  document.querySelectorAll('[data-pub-card]').forEach(card=>{
+    card.onclick = ()=>{
+      pubFilters.selectedId = card.dataset.pubCard;
+      renderPublicacoes();
+    };
   });
+  if(selected){
+    const p = selected;
+    const stSel = document.getElementById('pubDetailStatus');
+    if(stSel) stSel.onchange = async e=>{ const old=p.status; p.status=e.target.value; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) alterada: ${old} → ${p.status}`); await saveDB(); renderAll(); toast('Status atualizado'); };
+    const respInput = document.querySelector('.publication-detail [data-act="resp-input"]');
+    const respSave = document.querySelector('.publication-detail [data-act="resp-save"]');
+    if(respInput && respSave) respSave.onclick = ()=>saveInlineResponsible(p, respInput.value, `Publicação de ${displayClientName(p)} (${p.processo})`);
+    const bind = (act, fn)=>{
+      document.querySelectorAll(`[data-detail-act="${act}"]`).forEach(btn=>btn.onclick = fn);
+    };
+    bind('suggest', ()=>createSuggestedPrazoFromPublication(p));
+    bind('genprazo', ()=>openPrazoModal(null, p));
+    bind('details', ()=>openPublicationAnalysisModal(p));
+    bind('task', ()=>createTaskFromPublication(p));
+    bind('a3', ()=>openRestrictedWithA3(p));
+    bind('whatsapp', ()=>openWhatsAppShare('prazo', {cliente:displayClientName(p), processo:p.processo, tipoPrazo:p.tipoPublicacao || 'Publicação', prazoFatal:p.prazoFatal, responsavel:p.responsavel}));
+    bind('edit', ()=>openPubModal(p));
+    bind('archive', async ()=>{ p.status='Arquivado'; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) arquivada.`); await saveDB(); renderAll(); toast('Recorte arquivado'); });
+  }
 }
 
 function openPubModal(p){
