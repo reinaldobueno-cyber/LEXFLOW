@@ -452,9 +452,9 @@ async function handleSettings(request, env, auth){
         tokenEncrypted:current.integrations?.djen?.tokenEncrypted || null
       },
       a3:{
-        mode:body.a3?.mode || current.integrations?.a3?.mode || 'local_agent',
-        localAgentUrl:body.a3?.localAgentUrl || current.integrations?.a3?.localAgentUrl || 'http://127.0.0.1:48731/open',
-        status:body.a3?.status || current.integrations?.a3?.status || 'not_installed',
+        mode:body.a3?.mode === 'local_agent' ? 'browser_open' : (body.a3?.mode || current.integrations?.a3?.mode || 'browser_open'),
+        localAgentUrl:'',
+        status:body.a3?.status === 'not_installed' ? 'browser_ready' : (body.a3?.status || current.integrations?.a3?.status || 'browser_ready'),
         requireConsent:body.a3?.requireConsent !== undefined ? Boolean(body.a3.requireConsent) : (current.integrations?.a3?.requireConsent ?? true),
         allowedCourts:Array.isArray(body.a3?.allowedCourts) ? body.a3.allowedCourts.map(item => String(item || '').trim().toUpperCase()).filter(Boolean) : (current.integrations?.a3?.allowedCourts || [])
       }
@@ -484,18 +484,6 @@ async function handleIntegrationTest(request, env, auth){
   return json({ok:true, message:'Estrutura de teste registrada. A validacao real sera feita pelo conector especifico.'});
 }
 
-function appendAgentParams(base, params){
-  const cleanBase = safeText(base, 500) || 'http://127.0.0.1:48731/open';
-  try{
-    const url = new URL(cleanBase);
-    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, String(value || '')));
-    return url.toString();
-  }catch(error){
-    const sep = cleanBase.includes('?') ? '&' : '?';
-    return `${cleanBase}${sep}${new URLSearchParams(params).toString()}`;
-  }
-}
-
 async function handleA3Requests(request, env, auth){
   const url = new URL(request.url);
   const tenantId = auth.user.role === 'master' && url.searchParams.get('tenantId')
@@ -519,6 +507,7 @@ async function handleA3Requests(request, env, auth){
   const body = await readBody(request);
   const settings = await env.LEXFLOW_CACHE.get(settingsKey(tenantId), {type:'json'}) || {tenantId, integrations:{}};
   const a3 = settings.integrations?.a3 || {};
+  const a3Mode = a3.mode === 'local_agent' ? 'browser_open' : (a3.mode || 'browser_open');
   const publicacao = body.publicacao || {};
   const id = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -536,8 +525,8 @@ async function handleA3Requests(request, env, auth){
     motivo:safeText(publicacao.motivo, 300),
     sourceUrl:safeText(publicacao.sourceUrl || publicacao.linkOrigem, 1000),
     agent:{
-      mode:a3.mode || 'local_agent',
-      configuredStatus:a3.status || 'not_installed',
+      mode:a3Mode,
+      configuredStatus:a3.status || 'browser_ready',
       allowedCourts:Array.isArray(a3.allowedCourts) ? a3.allowedCourts : []
     },
     createdAt:nowIso(),
@@ -552,21 +541,13 @@ async function handleA3Requests(request, env, auth){
     processo:record.processo,
     tribunal:record.tribunal,
     publicacaoId:record.publicacaoId,
-    origem:record.origem
-  });
-  const agentLaunchUrl = appendAgentParams(a3.localAgentUrl || 'http://127.0.0.1:48731/open', {
-    action:record.action,
-    requestId:id,
-    processo:record.processo,
-    tribunal:record.tribunal,
-    publicacaoId:record.publicacaoId,
     origem:record.origem,
-    motivo:record.motivo,
-    tenantId,
-    sourceUrl:record.sourceUrl,
-    lexflowUrl:url.origin
+    mode:a3Mode,
+    hasSourceUrl:Boolean(record.sourceUrl)
   });
-  return json({ok:true, request:record, agentLaunchUrl}, 201);
+  const browserLaunchUrl = /^https?:\/\//i.test(record.sourceUrl) ? record.sourceUrl : '';
+  const agentLaunchUrl = '';
+  return json({ok:true, request:record, browserLaunchUrl, agentLaunchUrl}, 201);
 }
 
 function sleep(ms){

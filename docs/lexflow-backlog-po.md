@@ -59,7 +59,7 @@ Legenda:
 - [x] Prazo fatal nao deve ser inventado quando a fonte nao entrega base suficiente.
 - [x] Prioridade critica definida: Motor de Prazos Validavel passa a ser o foco imediato.
 - [ ] Definir fonte autenticada principal para processos em segredo de justica.
-- [ ] Definir estrategia oficial para certificado digital A3.
+- [x] Definir estrategia oficial para certificado digital A3: fluxo SaaS abre a fonte oficial no navegador do advogado; token fisico fica local.
 - [ ] Definir se aceitaremos certificado A1 como alternativa operacional.
 
 ## Epic 1 - Inbox de Publicacoes Integradas
@@ -164,7 +164,7 @@ Critérios de aceite:
 
 ## Epic 4 - Certificado Digital A3 / Token Fisico
 
-Objetivo: permitir integracoes que exigem certificado digital fisico sem quebrar a arquitetura SaaS.
+Objetivo: permitir acesso autenticado com certificado digital fisico sem quebrar a arquitetura SaaS.
 
 Status: `[~]`
 
@@ -172,13 +172,22 @@ Restricao tecnica:
 
 Um certificado A3/token fisico fica conectado a uma maquina local e depende de driver, PIN e interacao do sistema operacional/navegador. Um Cloudflare Worker na nuvem nao consegue acessar USB/token fisico do escritorio.
 
-Arquiteturas possiveis:
+Arquitetura definida para o MVP:
+
+1. Abertura oficial no navegador do usuario
+   - [x] LexFlow continua 100% em nuvem.
+   - [x] Usuario clica em `Abrir fonte oficial`.
+   - [x] Backend registra `/api/a3/requests` com auditoria por tenant/usuario.
+   - [x] Browser do advogado abre a URL oficial do tribunal.
+   - [x] Token A3 e PIN ficam somente na maquina do advogado.
+
+Arquiteturas futuras/alternativas:
 
 1. Agente local LexFlow Desktop
-   - [x] Pequeno app instalado/rodando no computador do escritorio.
+   - [~] Pequeno app instalado/rodando no computador do escritorio, apenas se for preciso automatizar navegacao autorizada.
    - [~] Acessa o certificado A3 pelo navegador/sistema local.
    - [ ] Sincroniza apenas metadados/documentos autorizados com o LexFlow.
-   - [x] Ideal para token fisico A3.
+   - [ ] Nao e dependencia do fluxo SaaS atual.
 
 2. Coletor dedicado em servidor com certificado instalado
    - [ ] VPS/Windows/Render/Railway com navegador e certificado configurado.
@@ -197,21 +206,22 @@ Arquiteturas possiveis:
 
 Decisao pendente:
 
-- [x] Para A3, o caminho definido e agente local; Cloudflare Worker nao acessa USB/token fisico.
+- [x] Para A3, o caminho definido no MVP e abrir a fonte oficial no navegador do advogado; Cloudflare Worker nao acessa USB/token fisico.
 - [ ] O escritorio aceita usar A1 para integracoes automaticas?
 - [ ] Quais tribunais realmente exigem A3 para os dados que faltam?
-- [x] Preparar Configuracoes do LexFlow para URL/protocolo do Agente Local A3.
-- [x] Criar acao `Abrir A3` em publicacoes restritas.
-- [x] Documentar arquitetura do Agente Local A3.
+- [x] Preparar Configuracoes do LexFlow para modo A3 em nuvem/browser.
+- [x] Criar acao `Abrir fonte oficial` em publicacoes restritas.
+- [x] Documentar arquitetura de acesso autenticado A3.
 - [x] Criar backend `/api/a3/requests` para registrar solicitacoes A3 por tenant/usuario.
-- [x] Criar prototipo Node do Agente Local A3 em `tools/a3-local-agent.mjs`.
+- [x] Criar prototipo Node do Agente Local A3 em `tools/a3-local-agent.mjs` como fallback avancado.
 
 Critérios de aceite:
 
 - A3 nunca e tratado como segredo de servidor comum.
 - PIN nunca e armazenado sem decisao explicita e segura.
 - Toda solicitacao via certificado tem auditoria.
-- Usuario sabe quando precisa deixar agente local ativo.
+- Usuario consegue testar pela nuvem, desde que esteja na maquina com token A3 e a publicacao tenha link oficial.
+- Usuario entende que agente local e opcional/avancado, nao requisito do MVP.
 
 ## Epic 5 - Dashboard e Alertas
 
@@ -334,8 +344,8 @@ Critérios de aceite:
 
 - [ ] Mapear tribunais prioritarios.
 - [ ] Criar tela "Fontes autenticadas".
-- [ ] Definir estrategia A3 vs A1.
-- [ ] Criar prototipo de agente local ou coletor autenticado.
+- [x] Definir estrategia A3 vs A1 para MVP: A3 abre no navegador local; A1 fica como decisao futura para automacao.
+- [x] Criar prototipo de agente local como fallback avancado.
 
 ### Sprint 3 - Motor de Prazo Validavel
 

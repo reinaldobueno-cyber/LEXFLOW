@@ -59,7 +59,7 @@ test('recreates the master user hash when the configured password changes', asyn
   assert.equal(secondLogin.body.user?.email, 'admin@lexflow.com');
 });
 
-test('creates an audited A3 local-agent request for restricted publications', async () => {
+test('creates an audited A3 browser request for restricted publications', async () => {
   const cache = createCache();
   const env = {
     LEXFLOW_CACHE: cache,
@@ -83,6 +83,7 @@ test('creates an audited A3 local-agent request for restricted publications', as
 
   assert.equal(result.status, 201);
   assert.equal(result.body.request?.processo, '5588081-07.2026.8.09.0012');
-  assert.match(result.body.agentLaunchUrl, /^http:\/\/127\.0\.0\.1:48731\/open\?/);
-  assert.match(result.body.agentLaunchUrl, /requestId=/);
+  assert.equal(result.body.browserLaunchUrl, 'https://comunicaapi.pje.jus.br/api/v1/comunicacao/abc');
+  assert.equal(result.body.agentLaunchUrl, '');
+  assert.equal(result.body.request?.agent?.mode, 'browser_open');
 });
