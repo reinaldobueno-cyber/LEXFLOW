@@ -393,6 +393,10 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .coverage-months{display:flex; gap:7px; flex-wrap:wrap; margin-top:12px;}
 .coverage-month{font-size:10.5px; font-weight:800; padding:5px 8px; border-radius:999px; background:#EFF8FF; color:var(--azul); border:1px solid #B2DDFF;}
 .coverage-gap{border-left:3px solid var(--laranja); background:#FFFAEB; padding:10px 12px; border-radius:8px; color:#7A4B00; font-size:12.5px; line-height:1.45;}
+.retro-plan{display:flex; flex-direction:column; gap:9px; margin-top:12px;}
+.retro-step{display:flex; gap:10px; align-items:flex-start; font-size:12.5px; color:var(--ink-2); line-height:1.45;}
+.retro-step b{color:var(--ink);}
+.retro-num{width:22px; height:22px; border-radius:50%; background:#EFF8FF; color:var(--azul); display:inline-flex; align-items:center; justify-content:center; font-weight:900; font-size:11px; flex-shrink:0;}
 .archive-timeline{border-left:2px solid var(--line); padding-left:14px; display:flex; flex-direction:column; gap:8px;}
 .archive-event{position:relative; font-size:12px; color:var(--ink-2);}
 .archive-event::before{content:''; position:absolute; left:-20px; top:4px; width:8px; height:8px; border-radius:50%; background:var(--azul);}
@@ -480,6 +484,15 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .check-item:last-child{border-bottom:none;}
 .check-item input{width:16px; height:16px; accent-color:var(--verde);}
 .check-item.checked span{text-decoration:line-through; color:var(--ink-soft);}
+.connection-status-list{display:grid; grid-template-columns:1fr; gap:10px;}
+.connection-status{border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:grid; grid-template-columns:auto 1fr; gap:12px; align-items:flex-start; background:#fff;}
+.connection-status.ok{border-color:#B7DFD0; background:#F0FBF6;}
+.connection-status.pending{border-color:#F3D59B; background:#FFFAEB;}
+.connection-icon{width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:13px; background:#F2F4F7; color:var(--ink-soft);}
+.connection-status.ok .connection-icon{background:#D1FADF; color:var(--verde);}
+.connection-status.pending .connection-icon{background:#FEDF89; color:#A15C00;}
+.connection-title{font-size:13px; font-weight:900; color:var(--ink);}
+.connection-detail{font-size:12px; color:var(--ink-soft); line-height:1.45; margin-top:3px;}
 @media (max-width: 1100px){ .publication-workspace{grid-template-columns:1fr;} .publication-detail{position:static;} }
 @media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary,.archive-summary,.archive-card,.archive-coverage,.help-grid,.publication-form-row{grid-template-columns:1fr;} .archive-counts{justify-content:flex-start;} }
 @media (max-width: 1180px){
@@ -1139,6 +1152,32 @@ function controlJusSyncOk(){
 
 function djenSyncOk(){
   return ['fresh_djen','cached_djen','stale_djen_after_error'].includes(DB.config?.lastDjenSyncStatus);
+}
+
+function connectionChecklistItems(){
+  const privateOk = controlJusSyncOk();
+  const djenOk = djenSyncOk();
+  return [
+    {
+      ok:true,
+      label:'Rota fixa de fontes conectadas gravada no LexFlow',
+      detail:'Endpoint fixo do Cloudflare está configurado. Não há importação por arquivo nem troca manual de URL.'
+    },
+    {
+      ok:privateOk,
+      label:'Sessão autorizada do escritório validada para consultar recortes',
+      detail:privateOk
+        ? `Último retorno da fonte privada: ${DB.config?.lastControlJusSyncStatus || 'ativo'} em ${fmtDateTime(DB.config?.lastControlJusSyncAt)}.`
+        : 'Marca quando a fonte privada/ControlJus retorna fresh, cached ou cached_native com credenciais autorizadas.'
+    },
+    {
+      ok:privateOk || djenOk,
+      label:'Coletores de integração configurados com credenciais ou fonte oficial',
+      detail:(privateOk || djenOk)
+        ? `Coletor ativo: ${[privateOk ? 'fonte privada' : '', djenOk ? 'DJEN/CNJ' : ''].filter(Boolean).join(' + ')}.`
+        : 'Marca quando DJEN/CNJ ou fonte privada conclui uma sincronização válida.'
+    }
+  ];
 }
 
 function syncErrorMessage(payload){
@@ -3616,7 +3655,13 @@ function renderHistorico(){
       </div>
       <div class="coverage-panel">
         <h4>Meses e anos anteriores</h4>
-        <div class="coverage-gap">Se o advogado quiser consultar processos anteriores ao primeiro registro carregado, precisamos executar uma carga histórica retroativa por OAB, processo ou fonte conectada. O LexFlow não deve inventar acervo: ele precisa buscar em DJEN/CNJ, ControlJus autorizado ou portal autenticado.</div>
+        <div class="coverage-gap">Hoje aparecem apenas os períodos já sincronizados. Para buscar meses ou anos anteriores, é necessária uma carga retroativa por fonte oficial/autorizada.</div>
+        <div class="retro-plan">
+          <div class="retro-step"><span class="retro-num">1</span><span><b>DJEN/CNJ:</b> consultar por OAB e intervalo de datas anteriores.</span></div>
+          <div class="retro-step"><span class="retro-num">2</span><span><b>Fonte privada:</b> consultar recortes históricos se a conta autorizada permitir.</span></div>
+          <div class="retro-step"><span class="retro-num">3</span><span><b>Restritos/segredo:</b> abrir fonte oficial do tribunal com autenticação/A3 quando necessário.</span></div>
+        </div>
+        <p style="margin-top:12px;"><button class="btn small azul" id="retroLoadBtn">Planejar carga retroativa</button></p>
       </div>
     </div>
     <div class="filters">
@@ -3655,6 +3700,8 @@ function renderHistorico(){
   document.getElementById('histBusca').oninput = e=>{ historicoFilters.q=e.target.value; renderHistorico(); };
   document.getElementById('histStatus').onchange = e=>{ historicoFilters.status=e.target.value; renderHistorico(); };
   document.getElementById('histPeriod').onchange = e=>{ historicoFilters.period=e.target.value; renderHistorico(); };
+  const retroBtn = document.getElementById('retroLoadBtn');
+  if(retroBtn) retroBtn.onclick = openRetroactiveLoadModal;
   document.querySelectorAll('[data-act="open-archive"]').forEach(btn=>btn.onclick = e=>{
     const processo = e.target.closest('.archive-card').dataset.processo;
     const row = acervoProcessos().find(r=>r.processo === processo);
@@ -3662,15 +3709,50 @@ function renderHistorico(){
   });
 }
 
+function openRetroactiveLoadModal(){
+  const box = document.getElementById('modalBox');
+  box.className = 'modal';
+  box.innerHTML = `
+    <div class="modal-head"><h3>Carga retroativa de acervo</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="analysis-hero">
+        <div class="analysis-title">Como carregar processos de meses e anos anteriores</div>
+        <div class="analysis-sub">O LexFlow só deve mostrar histórico que veio de fonte oficial, fonte privada autorizada ou portal autenticado.</div>
+      </div>
+      <div class="path-cards" style="margin-bottom:0;">
+        <div class="path-card">
+          <div class="path-tag">Fonte oficial pública</div>
+          <h4>DJEN/CNJ por OAB e período</h4>
+          <p>Executar busca retroativa por cada OAB monitorada e intervalo de datas. Exemplo operacional: janeiro/2024 até hoje, paginando por mês para evitar limite/timeout.</p>
+        </div>
+        <div class="path-card">
+          <div class="path-tag">Fonte privada autorizada</div>
+          <h4>ControlJus / Aviso Urgente</h4>
+          <p>Consultar histórico disponível pela conta do escritório. Se a fonte não expuser acervo antigo, ela não consegue preencher anos anteriores sozinha.</p>
+        </div>
+        <div class="path-card">
+          <div class="path-tag">Fonte autenticada</div>
+          <h4>Tribunais e processos restritos</h4>
+          <p>Para segredo de justiça ou arquivo indisponível, o LexFlow precisa abrir o link oficial no navegador do advogado e o tribunal solicitará login/certificado A3 quando aplicável.</p>
+        </div>
+        <div class="path-card">
+          <div class="path-tag">Próxima entrega técnica</div>
+          <h4>Fila de backfill</h4>
+          <p>Criar uma rotina de carga retroativa por TenantID, OAB, fonte, data inicial, data final, status, logs, deduplicação e reprocessamento da inteligência de prazo.</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn primary" id="mClose2">Entendi</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mClose2').onclick = hideModal;
+}
+
 /* ===================== INTEGRAÇÃO / ROADMAP ===================== */
 function renderIntegracao(){
   ensureFixedConfig();
-  const cl = DB.checklist;
-  const checklistItems = [
-    {key:'controlJusEndpoint', label:'Rota fixa de fontes conectadas gravada no LexFlow'},
-    {key:'authenticatedSession', label:'Sessão autorizada do escritório validada para consultar recortes'},
-    {key:'webserviceContract', label:'Coletores de integração configurados com credenciais autorizadas'},
-  ];
+  const checklistItems = connectionChecklistItems();
   let html = `
     <div class="roadmap-hero">
       <div class="eyebrow">Estratégia de integração</div>
@@ -3724,8 +3806,30 @@ function renderIntegracao(){
 
     <div class="section-title">Checklist de conexão <span class="cnt">sem importação por arquivo</span></div>
     <div class="table-wrap" style="padding:6px 18px;">
-      <div class="checklist">
-        ${checklistItems.map(c=>`<label class="check-item ${cl[c.key]?'checked':''}"><input type="checkbox" data-k="${c.key}" ${cl[c.key]?'checked':''}><span>${c.label}</span></label>`).join('')}
+      <div class="connection-status-list">
+        ${checklistItems.map(c=>`
+          <div class="connection-status ${c.ok?'ok':'pending'}">
+            <div class="connection-icon">${c.ok?'✓':'!'}</div>
+            <div>
+              <div class="connection-title">${esc(c.label)}</div>
+              <div class="connection-detail">${esc(c.detail)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="section-title">Carga histórica retroativa <span class="cnt">próximo passo</span></div>
+    <div class="path-cards">
+      <div class="path-card">
+        <div class="path-tag">Acervo antigo</div>
+        <h4>Meses e anos anteriores</h4>
+        <p>Para carregar histórico anterior ao primeiro registro, o LexFlow precisa executar busca retroativa por OAB/processo/fonte conectada. A fonte principal é DJEN/CNJ; ControlJus entra apenas quando autorizado e disponível.</p>
+        <p><button class="btn small azul" id="retroLoadIntegrationBtn">Ver plano da carga retroativa</button></p>
+      </div>
+      <div class="path-card">
+        <div class="path-tag">Regra de segurança</div>
+        <h4>Sem acervo inventado</h4>
+        <p>O LexFlow não deve criar histórico que não veio de fonte oficial, privada autorizada ou portal autenticado. Isso evita falsa cobertura e risco operacional.</p>
       </div>
     </div>
   `;
@@ -3750,13 +3854,8 @@ function renderIntegracao(){
     try{ await syncDjenComunicacoes(true); }
     catch(e){ toast(e.message || 'Falha na sincronização DJEN'); renderIntegracao(); }
   };
-  document.querySelectorAll('.check-item input').forEach(cb=>{
-    cb.onchange = async e=>{
-      DB.checklist[e.target.dataset.k] = e.target.checked;
-      logHist(`Checklist de integrações atualizado: "${checklistItems.find(c=>c.key===e.target.dataset.k).label}" → ${e.target.checked?'sim':'não'}`);
-      await saveDB(); renderIntegracao(); toast('Checklist salvo');
-    };
-  });
+  const retroIntegrationBtn = document.getElementById('retroLoadIntegrationBtn');
+  if(retroIntegrationBtn) retroIntegrationBtn.onclick = openRetroactiveLoadModal;
 }
 
 /* ===================== CONFIGURAÇÕES / USUÁRIOS ===================== */
