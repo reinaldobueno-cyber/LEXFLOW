@@ -969,6 +969,8 @@ function ensureFixedConfig(){
   if(typeof DB.config.calendarReminderMinutes !== 'number'){ DB.config.calendarReminderMinutes = 60; changed = true; }
   if(!Array.isArray(DB.config.taskColumns) || !DB.config.taskColumns.length){ DB.config.taskColumns = DEFAULT_TASK_COLUMNS.slice(); changed = true; }
   if(!DB.config.taskView){ DB.config.taskView = 'kanban'; changed = true; }
+  if(!DB.config.dailySummary){ DB.config.dailySummary = {enabled:false, hour:'08:00', timezone:'America/Sao_Paulo', channels:{whatsapp:false,email:false}, whatsappNumbers:'', emails:''}; changed = true; }
+  if(!DB.config.dailySummary.channels){ DB.config.dailySummary.channels = {whatsapp:false,email:false}; changed = true; }
   if(!DB.checklist){ DB.checklist = {}; changed = true; }
   ['exportBtn','tableCopy','apiEndpoints'].forEach(k=>{
     if(Object.prototype.hasOwnProperty.call(DB.checklist,k)){ delete DB.checklist[k]; changed = true; }
@@ -1134,7 +1136,37 @@ async function loadDB(){
   await saveDB();
 }
 function dbStorageKey(){ return `lc:data:${currentTenantId()}`; }
-async function saveDB(){ try{ await window.storage.set(dbStorageKey(), JSON.stringify(DB), false); }catch(e){ console.error('storage error', e); } }
+let operationalSnapshotTimer = null;
+function operationalSnapshotPayload(){
+  return {
+    dataVersion:DB.dataVersion || APP_DATA_VERSION,
+    prazos:DB.prazos || [],
+    audiencias:DB.audiencias || [],
+    tarefas:DB.tarefas || [],
+    publicacoes:DB.publicacoes || [],
+    historico:DB.historico || []
+  };
+}
+function queueOperationalSnapshot(){
+  if(!AUTH.token) return;
+  clearTimeout(operationalSnapshotTimer);
+  operationalSnapshotTimer = setTimeout(()=>syncOperationalSnapshotNow().catch(e=>console.warn('operational snapshot failed', e)), 800);
+}
+async function syncOperationalSnapshotNow(){
+  if(!AUTH.token) return;
+  const suffix = isMaster() && AUTH.activeTenantId ? `?tenantId=${encodeURIComponent(AUTH.activeTenantId)}` : '';
+  await apiFetch('/api/operational-data' + suffix, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({data:operationalSnapshotPayload()})
+  });
+}
+async function saveDB(){
+  try{
+    await window.storage.set(dbStorageKey(), JSON.stringify(DB), false);
+    queueOperationalSnapshot();
+  }catch(e){ console.error('storage error', e); }
+}
 function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), texto}); if(DB.historico.length>250) DB.historico.length=250; }
 
 let toastTimer;
@@ -3866,6 +3898,38 @@ async function fetchSettings(){
   return (await res.json()).settings || {};
 }
 
+async function openDailySummaryPreview(sendNow = false){
+  await syncOperationalSnapshotNow().catch(()=>{});
+  const suffix = isMaster() && AUTH.activeTenantId ? `?tenantId=${encodeURIComponent(AUTH.activeTenantId)}` : '';
+  const res = await apiFetch('/api/daily-summary' + suffix + (sendNow ? (suffix ? '&send=1' : '?send=1') : ''), {method:sendNow ? 'POST' : 'GET'});
+  const payload = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(payload.message || 'Falha ao gerar resumo diário');
+  const box = document.getElementById('modalBox');
+  box.className = 'modal';
+  box.innerHTML = `
+    <div class="modal-head"><h3>${sendNow ? 'Teste de envio do resumo' : 'Resumo diário de hoje'}</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="analysis-hero">
+        <div class="analysis-title">Compromissos do dia</div>
+        <div class="analysis-sub">Snapshot: ${esc(payload.snapshotUpdatedAt ? fmtDateTime(payload.snapshotUpdatedAt) : 'ainda sem snapshot')}</div>
+      </div>
+      <div class="report-box">${esc(payload.summary?.text || payload.text || 'Sem conteúdo para exibir.')}</div>
+      ${sendNow ? `<div class="coverage-gap">Resultado do teste: ${(payload.results || []).length ? esc((payload.results || []).map(r=>`${r.channel}: ${r.result?.ok ? 'enviado' : (r.result?.reason || 'pendente')}`).join(' | ')) : 'nenhum canal configurado ou webhook ausente.'}</div>` : ''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="mCopyDaily">Copiar texto</button>
+      <button class="btn primary" id="mClose2">Fechar</button>
+    </div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mClose2').onclick = hideModal;
+  document.getElementById('mCopyDaily').onclick = async ()=>{
+    await navigator.clipboard.writeText(payload.summary?.text || payload.text || '').catch(()=>{});
+    toast('Resumo copiado');
+  };
+}
+
 function renderConfiguracoes(){
   const defaultOabs = [
     {uf:'GO', numero:'60795', nome:'Igor Lazaro Pires Neto'},
@@ -3941,6 +4005,32 @@ function renderConfiguracoes(){
       <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="testCalendarLink">Testar link Google</button><button class="btn primary" id="saveSettingsCalendar">Salvar agenda</button></div>
     </div>
 
+    <div class="section-title">Resumo diário automático</div>
+    <div class="path-cards">
+      <div class="path-card">
+        <div class="path-tag">Disparo matinal</div>
+        <h4>Compromissos do dia</h4>
+        <p>Todos os dias de manhã, o LexFlow pode consolidar prazos vencidos/hoje, audiências do dia e tarefas vencidas/hoje para enviar aos responsáveis do escritório.</p>
+      </div>
+      <div class="path-card">
+        <div class="path-tag">Canais</div>
+        <h4>WhatsApp e e-mail</h4>
+        <p>O cron já fica preparado no Cloudflare. Para envio real, configure webhook de WhatsApp/e-mail nos secrets do Worker ou conecte um provedor oficial.</p>
+      </div>
+    </div>
+    <div class="table-wrap" style="padding:18px;">
+      <label class="chk"><input type="checkbox" id="cfgDailyEnabled"> Ativar envio automático diário</label>
+      <div class="field-row" style="margin-top:12px;">
+        <div class="field"><label>Horário de envio</label><input type="time" id="cfgDailyHour"></div>
+        <div class="field"><label>Fuso horário</label><input id="cfgDailyTimezone" placeholder="America/Sao_Paulo"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>WhatsApp(s) destinatários</label><textarea id="cfgDailyWhatsapp" placeholder="+55 62 99999-9999&#10;+55 62 98888-8888"></textarea></div>
+        <div class="field"><label>E-mail(s) destinatários</label><textarea id="cfgDailyEmails" placeholder="advogado@escritorio.com&#10;controladoria@escritorio.com"></textarea></div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="previewDailySummary">Visualizar resumo de hoje</button><button class="btn" id="sendDailySummaryNow">Enviar teste agora</button><button class="btn primary" id="saveDailySummary">Salvar resumo diário</button></div>
+    </div>
+
     <div class="section-title">Certificado Digital A3 / Token físico</div>
     <div class="path-cards">
       <div class="path-card">
@@ -3974,6 +4064,7 @@ function renderConfiguracoes(){
     const c = settings.integrations?.controljus || {};
     const d = settings.integrations?.djen || {};
     const a3 = settings.integrations?.a3 || {};
+    const daily = settings.notifications?.dailySummary || DB.config.dailySummary || {};
     document.getElementById('cfgControlUrl').value = c.baseUrl || '';
     document.getElementById('cfgDjenAuth').value = d.authType || 'public';
     document.getElementById('cfgDjenUrl').value = d.serviceUrl || DJEN_PUBLIC_ENDPOINT;
@@ -3983,6 +4074,19 @@ function renderConfiguracoes(){
     document.getElementById('cfgCalendarProvider').value = DB.config.calendarProvider || 'google';
     document.getElementById('cfgCalendarTime').value = DB.config.calendarDefaultTime || '09:00';
     document.getElementById('cfgCalendarReminder').value = DB.config.calendarReminderMinutes ?? 60;
+    document.getElementById('cfgDailyEnabled').checked = Boolean(daily.enabled);
+    document.getElementById('cfgDailyHour').value = daily.hour || '08:00';
+    document.getElementById('cfgDailyTimezone').value = daily.timezone || 'America/Sao_Paulo';
+    document.getElementById('cfgDailyWhatsapp').value = Array.isArray(daily.whatsappNumbers) ? daily.whatsappNumbers.join('\n') : (daily.whatsappNumbers || '');
+    document.getElementById('cfgDailyEmails').value = Array.isArray(daily.emails) ? daily.emails.join('\n') : (daily.emails || '');
+    DB.config.dailySummary = {
+      enabled:Boolean(daily.enabled),
+      hour:daily.hour || '08:00',
+      timezone:daily.timezone || 'America/Sao_Paulo',
+      channels:daily.channels || {whatsapp:false,email:false},
+      whatsappNumbers:document.getElementById('cfgDailyWhatsapp').value,
+      emails:document.getElementById('cfgDailyEmails').value
+    };
     const a3Mode = a3.mode === 'local_agent' ? LEXFLOW_A3_MODE_DEFAULT : (a3.mode || LEXFLOW_A3_MODE_DEFAULT);
     document.getElementById('cfgA3Mode').value = a3Mode;
     document.getElementById('cfgA3Status').value = a3.status === 'not_installed' ? 'browser_ready' : (a3.status || 'browser_ready');
@@ -4015,7 +4119,20 @@ function renderConfiguracoes(){
     const body = {
       controljus:{apiKey:document.getElementById('cfgControlKey').value.trim(), baseUrl:document.getElementById('cfgControlUrl').value.trim()},
       djen:{authType:document.getElementById('cfgDjenAuth').value, token:document.getElementById('cfgDjenToken').value.trim(), serviceUrl:document.getElementById('cfgDjenUrl').value.trim(), frequency:document.getElementById('cfgDjenFreq').value, oabs:parseOabs()},
-      a3:{mode:document.getElementById('cfgA3Mode').value === 'local_agent' ? LEXFLOW_A3_MODE_DEFAULT : document.getElementById('cfgA3Mode').value, status:document.getElementById('cfgA3Status').value, localAgentUrl:'', requireConsent:document.getElementById('cfgA3Consent').checked, allowedCourts:a3Courts}
+      a3:{mode:document.getElementById('cfgA3Mode').value === 'local_agent' ? LEXFLOW_A3_MODE_DEFAULT : document.getElementById('cfgA3Mode').value, status:document.getElementById('cfgA3Status').value, localAgentUrl:'', requireConsent:document.getElementById('cfgA3Consent').checked, allowedCourts:a3Courts},
+      notifications:{
+        dailySummary:{
+          enabled:document.getElementById('cfgDailyEnabled').checked,
+          hour:document.getElementById('cfgDailyHour').value || '08:00',
+          timezone:document.getElementById('cfgDailyTimezone').value.trim() || 'America/Sao_Paulo',
+          channels:{
+            whatsapp:Boolean(document.getElementById('cfgDailyWhatsapp').value.trim()),
+            email:Boolean(document.getElementById('cfgDailyEmails').value.trim())
+          },
+          whatsappNumbers:document.getElementById('cfgDailyWhatsapp').value,
+          emails:document.getElementById('cfgDailyEmails').value
+        }
+      }
     };
     const suffix = isMaster() && AUTH.activeTenantId ? `?tenantId=${encodeURIComponent(AUTH.activeTenantId)}` : '';
     const res = await apiFetch('/api/settings' + suffix, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -4027,6 +4144,7 @@ function renderConfiguracoes(){
     DB.config.a3AgentUrl = body.a3.localAgentUrl;
     DB.config.a3AgentStatus = body.a3.status;
     DB.config.a3RequireConsent = body.a3.requireConsent;
+    DB.config.dailySummary = body.notifications.dailySummary;
     await saveDB();
     toast('Configuração salva');
   }
@@ -4038,6 +4156,9 @@ function renderConfiguracoes(){
     window.open(calendarGoogleUrl(ev), '_blank', 'noopener');
   };
   document.getElementById('saveSettingsA3').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
+  document.getElementById('saveDailySummary').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
+  document.getElementById('previewDailySummary').onclick = ()=>syncOperationalSnapshotNow().then(()=>openDailySummaryPreview(false)).catch(e=>toast(e.message));
+  document.getElementById('sendDailySummaryNow').onclick = ()=>saveSettingsFromForm().then(()=>openDailySummaryPreview(true)).catch(e=>toast(e.message));
   document.getElementById('testControlJus').onclick = async ()=>{
     const res = await apiFetch('/api/integrations/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'controljus'})});
     const payload = await res.json().catch(()=>({}));
@@ -4460,6 +4581,7 @@ document.getElementById('loginForm').onsubmit = async e=>{
     await login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value);
     showApp();
     await loadDB();
+    queueOperationalSnapshot();
     renderAll();
     hydrateFromServerCache().catch(console.warn);
   }catch(error){
@@ -4479,6 +4601,7 @@ document.getElementById('loginForm').onsubmit = async e=>{
   }
   showApp();
   await loadDB();
+  queueOperationalSnapshot();
   renderAll();
   hydrateFromServerCache().catch(err=>console.warn('cache hydrate failed', err));
 })();

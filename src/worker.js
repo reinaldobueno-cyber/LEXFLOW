@@ -14,6 +14,14 @@ const DEFAULT_DJEN_OABS = [
   {uf:'DF', numero:'59142', nome:'Igor Lazaro Pires Neto'},
   {uf:'GO', numero:'74242', nome:'Luiz Fernando Correa Pires'}
 ];
+const DEFAULT_DAILY_SUMMARY = {
+  enabled:false,
+  hour:'08:00',
+  timezone:'America/Sao_Paulo',
+  channels:{whatsapp:false, email:false},
+  whatsappNumbers:[],
+  emails:[]
+};
 const DEFAULT_USER_SELECTOR = 'input[type="email"], input[name="email"], input[name="usuario"], input[name="login"], input[type="text"]';
 const DEFAULT_PASSWORD_SELECTOR = 'input[type="password"]';
 
@@ -43,6 +51,8 @@ function settingsKey(tenantId){ return `settings:${tenantId}`; }
 function auditKey(tenantId, id = crypto.randomUUID()){ return `audit:${tenantId}:${Date.now()}:${id}`; }
 function a3RequestKey(tenantId, id){ return `a3-request:${tenantId}:${id}`; }
 function a3RequestPrefix(tenantId){ return `a3-request:${tenantId}:`; }
+function operationalDataKey(tenantId){ return `operational-data:${tenantId}`; }
+function dailySummarySentKey(tenantId, day){ return `daily-summary:${tenantId}:${day}`; }
 
 function bytesToBase64Url(bytes){
   let str = '';
@@ -127,6 +137,45 @@ function maskSecret(value){
 
 function safeText(value, max = 500){
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function onlyDateInTimezone(date = new Date(), timezone = 'America/Sao_Paulo'){
+  const parts = new Intl.DateTimeFormat('en-CA', {timeZone:timezone, year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(date);
+  const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function timeInTimezone(date = new Date(), timezone = 'America/Sao_Paulo'){
+  const parts = new Intl.DateTimeFormat('pt-BR', {timeZone:timezone, hour:'2-digit', minute:'2-digit', hour12:false}).formatToParts(date);
+  const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${map.hour}:${map.minute}`;
+}
+
+function formatBrDate(value){
+  if(!value) return '';
+  const [y, m, d] = String(value).slice(0, 10).split('-');
+  return y && m && d ? `${d}/${m}/${y}` : String(value);
+}
+
+function normalizeDailySummarySettings(settings = {}){
+  const cfg = settings.notifications?.dailySummary || {};
+  const channels = cfg.channels || {};
+  const split = value => Array.isArray(value)
+    ? value.map(item => String(item || '').trim()).filter(Boolean)
+    : String(value || '').split(/[,;\n]+/).map(item => item.trim()).filter(Boolean);
+  return {
+    ...DEFAULT_DAILY_SUMMARY,
+    ...cfg,
+    enabled:Boolean(cfg.enabled),
+    hour:cfg.hour || DEFAULT_DAILY_SUMMARY.hour,
+    timezone:cfg.timezone || DEFAULT_DAILY_SUMMARY.timezone,
+    channels:{
+      whatsapp:Boolean(channels.whatsapp),
+      email:Boolean(channels.email)
+    },
+    whatsappNumbers:split(cfg.whatsappNumbers),
+    emails:split(cfg.emails)
+  };
 }
 
 async function readBody(request){
@@ -459,6 +508,13 @@ async function handleSettings(request, env, auth){
         allowedCourts:Array.isArray(body.a3?.allowedCourts) ? body.a3.allowedCourts.map(item => String(item || '').trim().toUpperCase()).filter(Boolean) : (current.integrations?.a3?.allowedCourts || [])
       }
     },
+    notifications:{
+      dailySummary:normalizeDailySummarySettings({
+        notifications:{
+          dailySummary:body.notifications?.dailySummary || current.notifications?.dailySummary || DEFAULT_DAILY_SUMMARY
+        }
+      })
+    },
     updatedAt:nowIso(),
     updatedBy:auth.user.id
   };
@@ -548,6 +604,157 @@ async function handleA3Requests(request, env, auth){
   const browserLaunchUrl = /^https?:\/\//i.test(record.sourceUrl) ? record.sourceUrl : '';
   const agentLaunchUrl = '';
   return json({ok:true, request:record, browserLaunchUrl, agentLaunchUrl}, 201);
+}
+
+function sanitizeOperationalData(data = {}){
+  const pickArray = name => Array.isArray(data[name]) ? data[name].slice(0, 5000) : [];
+  return {
+    dataVersion:data.dataVersion || '',
+    prazos:pickArray('prazos'),
+    audiencias:pickArray('audiencias'),
+    tarefas:pickArray('tarefas'),
+    publicacoes:pickArray('publicacoes'),
+    historico:pickArray('historico').slice(0, 250),
+    updatedAt:nowIso()
+  };
+}
+
+async function handleOperationalData(request, env, auth){
+  const url = new URL(request.url);
+  const tenantId = auth.user.role === 'master' && url.searchParams.get('tenantId') ? url.searchParams.get('tenantId') : auth.user.tenantId;
+  if(auth.user.role !== 'master' && tenantId !== auth.user.tenantId) return json({error:'forbidden'}, 403);
+  if(request.method === 'GET'){
+    const data = await env.LEXFLOW_CACHE.get(operationalDataKey(tenantId), {type:'json'});
+    return json({data:data || null});
+  }
+  if(request.method !== 'PUT' && request.method !== 'POST') return json({error:'method_not_allowed'}, 405);
+  const body = await readBody(request);
+  const data = sanitizeOperationalData(body.data || body);
+  await env.LEXFLOW_CACHE.put(operationalDataKey(tenantId), JSON.stringify(data));
+  await auditLog(env, tenantId, auth.user, 'operational_data.snapshot', {
+    prazos:data.prazos.length,
+    audiencias:data.audiencias.length,
+    tarefas:data.tarefas.length,
+    publicacoes:data.publicacoes.length
+  });
+  return json({ok:true, updatedAt:data.updatedAt});
+}
+
+function isDone(status, doneList){
+  return doneList.includes(String(status || '').trim());
+}
+
+function buildDailySummaryText(tenant, data, day){
+  const prazos = (data?.prazos || []).filter(p => {
+    const d = String(p.prazoFatal || '').slice(0, 10);
+    return d && !isDone(p.status, ['Concluído','Arquivado']) && d <= day;
+  });
+  const audiencias = (data?.audiencias || []).filter(a => {
+    const d = String(a.data || '').slice(0, 10);
+    return d && !isDone(a.status, ['Realizada','Cancelada','Arquivado']) && d === day;
+  });
+  const tarefas = (data?.tarefas || []).filter(t => {
+    const d = String(t.dataLimite || '').slice(0, 10);
+    return d && !isDone(t.status, ['Concluída','Desconsiderada','Arquivado']) && d <= day;
+  });
+  const vencidos = prazos.filter(p => String(p.prazoFatal || '').slice(0, 10) < day);
+  const hoje = prazos.filter(p => String(p.prazoFatal || '').slice(0, 10) === day);
+  const atrasoTarefas = tarefas.filter(t => String(t.dataLimite || '').slice(0, 10) < day);
+  const items = [
+    ...vencidos.map(p => ({tipo:'PRAZO VENCIDO', cliente:p.cliente, processo:p.processo, desc:p.tipoPrazo, data:p.prazoFatal, resp:p.responsavel})),
+    ...hoje.map(p => ({tipo:'PRAZO HOJE', cliente:p.cliente, processo:p.processo, desc:p.tipoPrazo, data:p.prazoFatal, resp:p.responsavel})),
+    ...audiencias.map(a => ({tipo:'AUDIÊNCIA', cliente:a.cliente, processo:a.processo, desc:[a.tipo, a.horario].filter(Boolean).join(' - '), data:a.data, resp:a.responsavel})),
+    ...atrasoTarefas.map(t => ({tipo:'TAREFA ATRASADA', cliente:t.cliente, processo:t.processo, desc:t.titulo, data:t.dataLimite, resp:t.responsavel})),
+    ...tarefas.filter(t => String(t.dataLimite || '').slice(0, 10) === day).map(t => ({tipo:'TAREFA HOJE', cliente:t.cliente, processo:t.processo, desc:t.titulo, data:t.dataLimite, resp:t.responsavel}))
+  ];
+  const header = [
+    'LexFlow - Compromissos do dia',
+    `Escritório: ${tenant?.name || 'LexFlow'}`,
+    `Data: ${formatBrDate(day)}`,
+    '',
+    `Prazos vencidos: ${vencidos.length}`,
+    `Prazos vencem hoje: ${hoje.length}`,
+    `Audiências hoje: ${audiencias.length}`,
+    `Tarefas vencidas/hoje: ${tarefas.length}`,
+    ''
+  ];
+  const body = items.length
+    ? ['Itens:', ...items.map((item, idx) => `${idx + 1}. [${item.tipo}] ${item.cliente || 'Sem cliente'} | ${item.processo || 'Sem processo'} | ${item.desc || 'Sem descrição'} | ${formatBrDate(item.data)} | resp.: ${item.resp || 'sem responsável'}`)]
+    : ['Nenhum compromisso crítico para hoje.'];
+  return {text:[...header, ...body].join('\n'), items, counts:{vencidos:vencidos.length, hoje:hoje.length, audiencias:audiencias.length, tarefas:tarefas.length}};
+}
+
+async function postWebhook(url, token, payload){
+  if(!url) return {skipped:true, reason:'webhook_not_configured'};
+  const headers = {'Content-Type':'application/json'};
+  if(token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(url, {method:'POST', headers, body:JSON.stringify(payload)});
+  const body = await response.text().catch(() => '');
+  return {ok:response.ok, status:response.status, body:body.slice(0, 500)};
+}
+
+async function dispatchDailySummary(env, tenant, settings, data, opts = {}){
+  const cfg = normalizeDailySummarySettings(settings);
+  const day = opts.day || onlyDateInTimezone(new Date(), cfg.timezone);
+  const summary = buildDailySummaryText(tenant, data, day);
+  const results = [];
+  if(cfg.channels.whatsapp){
+    for(const to of cfg.whatsappNumbers){
+      results.push({channel:'whatsapp', to, result:await postWebhook(env.WHATSAPP_WEBHOOK_URL, env.WHATSAPP_WEBHOOK_TOKEN, {to, message:summary.text, tenantId:tenant.id, day})});
+    }
+  }
+  if(cfg.channels.email){
+    for(const to of cfg.emails){
+      results.push({channel:'email', to, result:await postWebhook(env.EMAIL_WEBHOOK_URL, env.EMAIL_WEBHOOK_TOKEN, {
+        to,
+        subject:`LexFlow - Compromissos do dia ${formatBrDate(day)}`,
+        text:summary.text,
+        html:`<pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${summary.text.replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]))}</pre>`,
+        tenantId:tenant.id,
+        day
+      })});
+    }
+  }
+  return {day, summary, results};
+}
+
+async function handleDailySummary(request, env, auth){
+  const url = new URL(request.url);
+  const tenantId = auth.user.role === 'master' && url.searchParams.get('tenantId') ? url.searchParams.get('tenantId') : auth.user.tenantId;
+  if(auth.user.role !== 'master' && tenantId !== auth.user.tenantId) return json({error:'forbidden'}, 403);
+  const tenant = await env.LEXFLOW_CACHE.get(tenantKey(tenantId), {type:'json'}) || {id:tenantId, name:'LexFlow'};
+  const settings = await env.LEXFLOW_CACHE.get(settingsKey(tenantId), {type:'json'}) || {tenantId};
+  const data = await env.LEXFLOW_CACHE.get(operationalDataKey(tenantId), {type:'json'}) || {};
+  const cfg = normalizeDailySummarySettings(settings);
+  const day = url.searchParams.get('date') || onlyDateInTimezone(new Date(), cfg.timezone);
+  if(request.method === 'POST' || url.searchParams.get('send') === '1'){
+    const dispatched = await dispatchDailySummary(env, tenant, settings, data, {day});
+    await auditLog(env, tenantId, auth.user, 'daily_summary.manual_send', {day, results:dispatched.results});
+    return json({ok:true, ...dispatched});
+  }
+  return json({ok:true, day, config:cfg, ...buildDailySummaryText(tenant, data, day), snapshotUpdatedAt:data.updatedAt || ''});
+}
+
+async function runDailySummaries(env, cron = ''){
+  const tenants = (await listTenants(env)).filter(t => t && t.status !== 'inactive');
+  const now = new Date();
+  const results = [];
+  for(const tenant of tenants){
+    if(tenant.id === MASTER_TENANT_ID) continue;
+    const settings = await env.LEXFLOW_CACHE.get(settingsKey(tenant.id), {type:'json'}) || {tenantId:tenant.id};
+    const cfg = normalizeDailySummarySettings(settings);
+    if(!cfg.enabled) continue;
+    const currentTime = timeInTimezone(now, cfg.timezone);
+    if(currentTime.slice(0, 2) !== cfg.hour.slice(0, 2)) continue;
+    const day = onlyDateInTimezone(now, cfg.timezone);
+    if(await env.LEXFLOW_CACHE.get(dailySummarySentKey(tenant.id, day))) continue;
+    const data = await env.LEXFLOW_CACHE.get(operationalDataKey(tenant.id), {type:'json'}) || {};
+    const dispatched = await dispatchDailySummary(env, tenant, settings, data, {day});
+    await env.LEXFLOW_CACHE.put(dailySummarySentKey(tenant.id, day), JSON.stringify({sentAt:nowIso(), cron, results:dispatched.results}), {expirationTtl:60 * 60 * 24 * 40});
+    await auditLog(env, tenant.id, {id:'system', email:'system@lexflow'}, 'daily_summary.cron_send', {day, cron, results:dispatched.results});
+    results.push({tenantId:tenant.id, day, results:dispatched.results});
+  }
+  return results;
 }
 
 function sleep(ms){
@@ -1278,6 +1485,8 @@ export default {
       if(url.pathname === '/api/audit-log') return handleAuditLog(request, env, auth);
       if(url.pathname === '/api/integrations/test') return handleIntegrationTest(request, env, auth);
       if(url.pathname === '/api/a3/requests') return handleA3Requests(request, env, auth);
+      if(url.pathname === '/api/operational-data') return handleOperationalData(request, env, auth);
+      if(url.pathname === '/api/daily-summary') return handleDailySummary(request, env, auth);
       if(url.pathname === '/api/controljus/publicacoes') return proxyControlJus(request, env, auth);
       if(url.pathname === '/api/controljus/status') return proxyControlJusStatus(request, env, auth);
       if(url.pathname === '/api/controljus/refresh') return proxyControlJusRefresh(request, env, auth);
@@ -1302,7 +1511,9 @@ export default {
         refreshControlJusBackend(env, 'cloudflare_cron', controller.cron)
           .then(result => console.log(JSON.stringify({event:'controljus_cron_sync', cron:controller.cron, result}))),
         refreshDjen(env)
-          .then(result => console.log(JSON.stringify({event:'djen_cron_sync', cron:controller.cron, comunicacoes:result.comunicacoes.length})))
+          .then(result => console.log(JSON.stringify({event:'djen_cron_sync', cron:controller.cron, comunicacoes:result.comunicacoes.length}))),
+        runDailySummaries(env, controller.cron)
+          .then(result => console.log(JSON.stringify({event:'daily_summary_cron', cron:controller.cron, result})))
       ]).then(results => {
         results.filter(result => result.status === 'rejected').forEach(result => {
           console.error(JSON.stringify({event:'cron_sync_error', cron:controller.cron, message:result.reason?.message || 'Erro desconhecido'}));
