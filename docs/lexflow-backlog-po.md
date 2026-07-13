@@ -362,7 +362,8 @@ Prioridade 3 - Operacao:
 - [x] Criar tarefa a partir da publicacao.
 - [x] Responsavel obrigatorio para prazos criticos.
 - [x] Criar acervo historico pesquisavel por processo/cliente/tribunal.
-- [ ] Checklist inicial por tipo de ato.
+- [x] Checklist inicial por tipo de ato.
+- [x] Kanban de tarefas com colunas renomeaveis.
 - [ ] Campo comprovante/protocolo ao concluir prazo/tarefa.
 
 Fora da sprint:
@@ -399,8 +400,9 @@ Fora da sprint:
 ### Sprint 4 - Workflow de Execucao
 
 - [x] Criar tarefas a partir de publicacao.
-- [ ] Checklist por tipo de ato.
-- [ ] Responsavel obrigatorio em itens criticos.
+- [x] Checklist por tipo de ato.
+- [x] Responsavel obrigatorio em itens criticos.
+- [x] Kanban de tarefas com fluxo configuravel.
 - [ ] Conclusao com comprovante.
 
 ## Proximo Item Ativo

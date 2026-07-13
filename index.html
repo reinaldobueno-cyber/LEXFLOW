@@ -320,6 +320,26 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .archive-event{position:relative; font-size:12px; color:var(--ink-2);}
 .archive-event::before{content:''; position:absolute; left:-20px; top:4px; width:8px; height:8px; border-radius:50%; background:var(--azul);}
 .archive-event .date{font-family:'IBM Plex Mono',monospace; color:var(--ink-soft); font-size:10.5px; margin-bottom:2px;}
+.kanban-board{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; align-items:start;}
+.kanban-column{background:#F8FAFC; border:1px solid var(--line); border-radius:10px; padding:10px; min-height:180px;}
+.kanban-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;}
+.kanban-head h4{font-size:12.5px; font-weight:800; color:var(--ink); line-height:1.2;}
+.kanban-count{font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink-soft); background:var(--white); border:1px solid var(--line); border-radius:999px; padding:2px 7px;}
+.task-card{background:var(--white); border:1px solid var(--line); border-radius:8px; padding:11px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px; margin-bottom:9px;}
+.task-card .task-title{font-size:13px; font-weight:800; color:var(--ink); line-height:1.25;}
+.task-card .task-meta{font-size:11px; color:var(--ink-soft); line-height:1.35;}
+.task-card .task-foot{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;}
+.task-card .task-actions{display:flex; gap:5px; flex-wrap:wrap;}
+.checklist-mini{display:flex; flex-direction:column; gap:4px; border-top:1px solid var(--line); padding-top:8px;}
+.checklist-mini div{font-size:11px; color:var(--ink-soft); display:flex; gap:5px; align-items:flex-start;}
+.checklist-mini .done{text-decoration:line-through; opacity:.65;}
+.checklist-progress{font-size:10.5px; font-weight:800; color:var(--azul); background:#EFF8FF; border-radius:999px; padding:3px 7px;}
+.task-checklist-editor{border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:#F8FAFC; display:flex; flex-direction:column; gap:7px;}
+.task-checklist-editor label{display:flex; align-items:flex-start; gap:7px; font-size:12px; color:var(--ink-2);}
+.task-checklist-editor input{margin-top:2px;}
+.segmented{display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--white);}
+.segmented button{border:0; background:transparent; padding:8px 11px; font-weight:800; font-size:11.5px; color:var(--ink-soft); cursor:pointer;}
+.segmented button.active{background:#EFF8FF; color:var(--azul);}
 
 /* Integração / roadmap tab */
 .roadmap-hero{background:#101828; color:#F9FAFB; border-radius:8px; padding:26px 28px; margin-bottom:24px;}
@@ -503,7 +523,8 @@ const PRAZO_REVIEW_RECOMMENDED = ['revisao_recomendada','sem_regra_confiavel'];
 const AUDI_STATUSES = ['Agendada','Preparar documentos','Confirmar cliente','Confirmar link','Realizada','Remarcada','Cancelada','Arquivado'];
 const AUDI_DONE = ['Realizada','Cancelada','Arquivado'];
 const AUDI_ARCHIVED = ['Arquivado'];
-const TAREFA_STATUSES = ['Aberta','Em andamento','Aguardando terceiro','Concluída','Atrasada','Arquivado'];
+const TAREFA_STATUSES = ['Aberta','Em andamento','Aguardando terceiro','Revisão','Concluída','Atrasada','Arquivado'];
+const DEFAULT_TASK_COLUMNS = ['Aberta','Em andamento','Aguardando terceiro','Revisão','Concluída'];
 const TAREFA_DONE = ['Concluída','Arquivado'];
 const TAREFA_ARCHIVED = ['Arquivado'];
 const PUB_STATUSES = ['Novo','Em análise','Gerou prazo','Não gera prazo','Tarefa criada','Concluído','Arquivado'];
@@ -730,6 +751,8 @@ function ensureFixedConfig(){
   if(!DB.config.a3AgentUrl){ DB.config.a3AgentUrl = LEXFLOW_A3_AGENT_DEFAULT; changed = true; }
   if(!DB.config.a3AgentStatus || DB.config.a3AgentStatus === 'not_installed'){ DB.config.a3AgentStatus = 'browser_ready'; changed = true; }
   if(typeof DB.config.a3RequireConsent !== 'boolean'){ DB.config.a3RequireConsent = true; changed = true; }
+  if(!Array.isArray(DB.config.taskColumns) || !DB.config.taskColumns.length){ DB.config.taskColumns = DEFAULT_TASK_COLUMNS.slice(); changed = true; }
+  if(!DB.config.taskView){ DB.config.taskView = 'kanban'; changed = true; }
   if(!DB.checklist){ DB.checklist = {}; changed = true; }
   ['exportBtn','tableCopy','apiEndpoints'].forEach(k=>{
     if(Object.prototype.hasOwnProperty.call(DB.checklist,k)){ delete DB.checklist[k]; changed = true; }
@@ -1422,7 +1445,7 @@ function renderNav(){
       if(v.id==='publicacoes'){ const pubs=publicacoesOperacionais(); const n=pubs.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${pubs.length}</span>`; }
       if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>isIntegratedPrazo(p) && !PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
       if(v.id==='audiencias') badge = `<span class="badge">${DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status)).length}</span>`;
-      if(v.id==='tarefas') badge = `<span class="badge">${DB.tarefas.filter(t=>!TAREFA_DONE.includes(t.status)).length}</span>`;
+      if(v.id==='tarefas') badge = `<span class="badge">${DB.tarefas.filter(t=>!isTaskDone(t)).length}</span>`;
       if(v.id==='alertas' && critCount>0) badge = `<span class="badge crit">${critCount}</span>`;
       html += `<button data-view="${v.id}" class="${v.id===currentView?'active':''}"><span class="ic">${v.icon}</span>${v.label}${badge}</button>`;
     });
@@ -1717,7 +1740,7 @@ function acervoProcessos(){
     const row = ensure(t.processo);
     row.tarefas.push(t);
     if(t.cliente) row.clientes.add(t.cliente);
-    row.active = row.active || !TAREFA_DONE.includes(t.status);
+    row.active = row.active || !isTaskDone(t);
     touchDate(row, t.dataLimite);
   });
   (DB.historico || []).forEach(ev=>{
@@ -1999,7 +2022,7 @@ function renderDashboard(){
   const em3 = activePrazos.filter(p=>{if(PRAZO_DONE.includes(p.status))return false; const d=diasRestantes(p.prazoFatal); return d>0&&d<=3;}).length;
   const em7 = activePrazos.filter(p=>{if(PRAZO_DONE.includes(p.status))return false; const d=diasRestantes(p.prazoFatal); return d>3&&d<=7;}).length;
   const pubSemTratamento = activePubs.filter(p=>PUB_UNTREATED.includes(p.status)).length;
-  const tarefasSemResp = activeTarefas.filter(t=>!TAREFA_DONE.includes(t.status) && !t.responsavel).length;
+  const tarefasSemResp = activeTarefas.filter(t=>!isTaskDone(t) && !t.responsavel).length;
   const audiProximas = activeAudi.filter(a=>{if(AUDI_DONE.includes(a.status))return false; const d=diasRestantes(a.data); return d>=0&&d<=7;}).length;
   const semRespTotal = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status)&&!p.responsavel).length + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&!a.responsavel).length;
   const pubsRestritas = activePubs.filter(isRestrictedPublication).length;
@@ -2367,6 +2390,7 @@ async function createTaskFromPublication(pub){
     link:pub.linkOrigem || '',
     concluidoEm:''
   };
+  task.checklist = taskChecklistTemplate(task).map(text=>({text, done:false}));
   DB.tarefas.push(task);
   pub.tarefaGeradaId = task.id;
   if(PUB_UNTREATED.includes(pub.status)) pub.status = 'Tarefa criada';
@@ -2655,45 +2679,209 @@ function openAudiModal(a){
 }
 
 /* ===================== TAREFAS ===================== */
+function taskColumns(){
+  ensureFixedConfig();
+  const cols = (DB.config.taskColumns || DEFAULT_TASK_COLUMNS).map(c=>cleanText(c)).filter(Boolean);
+  return [...new Set(cols.length ? cols : DEFAULT_TASK_COLUMNS)];
+}
+
+function isTaskDone(task){
+  const cols = taskColumns();
+  const finalCol = cols[cols.length - 1];
+  return Boolean(task && (TAREFA_DONE.includes(task.status) || task.status === finalCol));
+}
+
+function taskStatusOptions(current=''){
+  const values = [...new Set([...taskColumns(), ...TAREFA_STATUSES, current].filter(Boolean))];
+  return values.map(s=>`<option ${current===s?'selected':''}>${esc(s)}</option>`).join('');
+}
+
+function taskColumnSet(rows=[]){
+  const cols = taskColumns();
+  rows.forEach(t=>{
+    if(t.status && !TAREFA_ARCHIVED.includes(t.status) && !cols.includes(t.status)) cols.push(t.status);
+  });
+  return cols;
+}
+
+function taskChecklistTemplate(task){
+  const text = normalizePersonName(`${task?.titulo || ''} ${task?.observacao || ''}`);
+  if(text.includes('AUDIENCIA')){
+    return ['Conferir data, horário e modalidade', 'Confirmar link/endereço no tribunal', 'Separar documentos essenciais', 'Confirmar responsável e cliente', 'Registrar resultado após a audiência'];
+  }
+  if(text.includes('CONTRARRAZOES')){
+    return ['Conferir publicação e termo inicial', 'Baixar decisão/recurso nos autos', 'Validar prazo fatal e responsável', 'Preparar minuta de contrarrazões', 'Revisar e protocolar', 'Salvar comprovante de protocolo'];
+  }
+  if(text.includes('APELACAO')){
+    return ['Conferir sentença/acórdão e intimação', 'Validar prazo e cabimento', 'Levantar pontos de reforma', 'Preparar minuta do recurso', 'Revisar preparo/dispensa quando aplicável', 'Protocolar e salvar comprovante'];
+  }
+  if(text.includes('EMBARGOS') || text.includes(' ED ')){
+    return ['Conferir omissão/contradição/obscuridade', 'Validar prazo curto', 'Preparar minuta objetiva', 'Revisar risco de caráter protelatório', 'Protocolar e salvar comprovante'];
+  }
+  if(text.includes('MANIFESTACAO') || text.includes('VISTA')){
+    return ['Ler integralmente a intimação', 'Identificar providência exigida', 'Validar prazo aplicável', 'Preparar manifestação/documentos', 'Revisar e protocolar se necessário'];
+  }
+  return ['Conferir origem e texto da publicação', 'Validar se gera prazo ou tarefa', 'Definir responsável', 'Executar providência', 'Registrar conclusão/comprovante'];
+}
+
+function ensureTaskChecklist(task){
+  if(!task) return [];
+  if(!Array.isArray(task.checklist) || !task.checklist.length){
+    task.checklist = taskChecklistTemplate(task).map(text=>({text, done:false}));
+  }
+  return task.checklist;
+}
+
+function taskChecklistProgress(task){
+  const list = ensureTaskChecklist(task);
+  const done = list.filter(i=>i.done).length;
+  return {done, total:list.length, label:`${done}/${list.length}`};
+}
+
+function taskChecklistMiniHTML(task){
+  const list = ensureTaskChecklist(task);
+  const progress = taskChecklistProgress(task);
+  return `<div class="checklist-mini">
+    <div><span class="checklist-progress">Checklist ${progress.label}</span></div>
+    ${list.slice(0,3).map(item=>`<div class="${item.done?'done':''}">${item.done?'✓':'□'} <span>${esc(item.text)}</span></div>`).join('')}
+  </div>`;
+}
+
+function taskChecklistEditorHTML(task){
+  const list = ensureTaskChecklist(task);
+  return `<div class="field"><label>Checklist operacional</label><div class="task-checklist-editor">
+    ${list.map((item,idx)=>`<label><input type="checkbox" data-task-check="${idx}" ${item.done?'checked':''}> <span>${esc(item.text)}</span></label>`).join('')}
+  </div></div>`;
+}
+
+async function saveTaskStatus(task, nextStatus){
+  const old = task.status;
+  task.status = nextStatus;
+  if(isTaskDone(task) && !task.concluidoEm) task.concluidoEm = new Date().toISOString();
+  logHist(`Tarefa "${task.titulo}" alterada: ${old} → ${task.status}`);
+  await saveDB();
+  renderAll();
+  toast('Status atualizado');
+}
+
+function openTaskColumnsModal(){
+  const cols = taskColumns();
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `
+    <div class="modal-head"><h3>Colunas do Kanban</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="validation-note">Sugestão inicial: Aberta, Em andamento, Aguardando terceiro, Revisão e Concluída. Você pode renomear as colunas para refletir o fluxo real do escritório.</div>
+      ${cols.map((c,i)=>`<div class="field"><label>Coluna ${i+1}</label><input data-col="${i}" value="${esc(c)}"></div>`).join('')}
+      <div class="field"><label>Nova coluna opcional</label><input id="newColumnName" placeholder="Ex.: Aguardando cliente"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar colunas</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCancel').onclick = hideModal;
+  document.getElementById('mSave').onclick = async ()=>{
+    const oldCols = taskColumns();
+    const nextCols = [...document.querySelectorAll('[data-col]')].map(i=>i.value.trim()).filter(Boolean);
+    const extra = document.getElementById('newColumnName').value.trim();
+    if(extra) nextCols.push(extra);
+    const unique = [...new Set(nextCols)];
+    if(!unique.length){ toast('Mantenha pelo menos uma coluna'); return; }
+    oldCols.forEach((oldName,idx)=>{
+      const nextName = unique[idx];
+      if(nextName && nextName !== oldName){
+        DB.tarefas.forEach(t=>{ if(t.status === oldName) t.status = nextName; });
+      }
+    });
+    DB.config.taskColumns = unique;
+    logHist(`Colunas do Kanban de tarefas atualizadas: ${unique.join(', ')}.`);
+    await saveDB();
+    hideModal();
+    renderAll();
+    toast('Colunas atualizadas');
+  };
+}
+
 function renderTarefas(){
+  ensureFixedConfig();
   const showArch = document.getElementById('fArchT')?.checked;
   let rows = DB.tarefas.slice();
-  if(dashboardFilter==='tarefas_sem_resp') rows = rows.filter(t=>!TAREFA_DONE.includes(t.status) && !t.responsavel);
+  if(dashboardFilter==='tarefas_sem_resp') rows = rows.filter(t=>!isTaskDone(t) && !t.responsavel);
   if(!showArch) rows = rows.filter(t=>!TAREFA_ARCHIVED.includes(t.status));
+  rows.forEach(ensureTaskChecklist);
   rows.sort((a,b)=> (parseDateLocal(a.dataLimite)||parseDateLocal('2999-01-01')) - (parseDateLocal(b.dataLimite)||parseDateLocal('2999-01-01')));
   const filterNote = dashboardFilter==='tarefas_sem_resp' ? `<div class="section-title">Filtro: Tarefas sem responsável <span class="cnt">${rows.length}</span></div>` : '';
-  let html = `${filterNote}<div class="filters"><label class="chk" style="margin-left:auto;"><input type="checkbox" id="fArchT" ${showArch?'checked':''}> Mostrar arquivadas</label><button class="btn primary small" id="addTaskBtn">+ Nova tarefa</button></div>`;
-  html += `<div class="table-wrap"><table><thead><tr><th>Título</th><th>Processo / Cliente</th><th>Responsável</th><th>Data limite</th><th>Prioridade</th><th>Status</th><th></th></tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="7"><div class="empty">Nenhuma tarefa cadastrada. Crie tarefas vinculadas a prazos, audiências ou publicações.</div></td></tr>`; }
-  rows.forEach(t=>{
-    const dr = t.dataLimite ? diasRestantes(t.dataLimite) : null;
-    const done = TAREFA_DONE.includes(t.status);
-    const archived = TAREFA_ARCHIVED.includes(t.status);
-    const color = riskColor(dr, done);
-    html += `<tr data-id="${t.id}" class="${archived?'archived':''}">
-      <td class="cliente">${t.titulo}</td>
-      <td><div class="proc">${t.processo||'—'}</div><div style="font-size:11px; color:var(--ink-soft);">${t.cliente||''}</div></td>
-      <td>${t.responsavel||'<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
-      <td>${t.dataLimite?fmtDate(t.dataLimite):'—'}</td>
-      <td><span class="priority-tag priority-${t.prioridade==='Alta'?'alta':t.prioridade==='Baixa'?'baixa':'media'}">${t.prioridade}</span></td>
-      <td><select class="status-select" data-act="status">${TAREFA_STATUSES.map(s=>`<option ${t.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td class="row-actions"><button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
-    </tr>`;
-  });
-  html += `</tbody></table></div>`;
+  const view = DB.config.taskView || 'kanban';
+  let html = `${filterNote}<div class="filters">
+    <div class="segmented"><button id="taskViewKanban" class="${view==='kanban'?'active':''}">Kanban</button><button id="taskViewTable" class="${view==='table'?'active':''}">Tabela</button></div>
+    <label class="chk" style="margin-left:auto;"><input type="checkbox" id="fArchT" ${showArch?'checked':''}> Mostrar arquivadas</label>
+    <button class="btn small" id="taskColsBtn">Configurar colunas</button>
+    <button class="btn primary small" id="addTaskBtn">+ Nova tarefa</button>
+  </div>`;
+  if(rows.length===0){
+    html += `<div class="empty">Nenhuma tarefa cadastrada. Crie tarefas vinculadas a prazos, audiências ou publicações.</div>`;
+  } else if(view === 'kanban'){
+    const cols = taskColumnSet(rows);
+    html += `<div class="kanban-board">${cols.map((col, colIdx)=>{
+      const items = rows.filter(t=>t.status === col || (!cols.includes(t.status) && colIdx === 0));
+      return `<section class="kanban-column" data-col="${esc(col)}">
+        <div class="kanban-head"><h4>${esc(col)}</h4><span class="kanban-count">${items.length}</span></div>
+        ${items.length ? items.map(t=>{
+          const dr = t.dataLimite ? diasRestantes(t.dataLimite) : null;
+          const progress = taskChecklistProgress(t);
+          return `<article class="task-card ${TAREFA_ARCHIVED.includes(t.status)?'archived':''}" data-id="${esc(t.id)}">
+            <div class="task-title">${esc(t.titulo)}</div>
+            <div class="task-meta"><span class="mono">${esc(t.processo || 'sem processo')}</span><br>${esc(t.cliente || 'sem cliente')}</div>
+            <div class="task-meta">Resp.: ${esc(t.responsavel || 'sem responsável')} · ${t.dataLimite?fmtDate(t.dataLimite):'sem data'} · ${dr===null?'':(dr<0?'atrasada':dr===0?'vence hoje':`${dr}d`)}</div>
+            ${taskChecklistMiniHTML(t)}
+            <div class="task-foot">
+              <span class="priority-tag priority-${t.prioridade==='Alta'?'alta':t.prioridade==='Baixa'?'baixa':'media'}">${esc(t.prioridade)}</span>
+              <span class="checklist-progress">${progress.label}</span>
+              <div class="task-actions">
+                ${colIdx>0?`<button class="btn small ghost" data-act="prev">←</button>`:''}
+                ${colIdx<cols.length-1?`<button class="btn small ghost" data-act="next">→</button>`:''}
+                <button class="btn small ghost" data-act="edit">✎</button>
+                ${!TAREFA_ARCHIVED.includes(t.status)?`<button class="btn small ghost" data-act="archive" title="Arquivar">🗄</button>`:''}
+              </div>
+            </div>
+          </article>`;
+        }).join('') : '<div class="empty" style="padding:16px;">Sem tarefas nesta coluna.</div>'}
+      </section>`;
+    }).join('')}</div>`;
+  } else {
+    html += `<div class="table-wrap"><table><thead><tr><th>Título</th><th>Processo / Cliente</th><th>Responsável</th><th>Data limite</th><th>Checklist</th><th>Prioridade</th><th>Status</th><th></th></tr></thead><tbody>`;
+    rows.forEach(t=>{
+      const archived = TAREFA_ARCHIVED.includes(t.status);
+      const progress = taskChecklistProgress(t);
+      html += `<tr data-id="${t.id}" class="${archived?'archived':''}">
+        <td class="cliente">${esc(t.titulo)}</td>
+        <td><div class="proc">${esc(t.processo||'—')}</div><div style="font-size:11px; color:var(--ink-soft);">${esc(t.cliente||'')}</div></td>
+        <td>${esc(t.responsavel||'sem resp.')}</td>
+        <td>${t.dataLimite?fmtDate(t.dataLimite):'—'}</td>
+        <td><span class="checklist-progress">${progress.label}</span></td>
+        <td><span class="priority-tag priority-${t.prioridade==='Alta'?'alta':t.prioridade==='Baixa'?'baixa':'media'}">${esc(t.prioridade)}</span></td>
+        <td><select class="status-select" data-act="status">${taskStatusOptions(t.status)}</select></td>
+        <td class="row-actions"><button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
   document.getElementById('content').innerHTML = html;
   document.getElementById('addTaskBtn').onclick = ()=>openTaskModal(null);
+  document.getElementById('taskColsBtn').onclick = openTaskColumnsModal;
+  document.getElementById('taskViewKanban').onclick = async ()=>{ DB.config.taskView='kanban'; await saveDB(); renderTarefas(); };
+  document.getElementById('taskViewTable').onclick = async ()=>{ DB.config.taskView='table'; await saveDB(); renderTarefas(); };
   const fArchT = document.getElementById('fArchT'); if(fArchT) fArchT.onchange = renderTarefas;
-  document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
-    const id=tr.dataset.id; const t = DB.tarefas.find(x=>x.id===id);
-    tr.querySelector('[data-act="status"]').onchange = async e=>{
-      const old=t.status; t.status = e.target.value;
-      if(t.status==='Concluída' && old!=='Concluída') t.concluidoEm = new Date().toISOString();
-      logHist(`Tarefa "${t.titulo}" alterada: ${old} → ${t.status}`);
-      await saveDB(); renderAll(); toast('Status atualizado');
-    };
-    tr.querySelector('[data-act="edit"]').onclick = ()=>openTaskModal(t);
-    const archBtn = tr.querySelector('[data-act="archive"]');
+  document.querySelectorAll('[data-id]').forEach(el=>{
+    const id=el.dataset.id; const t = DB.tarefas.find(x=>x.id===id);
+    if(!t) return;
+    const statusSelect = el.querySelector('[data-act="status"]');
+    if(statusSelect) statusSelect.onchange = e=>saveTaskStatus(t, e.target.value);
+    const editBtn = el.querySelector('[data-act="edit"]'); if(editBtn) editBtn.onclick = ()=>openTaskModal(t);
+    const cols = taskColumnSet(rows);
+    const idx = cols.indexOf(t.status);
+    const prevBtn = el.querySelector('[data-act="prev"]'); if(prevBtn) prevBtn.onclick = ()=>saveTaskStatus(t, cols[Math.max(0, idx-1)]);
+    const nextBtn = el.querySelector('[data-act="next"]'); if(nextBtn) nextBtn.onclick = ()=>saveTaskStatus(t, cols[Math.min(cols.length-1, idx+1)]);
+    const archBtn = el.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{ t.status='Arquivado'; logHist(`Tarefa "${t.titulo}" arquivada.`); await saveDB(); renderAll(); toast('Tarefa arquivada'); };
   });
 }
@@ -2701,6 +2889,7 @@ function renderTarefas(){
 function openTaskModal(t){
   const isNew = !t;
   const d = t || {id:uid(), titulo:'', processo:'', cliente:'', responsavel:'', dataLimite:'', status:'Aberta', prioridade:'Média', observacao:''};
+  ensureTaskChecklist(d);
   const box = document.getElementById('modalBox');
   box.innerHTML = `
     <div class="modal-head"><h3>${isNew?'Nova tarefa':'Editar tarefa'}</h3><button class="close-x" id="mClose">✕</button></div>
@@ -2710,8 +2899,9 @@ function openTaskModal(t){
       <div class="field-row"><div class="field"><label>Responsável</label><input id="mResp" value="${d.responsavel}"></div><div class="field"><label>Data limite</label><input type="date" id="mData" value="${d.dataLimite}"></div></div>
       <div class="field-row">
         <div class="field"><label>Prioridade</label><select id="mPrio"><option ${d.prioridade==='Alta'?'selected':''}>Alta</option><option ${d.prioridade==='Média'?'selected':''}>Média</option><option ${d.prioridade==='Baixa'?'selected':''}>Baixa</option></select></div>
-        <div class="field"><label>Status</label><select id="mStatus">${TAREFA_STATUSES.map(s=>`<option ${d.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Status</label><select id="mStatus">${taskStatusOptions(d.status)}</select></div>
       </div>
+      ${taskChecklistEditorHTML(d)}
       <div class="field"><label>Observações</label><textarea id="mObs">${d.observacao}</textarea></div>
     </div>
     <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar tarefa</button></div>
@@ -2732,6 +2922,13 @@ function openTaskModal(t){
       status:document.getElementById('mStatus').value,
       observacao:document.getElementById('mObs').value.trim(),
     };
+    updated.checklist = isNew
+      ? taskChecklistTemplate(updated).map(text=>({text, done:false}))
+      : [...document.querySelectorAll('[data-task-check]')].map((input,idx)=>({
+          text:d.checklist[idx]?.text || '',
+          done:input.checked
+        })).filter(item=>item.text);
+    if(isTaskDone(updated) && !updated.concluidoEm) updated.concluidoEm = new Date().toISOString();
     if(isNew){ DB.tarefas.push(updated); logHist(`Nova tarefa criada: "${titulo}"`); }
     else{ const idx=DB.tarefas.findIndex(x=>x.id===d.id); DB.tarefas[idx]=updated; logHist(`Tarefa "${titulo}" editada.`); }
     await saveDB(); hideModal(); renderAll(); toast('Tarefa salva');
