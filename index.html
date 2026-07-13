@@ -283,6 +283,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .deadline-summary span{display:block; color:var(--ink-soft); font-size:10px; text-transform:uppercase; font-weight:800; margin-bottom:4px;}
 .deadline-summary strong{display:block; font-size:13px;}
 .validation-note{border-left:3px solid var(--azul); padding:8px 10px; background:#EFF8FF; color:var(--ink-2); font-size:12px; line-height:1.45;}
+.responsavel-required{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; color:var(--vermelho); background:#FEF3F2; border-radius:999px; padding:3px 8px;}
 .modal-foot{padding:16px 22px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:8px;}
 .field{display:flex; flex-direction:column; gap:5px;}
 .field label{font-size:11.5px; font-weight:600; color:var(--ink-2);}
@@ -1763,6 +1764,19 @@ function canConfirmLexflowDeadline(prazo){
   return Boolean(prazo?.motorPrazo && !['confirmado','rejeitado'].includes(prazo.validacaoStatus));
 }
 
+function requiresPrazoResponsavel(prazo){
+  if(!prazo || PRAZO_DONE.includes(prazo.status)) return false;
+  if(!isIntegratedPrazo(prazo)) return false;
+  const dr = diasRestantes(prazo.prazoFatal);
+  return prazo.prioridade === 'Alta' || canConfirmLexflowDeadline(prazo) || needsDeadlineReview(prazo) || (dr !== null && dr <= 7);
+}
+
+function responsavelPrazoHTML(prazo){
+  if(prazo.responsavel) return esc(prazo.responsavel);
+  if(requiresPrazoResponsavel(prazo)) return '<span class="responsavel-required">Responsável obrigatório</span>';
+  return '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>';
+}
+
 function prazoMemoryHTML(d){
   if(!d?.motorPrazo) return `<div class="empty">Este prazo ainda não tem memória de cálculo do motor LexFlow.</div>`;
   const fatoresCalculo = Array.isArray(d.fatoresCalculo) && d.fatoresCalculo.length
@@ -1845,6 +1859,10 @@ function openDeadlineValidationModal(prazo){
     const reason = document.getElementById('vReason').value.trim();
     if(decision !== 'rejeitar' && !fatal){ toast('Informe o prazo fatal validado'); return; }
     if(!reason){ toast('Informe a justificativa da validação'); return; }
+    if(decision !== 'rejeitar' && requiresPrazoResponsavel({...prazo, prazoFatal:fatal, status:'Protocolar'}) && !prazo.responsavel){
+      toast('Atribua um responsável antes de confirmar prazo crítico');
+      return;
+    }
     const user = AUTH.user?.name || AUTH.user?.email || 'LexFlow';
     const now = new Date().toISOString();
     const oldFatal = prazo.prazoFatal;
@@ -2333,7 +2351,7 @@ function renderPrazos(){
       <td>${validationPill(p)}${p.prazoAjustado?`<div class="recorte-meta">ajustado</div>`:''}</td>
       <td>${fmtDate(p.prazoFatal)}</td>
       <td>${pill(done?'Concluído':(dr<0?'Vencido':dr===0?'Hoje':dr+'d'), color)}</td>
-      <td>${p.responsavel || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
+      <td>${responsavelPrazoHTML(p)}</td>
       <td><select class="status-select" data-act="status">${PRAZO_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td><span class="priority-tag priority-${p.prioridade==='Alta'?'alta':p.prioridade==='Baixa'?'baixa':'media'}">${p.prioridade}</span></td>
       <td class="row-actions">
@@ -2355,7 +2373,13 @@ function renderPrazos(){
   document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
     const id = tr.dataset.id; const p = DB.prazos.find(x=>x.id===id);
     tr.querySelector('[data-act="status"]').onchange = async e=>{
-      const old = p.status; p.status = e.target.value;
+      const old = p.status; const nextStatus = e.target.value;
+      if(requiresPrazoResponsavel({...p, status:nextStatus}) && !p.responsavel && !PRAZO_ARCHIVED.includes(nextStatus)){
+        e.target.value = old;
+        toast('Prazo crítico precisa de responsável antes de avançar');
+        return;
+      }
+      p.status = nextStatus;
       if(p.status==='Concluído' && old!=='Concluído') p.concluidoEm = new Date().toISOString();
       logHist(`Prazo de ${p.cliente} (${p.processo}) alterado: ${old} → ${p.status}`);
       await saveDB(); renderAll(); toast('Status atualizado');
@@ -2380,6 +2404,7 @@ function openPrazoModal(p, fromPub){
     <div class="modal-head"><h3>${isNew?'Novo prazo':'Editar prazo'}</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
       ${fromPub?`<div style="font-size:12px; background:#EFF8FF; color:var(--azul); padding:8px 10px; border-radius:7px;">Gerado a partir da publicação integrada de ${fmtDate(fromPub.dataPublicacao)}.</div>`:''}
+      ${requiresPrazoResponsavel(d) && !d.responsavel ? `<div class="validation-note" style="border-left-color:var(--vermelho); background:#FEF3F2;">Prazo crítico integrado: informe um responsável antes de salvar ou avançar o status.</div>` : ''}
       ${memoriaMotor}
       <div class="field-row">
         <div class="field"><label>Cliente</label><input id="mCliente" value="${d.cliente}"></div>
@@ -2424,6 +2449,10 @@ function openPrazoModal(p, fromPub){
       link:document.getElementById('mLink').value.trim(),
       observacao:document.getElementById('mObs').value.trim(),
     };
+    if(requiresPrazoResponsavel(updated) && !updated.responsavel && !PRAZO_ARCHIVED.includes(updated.status)){
+      toast('Prazo crítico precisa de responsável');
+      return;
+    }
     if(isNew){
       DB.prazos.push(updated);
       logHist(`Novo prazo cadastrado: ${cliente} (${processo})${fromPub?' — origem: publicação integrada':''}`);

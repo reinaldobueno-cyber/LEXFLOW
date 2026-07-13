@@ -264,7 +264,7 @@ Itens:
 - [x] Criar prazo a partir de publicacao.
 - [ ] Criar tarefa a partir de publicacao.
 - [ ] Checklist operacional por tipo de ato.
-- [ ] Responsavel obrigatorio para itens criticos.
+- [x] Responsavel obrigatorio para itens criticos.
 - [ ] Aprovacao/revisao antes de concluir.
 - [ ] Campo "comprovante/protocolo".
 
@@ -358,7 +358,7 @@ Prioridade 2 - Motor de prazo validavel:
 Prioridade 3 - Operacao:
 
 - [x] Criar tarefa a partir da publicacao.
-- [ ] Responsavel obrigatorio para prazos criticos.
+- [x] Responsavel obrigatorio para prazos criticos.
 - [ ] Checklist inicial por tipo de ato.
 - [ ] Campo comprovante/protocolo ao concluir prazo/tarefa.
 
