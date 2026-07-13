@@ -514,9 +514,10 @@ function plusOneHour(timeVal='09:00'){
   return `${String(Number(h)+1).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 function calendarEventFor(type, item){
+  const defaultTime = DB.config?.calendarDefaultTime || '09:00';
   if(type === 'audiencia') return {title:`Audiência - ${item.cliente || item.processo || 'LexFlow'}`, start:item.data, time:item.horario || '09:00', allDay:false, details:[item.tipo,item.modalidade,item.processo,item.observacoes,item.link].filter(Boolean).join('\n'), location:item.link || item.estado || ''};
-  if(type === 'tarefa') return {title:`Tarefa - ${item.titulo || item.cliente || 'LexFlow'}`, start:item.dataLimite, time:'09:00', allDay:true, details:[item.cliente,item.processo,item.responsavel?`Responsável: ${item.responsavel}`:'',item.observacao].filter(Boolean).join('\n'), location:''};
-  return {title:`Prazo fatal - ${item.cliente || item.processo || 'LexFlow'}`, start:item.prazoFatal, time:'09:00', allDay:true, details:[item.tipoPrazo,item.processo,item.tribunal,item.responsavel?`Responsável: ${item.responsavel}`:'',item.observacao].filter(Boolean).join('\n'), location:item.link || ''};
+  if(type === 'tarefa') return {title:`Tarefa - ${item.titulo || item.cliente || 'LexFlow'}`, start:item.dataLimite, time:defaultTime, allDay:true, details:[item.cliente,item.processo,item.responsavel?`Responsável: ${item.responsavel}`:'',item.observacao].filter(Boolean).join('\n'), location:''};
+  return {title:`Prazo fatal - ${item.cliente || item.processo || 'LexFlow'}`, start:item.prazoFatal, time:defaultTime, allDay:true, details:[item.tipoPrazo,item.processo,item.tribunal,item.responsavel?`Responsável: ${item.responsavel}`:'',item.observacao].filter(Boolean).join('\n'), location:item.link || ''};
 }
 function calendarGoogleUrl(ev){
   const dates = ev.allDay ? `${compactDate(ev.start)}/${compactDate(addDaysISO(ev.start,1))}` : `${compactDate(ev.start)}T${(ev.time||'09:00').replace(':','')}00/${compactDate(ev.start)}T${plusOneHour(ev.time).replace(':','')}00`;
@@ -530,7 +531,9 @@ function downloadCalendarICS(type, item){
   if(!ev.start){ toast('Item sem data para agenda'); return; }
   const dtStart = ev.allDay ? `DTSTART;VALUE=DATE:${compactDate(ev.start)}` : `DTSTART:${compactDate(ev.start)}T${(ev.time||'09:00').replace(':','')}00`;
   const dtEnd = ev.allDay ? `DTEND;VALUE=DATE:${compactDate(addDaysISO(ev.start,1))}` : `DTEND:${compactDate(ev.start)}T${plusOneHour(ev.time).replace(':','')}00`;
-  const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LexFlow//Agenda//PT-BR','BEGIN:VEVENT',`UID:${type}-${item.id || uid()}@lexflow`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')}`,dtStart,dtEnd,`SUMMARY:${ev.title.replace(/\n/g,' ')}`,`DESCRIPTION:${(ev.details||'').replace(/\n/g,'\\n')}`,`LOCATION:${(ev.location||'').replace(/\n/g,' ')}`,'END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const alarm = Number(DB.config?.calendarReminderMinutes || 0);
+  const alarmLines = alarm > 0 ? ['BEGIN:VALARM',`TRIGGER:-PT${alarm}M`,'ACTION:DISPLAY',`DESCRIPTION:${ev.title.replace(/\n/g,' ')}`,'END:VALARM'] : [];
+  const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LexFlow//Agenda//PT-BR','BEGIN:VEVENT',`UID:${type}-${item.id || uid()}@lexflow`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')}`,dtStart,dtEnd,`SUMMARY:${ev.title.replace(/\n/g,' ')}`,`DESCRIPTION:${(ev.details||'').replace(/\n/g,'\\n')}`,`LOCATION:${(ev.location||'').replace(/\n/g,' ')}`,...alarmLines,'END:VEVENT','END:VCALENDAR'].join('\r\n');
   const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = `${type}-${(item.processo || item.titulo || item.cliente || 'lexflow').replace(/[^\w.-]+/g,'-')}.ics`; a.click();
@@ -540,7 +543,8 @@ function downloadCalendarICS(type, item){
 function calendarActionsHTML(type, item){
   const ev = calendarEventFor(type, item);
   if(!ev.start) return '';
-  return `<span class="calendar-actions"><a class="btn small ghost" href="${esc(calendarGoogleUrl(ev))}" target="_blank" rel="noopener">Google</a><a class="btn small ghost" href="${esc(calendarOutlookUrl(ev))}" target="_blank" rel="noopener">Outlook</a><button class="btn small ghost" data-act="ics" data-cal-type="${esc(type)}">ICS</button></span>`;
+  const provider = DB.config?.calendarProvider || 'google';
+  return `<span class="calendar-actions"><a class="btn small ${provider==='google'?'azul':'ghost'}" href="${esc(calendarGoogleUrl(ev))}" target="_blank" rel="noopener">Google</a><a class="btn small ${provider==='outlook'?'azul':'ghost'}" href="${esc(calendarOutlookUrl(ev))}" target="_blank" rel="noopener">Outlook</a><button class="btn small ${provider==='ics'?'azul':'ghost'}" data-act="ics" data-cal-type="${esc(type)}">ICS</button></span>`;
 }
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 function diasRestantes(dateVal){
@@ -793,6 +797,9 @@ function ensureFixedConfig(){
   if(!DB.config.a3AgentUrl){ DB.config.a3AgentUrl = LEXFLOW_A3_AGENT_DEFAULT; changed = true; }
   if(!DB.config.a3AgentStatus || DB.config.a3AgentStatus === 'not_installed'){ DB.config.a3AgentStatus = 'browser_ready'; changed = true; }
   if(typeof DB.config.a3RequireConsent !== 'boolean'){ DB.config.a3RequireConsent = true; changed = true; }
+  if(!DB.config.calendarProvider){ DB.config.calendarProvider = 'google'; changed = true; }
+  if(!DB.config.calendarDefaultTime){ DB.config.calendarDefaultTime = '09:00'; changed = true; }
+  if(typeof DB.config.calendarReminderMinutes !== 'number'){ DB.config.calendarReminderMinutes = 60; changed = true; }
   if(!Array.isArray(DB.config.taskColumns) || !DB.config.taskColumns.length){ DB.config.taskColumns = DEFAULT_TASK_COLUMNS.slice(); changed = true; }
   if(!DB.config.taskView){ DB.config.taskView = 'kanban'; changed = true; }
   if(!DB.checklist){ DB.checklist = {}; changed = true; }
@@ -3168,7 +3175,7 @@ function renderIntegracao(){
 
     <div class="section-title">Integrações operacionais</div>
     <div class="path-cards">
-      <div class="path-card"><div class="path-tag">Agenda · ativo</div><h4>Google Agenda, Outlook e ICS</h4><p>Prazos, audiências e tarefas já podem ser adicionados à agenda por link direto ou arquivo .ics. Não depende de senha do Google no LexFlow.</p></div>
+      <div class="path-card"><div class="path-tag">Agenda · ativo</div><h4>Google Agenda, Outlook e ICS</h4><p>Prazos, audiências e tarefas já podem ser adicionados à agenda por link direto ou arquivo .ics. Não depende de senha do Google no LexFlow.</p><p><button class="btn small azul" id="goCalendarSettings">Configurar agenda</button></p></div>
       <div class="path-card"><div class="path-tag">Agenda · próximo</div><h4>Sincronização OAuth por escritório</h4><p>Próxima camada: conectar conta Google/Microsoft por tenant para criar eventos automaticamente, com logs e permissão revogável.</p></div>
       <div class="path-card"><div class="path-tag">Alertas · roadmap</div><h4>E-mail, WhatsApp e notificações</h4><p>Alertas de prazo, tarefa sem responsável, publicação restrita e falha de integração entram como canais configuráveis por escritório.</p></div>
     </div>
@@ -3205,6 +3212,12 @@ function renderIntegracao(){
     </div>
   `;
   document.getElementById('content').innerHTML = html;
+  const calBtn = document.getElementById('goCalendarSettings');
+  if(calBtn) calBtn.onclick = ()=>{
+    currentView = 'configuracoes';
+    DB.config.configFocus = 'agenda';
+    renderAll();
+  };
   document.getElementById('syncControlJusBtn').onclick = async ()=>{
     const btn = document.getElementById('syncControlJusBtn');
     btn.disabled = true;
@@ -3286,6 +3299,31 @@ function renderConfiguracoes(){
       <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="syncDjenSettings">Sincronizar DJEN</button><button class="btn primary" id="saveSettings2">Salvar configuração</button></div>
     </div>
 
+    <div class="section-title" id="agendaSettings">Agenda e calendário</div>
+    <div class="path-cards">
+      <div class="path-card">
+        <div class="path-tag">Camada ativa</div>
+        <h4>Links Google, Outlook e arquivo .ics</h4>
+        <p>Não existe login obrigatório aqui. O LexFlow gera links de criação de evento ou arquivo .ics no próprio item. O usuário escolhe Google, Outlook ou baixa o arquivo.</p>
+      </div>
+      <div class="path-card">
+        <div class="path-tag">Próxima camada</div>
+        <h4>OAuth automático por escritório</h4>
+        <p>Para criar eventos sozinho na agenda do escritório, será necessário configurar Google Cloud/Microsoft Entra, consentimento e tokens por TenantID.</p>
+      </div>
+    </div>
+    <div class="table-wrap" style="padding:18px;">
+      <div class="field-row">
+        <div class="field"><label>Provedor destacado</label><select id="cfgCalendarProvider"><option value="google">Google Agenda</option><option value="outlook">Outlook</option><option value="ics">Arquivo ICS</option></select></div>
+        <div class="field"><label>Horário padrão para prazos/tarefas</label><input type="time" id="cfgCalendarTime"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Lembrete padrão no ICS (minutos)</label><input type="number" id="cfgCalendarReminder" min="0" step="15"></div>
+        <div class="field"><label>Status da integração automática</label><input value="OAuth ainda não configurado nesta fase" disabled></div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:14px;"><button class="btn" id="testCalendarLink">Testar link Google</button><button class="btn primary" id="saveSettingsCalendar">Salvar agenda</button></div>
+    </div>
+
     <div class="section-title">Certificado Digital A3 / Token físico</div>
     <div class="path-cards">
       <div class="path-card">
@@ -3325,6 +3363,9 @@ function renderConfiguracoes(){
     document.getElementById('cfgDjenFreq').value = d.frequency || 'manual';
     const oabs = d.oabs?.length ? d.oabs : defaultOabs;
     document.getElementById('cfgDjenOabs').value = oabs.map(o=>`${o.uf || ''} ${o.numero || ''} ${o.nome || ''}`.trim()).join('\n');
+    document.getElementById('cfgCalendarProvider').value = DB.config.calendarProvider || 'google';
+    document.getElementById('cfgCalendarTime').value = DB.config.calendarDefaultTime || '09:00';
+    document.getElementById('cfgCalendarReminder').value = DB.config.calendarReminderMinutes ?? 60;
     const a3Mode = a3.mode === 'local_agent' ? LEXFLOW_A3_MODE_DEFAULT : (a3.mode || LEXFLOW_A3_MODE_DEFAULT);
     document.getElementById('cfgA3Mode').value = a3Mode;
     document.getElementById('cfgA3Status').value = a3.status === 'not_installed' ? 'browser_ready' : (a3.status || 'browser_ready');
@@ -3335,6 +3376,10 @@ function renderConfiguracoes(){
     DB.config.a3AgentUrl = '';
     DB.config.a3AgentStatus = document.getElementById('cfgA3Status').value;
     DB.config.a3RequireConsent = a3.requireConsent !== false;
+    if(DB.config.configFocus === 'agenda'){
+      setTimeout(()=>document.getElementById('agendaSettings')?.scrollIntoView({behavior:'smooth', block:'start'}), 80);
+      DB.config.configFocus = '';
+    }
   }).catch(e=>toast(e.message));
 
   function parseOabs(){
@@ -3347,6 +3392,9 @@ function renderConfiguracoes(){
 
   async function saveSettingsFromForm(){
     const a3Courts = document.getElementById('cfgA3Courts').value.split(/[,;\n]+/).map(item=>item.trim().toUpperCase()).filter(Boolean);
+    DB.config.calendarProvider = document.getElementById('cfgCalendarProvider').value;
+    DB.config.calendarDefaultTime = document.getElementById('cfgCalendarTime').value || '09:00';
+    DB.config.calendarReminderMinutes = Number(document.getElementById('cfgCalendarReminder').value || 0);
     const body = {
       controljus:{apiKey:document.getElementById('cfgControlKey').value.trim(), baseUrl:document.getElementById('cfgControlUrl').value.trim()},
       djen:{authType:document.getElementById('cfgDjenAuth').value, token:document.getElementById('cfgDjenToken').value.trim(), serviceUrl:document.getElementById('cfgDjenUrl').value.trim(), frequency:document.getElementById('cfgDjenFreq').value, oabs:parseOabs()},
@@ -3367,6 +3415,11 @@ function renderConfiguracoes(){
   }
   document.getElementById('saveSettings').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
   document.getElementById('saveSettings2').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
+  document.getElementById('saveSettingsCalendar').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
+  document.getElementById('testCalendarLink').onclick = ()=>{
+    const ev = calendarEventFor('tarefa', {titulo:'Teste LexFlow', cliente:AUTH.user?.tenant?.name || 'Escritório', dataLimite:isoOf(new Date()), observacao:'Evento de teste gerado pelo LexFlow.'});
+    window.open(calendarGoogleUrl(ev), '_blank', 'noopener');
+  };
   document.getElementById('saveSettingsA3').onclick = ()=>saveSettingsFromForm().catch(e=>toast(e.message));
   document.getElementById('testControlJus').onclick = async ()=>{
     const res = await apiFetch('/api/integrations/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'controljus'})});
