@@ -209,15 +209,15 @@ td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
 .recorte-meta{display:block; margin-top:4px; font-size:10.5px; color:var(--azul); font-weight:600;}
 .recorte-open{all:unset; cursor:pointer; display:inline-flex; margin-top:7px; font-size:11px; color:var(--azul); font-weight:800;}
 .recorte-open:hover{text-decoration:underline;}
-.pub-action-card{border:1px solid #E4E7EC; background:#F8FAFC; border-radius:8px; padding:9px 10px; display:flex; flex-direction:column; gap:7px; overflow:hidden;}
+.pub-action-card{border:1px solid #E4E7EC; background:#F8FAFC; border-radius:8px; padding:11px 12px; display:flex; flex-direction:column; gap:8px; overflow:hidden;}
 .pub-action-card.auth{border-color:#F3B8B0; background:#FFF7F5;}
 .pub-action-card.ok{border-color:#B7DFD0; background:#F0FBF6;}
 .pub-action-card.warn{border-color:#F3D59B; background:#FFFAEB;}
 .pub-action-title{font-size:12px; font-weight:800; line-height:1.25; color:var(--ink);}
 .pub-action-meta{font-size:11px; color:var(--ink-soft); line-height:1.35;}
 .pub-action-meta b{color:var(--ink-2);}
-.pub-action-buttons{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
-.pub-action-buttons .btn{padding:5px 8px;}
+.pub-action-buttons{display:flex; flex-wrap:wrap; gap:7px; align-items:center; border-top:1px solid rgba(16,24,40,.08); padding-top:8px;}
+.pub-action-buttons .ops-action{min-height:28px; padding:5px 8px;}
 .pub-ops-box{display:flex; flex-direction:column; gap:7px; align-items:flex-start;}
 .pub-ops-box .status-select{width:132px;}
 .pub-resp{font-size:10.5px; color:var(--ink-soft);}
@@ -229,7 +229,7 @@ td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
 .origin-stack{display:flex; flex-direction:column; align-items:flex-start; gap:4px;}
 .restriction-tag{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; background:#FEF3F2; color:var(--vermelho);}
 .restriction-tag::before{content:''; width:6px; height:6px; border-radius:50%; background:currentColor;}
-.row-actions{white-space:normal; min-width:230px;}
+.row-actions{white-space:normal; min-width:160px;}
 .pub-table td.row-actions{display:table-cell;}
 .row-actions-inner{display:flex; gap:6px; align-items:center; justify-content:flex-start; flex-wrap:wrap;}
 .ops-actions{display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
@@ -240,6 +240,13 @@ td.texto{max-width:320px; font-size:11.5px; color:var(--ink-soft);}
 .ops-action .mark{width:18px; height:18px; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:900; line-height:1; flex-shrink:0;}
 .mark.lex{background:#F7E9ED; color:var(--selo);}
 .mark.neutral{background:#EEF2F6; color:#475467;}
+.action-menu{display:inline-block;}
+.action-menu summary{list-style:none; cursor:pointer; min-height:32px; padding:7px 11px; border-radius:8px; border:1px solid var(--line); background:#fff; font-size:11.5px; font-weight:800; color:var(--ink-2); display:inline-flex; align-items:center; gap:7px;}
+.action-menu summary::-webkit-details-marker{display:none;}
+.action-menu summary::after{content:'▾'; font-size:9px; color:var(--ink-soft);}
+.action-menu[open] summary{border-color:#B2DDFF; background:#EFF8FF; color:var(--azul);}
+.action-menu .menu-panel{min-width:210px; margin-top:7px; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 24px rgba(16,24,40,.10); padding:8px; display:flex; flex-direction:column; gap:6px;}
+.action-menu .menu-panel .channel-action,.action-menu .menu-panel .ops-action{width:100%; justify-content:flex-start;}
 a.link-audi{color:var(--selo); text-decoration:none; font-size:11.5px; font-weight:600;}
 a.link-audi:hover{text-decoration:underline;}
 
@@ -275,7 +282,13 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .analysis-grid{display:grid; grid-template-columns:minmax(320px,1fr) minmax(360px,1.15fr); gap:14px;}
 .analysis-panel{border:1px solid var(--line); border-radius:8px; background:#fff; padding:16px;}
 .analysis-panel h4{font-family:'Source Serif 4',serif; font-size:16px; margin-bottom:10px;}
-.analysis-full-text{max-height:54vh; overflow:auto; white-space:pre-wrap; color:var(--ink-2); font-size:12.5px; line-height:1.55;}
+.analysis-full-text{max-height:54vh; overflow:auto; color:var(--ink-2); font-size:12.5px; line-height:1.65;}
+.publication-text{display:flex; flex-direction:column; gap:10px;}
+.publication-text p{padding-bottom:10px; border-bottom:1px solid #EEF2F6;}
+.publication-text p:last-child{border-bottom:none; padding-bottom:0;}
+.publication-text .text-label{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--azul); font-weight:900; margin-bottom:3px;}
+.publication-text .url{font-family:'IBM Plex Mono',monospace; font-size:11px; overflow-wrap:anywhere; color:var(--azul);}
+.report-box{border:1px solid var(--line); border-radius:8px; background:#F8FAFC; padding:14px; white-space:pre-wrap; font-family:'IBM Plex Mono',monospace; font-size:11.5px; line-height:1.55; max-height:54vh; overflow:auto;}
 .analysis-hero{border:1px solid var(--line); border-radius:10px; background:#F8FAFC; padding:16px; display:flex; flex-direction:column; gap:12px;}
 .analysis-title{font-size:17px; font-weight:800; line-height:1.25;}
 .analysis-sub{display:flex; flex-wrap:wrap; gap:7px; align-items:center;}
@@ -595,14 +608,17 @@ function openWhatsAppShare(type, item){
 }
 function calendarActionsHTML(type, item){
   const ev = calendarEventFor(type, item);
-  if(!ev.start) return `<span class="calendar-actions"><button class="channel-action whatsapp" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button></span>`;
+  if(!ev.start) return `<details class="action-menu"><summary>Compartilhar</summary><div class="menu-panel"><button class="channel-action whatsapp" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button></div></details>`;
   const provider = DB.config?.calendarProvider || 'google';
-  return `<span class="calendar-actions">
+  return `<details class="action-menu">
+    <summary>Compartilhar</summary>
+    <div class="menu-panel">
     <a class="channel-action google ${provider==='google'?'active':''}" href="${esc(calendarGoogleUrl(ev))}" target="_blank" rel="noopener"><span class="brand-mark google">G</span>Google Agenda</a>
     <a class="channel-action outlook ${provider==='outlook'?'active':''}" href="${esc(calendarOutlookUrl(ev))}" target="_blank" rel="noopener"><span class="brand-mark outlook">O</span>Outlook</a>
     <button class="channel-action ics ${provider==='ics'?'active':''}" data-act="ics" data-cal-type="${esc(type)}"><span class="brand-mark ics">ICS</span>Arquivo</button>
     <button class="channel-action whatsapp" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button>
-  </span>`;
+    </div>
+  </details>`;
 }
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 function diasRestantes(dateVal){
@@ -1787,10 +1803,15 @@ function publicationActionCard(pub){
       <div class="pub-action-meta"><b>Base:</b> ${esc(basis)}</div>
       ${s.restricted ? `<div class="pub-action-meta"><b>Restrição:</b> ${esc(s.restrictedReason || 'conteúdo exige fonte autenticada')}</div><div>${sourceStatusTag(pub)}</div>` : ''}
       <div class="pub-action-buttons">
-        <button class="ops-action" data-act="details"><span class="mark lex">L</span>Ver análise</button>
         ${s.dueDate ? `<button class="ops-action primary" data-act="suggest"><span class="mark lex">L</span>Gerar prazo</button>` : ''}
-        <button class="ops-action" data-act="task"><span class="mark lex">L</span>Criar tarefa</button>
-        ${s.restricted && linkStatus.state === 'ok' ? `<button class="ops-action primary" data-act="a3"><span class="mark lex">A3</span>Abrir fonte</button>` : ''}
+        <button class="ops-action" data-act="details"><span class="mark lex">L</span>Análise</button>
+        <details class="action-menu menu-left">
+          <summary>Mais</summary>
+          <div class="menu-panel">
+            <button class="ops-action" data-act="task"><span class="mark lex">L</span>Criar tarefa</button>
+            ${s.restricted && linkStatus.state === 'ok' ? `<button class="ops-action primary" data-act="a3"><span class="mark lex">A3</span>Abrir fonte</button>` : ''}
+          </div>
+        </details>
       </div>
     </div>
   `;
@@ -1803,6 +1824,33 @@ function publicationHistoryHTML(pub){
     .slice(0, 5);
   if(!rows.length) return '<div class="analysis-full-text" style="max-height:none;">Sem histórico específico para este processo.</div>';
   return rows.map(item=>`<div class="hist-item"><div class="t">${esc(fmtDateTime(item.ts))}</div><div>${esc(item.texto)}</div></div>`).join('');
+}
+
+function formattedPublicationTextHTML(text){
+  const raw = cleanText(text || 'Texto não informado.');
+  if(!raw || raw === 'Texto não informado.') return '<div class="publication-text"><p>Texto não informado.</p></div>';
+  const prepared = raw
+    .replace(/\s+(PODER JUDICI[ÁA]RIO|TRIBUNAL DE JUSTI[ÇC]A|DI[ÁA]RIO DA JUSTI[ÇC]A|TJ[A-Z]{2,4}\s+-)/gi, '\n$1')
+    .replace(/\s+(Processo\s+\d|Número do processo|Classe judicial|Data de disponibilização|Polo ativo|Polo passivo|Advogado\(a\)|Advogados\(s\)|Inteiro teor|Código da certidão|Certifico e dou fé|Intimação referente)/gi, '\n$1')
+    .replace(/\s+(https?:\/\/\S+)/gi, '\n$1');
+  const parts = prepared.split(/\n+/).map(cleanText).filter(Boolean);
+  const labelFor = part => {
+    const norm = normalizePersonName(part);
+    if(norm.includes('PROCESSO') || /^\d{7}-\d{2}\./.test(part)) return 'Processo';
+    if(norm.includes('DATA DE DISPONIBILIZACAO')) return 'Disponibilização';
+    if(norm.includes('POLO ATIVO')) return 'Polo ativo';
+    if(norm.includes('POLO PASSIVO')) return 'Polo passivo';
+    if(norm.includes('ADVOGADO')) return 'Advogados';
+    if(norm.includes('INTEIRO TEOR') || norm.includes('HTTPS')) return 'Link / inteiro teor';
+    if(norm.includes('TRIBUNAL') || norm.includes('PODER JUDICIARIO') || norm.includes('DIARIO DA JUSTICA')) return 'Órgão / origem';
+    if(norm.includes('CERTIFICO') || norm.includes('CODIGO DA CERTIDAO')) return 'Certidão';
+    return '';
+  };
+  return `<div class="publication-text">${parts.map(part=>{
+    const label = labelFor(part);
+    const isUrl = /^https?:\/\//i.test(part);
+    return `<p>${label ? `<div class="text-label">${esc(label)}</div>` : ''}<span class="${isUrl?'url':''}">${esc(part)}</span></p>`;
+  }).join('')}</div>`;
 }
 
 function acervoProcessos(){
@@ -1947,7 +1995,7 @@ function openPublicationAnalysisModal(pub){
       <div class="analysis-grid">
         <section class="analysis-panel">
           <h4>Texto completo da publicação</h4>
-          <div class="analysis-full-text">${esc(cleanText(pub.textoRecorte || 'Texto não informado.'))}</div>
+          <div class="analysis-full-text">${formattedPublicationTextHTML(pub.textoRecorte)}</div>
         </section>
         <section>${suggestionDetailsHTML(pub)}</section>
       </div>
@@ -2361,10 +2409,15 @@ function renderPublicacoes(){
         <select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select>
         ${responsibleAssignHTML(p, 'Responsável')}
         <div class="row-actions-inner">
-        ${canGerarPrazo?`<button class="ops-action primary" data-act="genprazo"><span class="mark lex">L</span>Gerar prazo</button>`:''}
-        <button class="ops-action" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button>
-        <button class="ops-action" data-act="edit"><span class="mark lex">L</span>Editar</button>
-        ${!archived?`<button class="ops-action" data-act="archive" title="Arquivar sem excluir"><span class="mark neutral">A</span>Arquivar</button>`:''}
+        <details class="action-menu">
+          <summary>Ações</summary>
+          <div class="menu-panel">
+            ${canGerarPrazo?`<button class="ops-action primary" data-act="genprazo"><span class="mark lex">L</span>Gerar prazo</button>`:''}
+            <button class="channel-action whatsapp" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button>
+            <button class="ops-action" data-act="edit"><span class="mark lex">L</span>Editar dados</button>
+            ${!archived?`<button class="ops-action" data-act="archive" title="Arquivar sem excluir"><span class="mark neutral">A</span>Arquivar</button>`:''}
+          </div>
+        </details>
         </div>
       </div></td>
     </tr>`;
@@ -2581,6 +2634,68 @@ async function createTaskFromPublication(pub){
 /* ===================== PRAZOS ===================== */
 let prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, showValidation:false, sort:'prazoFatal', dir:1};
 
+function deadlineReportText(rows){
+  const active = rows.filter(p=>!PRAZO_ARCHIVED.includes(p.status));
+  const vencidos = active.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)<0).length;
+  const hoje = active.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)===0).length;
+  const proximos = active.filter(p=>{ const d=diasRestantes(p.prazoFatal); return !PRAZO_DONE.includes(p.status) && d>0 && d<=7; }).length;
+  const semResp = active.filter(p=>!PRAZO_DONE.includes(p.status) && !p.responsavel).length;
+  const lines = [
+    'LexFlow - Relatório de prazos',
+    `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+    '',
+    `Total filtrado: ${rows.length}`,
+    `Vencidos: ${vencidos}`,
+    `Vencem hoje: ${hoje}`,
+    `Próximos 7 dias: ${proximos}`,
+    `Sem responsável: ${semResp}`,
+    '',
+    'Itens:'
+  ];
+  rows.slice(0, 40).forEach((p, idx)=>{
+    const dr = diasRestantes(p.prazoFatal);
+    const restam = PRAZO_DONE.includes(p.status) ? 'concluído' : (dr<0?'vencido':dr===0?'vence hoje':`${dr}d`);
+    lines.push(`${idx+1}. ${p.cliente || 'Parte não identificada'} | ${p.processo || 'sem processo'} | ${p.tipoPrazo || 'prazo'} | fatal ${fmtDate(p.prazoFatal)} | ${restam} | resp.: ${p.responsavel || 'sem responsável'}`);
+  });
+  if(rows.length > 40) lines.push(`... +${rows.length - 40} itens não listados neste resumo.`);
+  return lines.join('\n');
+}
+
+function openDeadlineReportModal(rows){
+  const report = deadlineReportText(rows);
+  const box = document.getElementById('modalBox');
+  box.className = 'modal analysis-modal';
+  box.innerHTML = `
+    <div class="modal-head"><h3>Relatório de prazos</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="help-intro">Este relatório respeita os filtros atuais da tela. Use para conferência interna, cobrança de responsáveis ou envio rápido no WhatsApp.</div>
+      <div class="report-box" id="deadlineReportText">${esc(report)}</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="mCopyReport">Copiar texto</button>
+      <button class="btn" id="mDownloadReport">Baixar TXT</button>
+      <button class="btn primary" id="mShareReport">Enviar pelo WhatsApp</button>
+    </div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCopyReport').onclick = async ()=>{
+    await navigator.clipboard.writeText(report).catch(()=>{});
+    toast('Relatório copiado');
+  };
+  document.getElementById('mShareReport').onclick = ()=>window.open(`https://wa.me/?text=${encodeURIComponent(report)}`, '_blank', 'noopener');
+  document.getElementById('mDownloadReport').onclick = ()=>{
+    const blob = new Blob([report], {type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-prazos-${isoOf(new Date())}.txt`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    toast('Relatório gerado');
+  };
+}
+
 function renderPrazos(){
   const respSet = [...new Set(DB.prazos.map(p=>p.responsavel).filter(Boolean))];
   let rows = DB.prazos.slice();
@@ -2608,6 +2723,7 @@ function renderPrazos(){
     <select id="fResp"><option value="">Todos os responsáveis</option>${respSet.map(r=>`<option ${prazoFilters.responsavel===r?'selected':''}>${r}</option>`).join('')}</select>
     <label class="chk"><input type="checkbox" id="fValidation" ${prazoFilters.showValidation?'checked':''}> Mostrar validação/de-para</label>
     <label class="chk"><input type="checkbox" id="fArch" ${prazoFilters.showArchived?'checked':''}> Mostrar arquivados</label>
+    <button class="btn primary small" id="deadlineReportBtn">Relatório de prazos</button>
   </div>`;
 
   html += `<div class="table-wrap"><table><thead><tr>
@@ -2636,9 +2752,14 @@ function renderPrazos(){
       <td><span class="priority-tag priority-${p.prioridade==='Alta'?'alta':p.prioridade==='Baixa'?'baixa':'media'}">${p.prioridade}</span></td>
       <td class="row-actions">
         ${calendarActionsHTML('prazo', p)}
-        ${p.motorPrazo?`<button class="ops-action primary" data-act="validate"><span class="mark lex">L</span>${canConfirmLexflowDeadline(p)?'Validar cálculo':'Ver cálculo'}</button>`:''}
-        <button class="ops-action" data-act="edit"><span class="mark lex">L</span>Editar</button>
-        ${!archived?`<button class="ops-action" data-act="archive" title="Arquivar sem excluir"><span class="mark neutral">A</span>Arquivar</button>`:''}
+        <details class="action-menu">
+          <summary>Ações</summary>
+          <div class="menu-panel">
+            ${p.motorPrazo?`<button class="ops-action primary" data-act="validate"><span class="mark lex">L</span>${canConfirmLexflowDeadline(p)?'Validar cálculo':'Ver cálculo'}</button>`:''}
+            <button class="ops-action" data-act="edit"><span class="mark lex">L</span>Editar prazo</button>
+            ${!archived?`<button class="ops-action" data-act="archive" title="Arquivar sem excluir"><span class="mark neutral">A</span>Arquivar</button>`:''}
+          </div>
+        </details>
       </td>
     </tr>`;
   });
@@ -2650,6 +2771,7 @@ function renderPrazos(){
   document.getElementById('fResp').onchange = e=>{prazoFilters.responsavel=e.target.value; renderPrazos();};
   document.getElementById('fValidation').onchange = e=>{prazoFilters.showValidation=e.target.checked; renderPrazos();};
   document.getElementById('fArch').onchange = e=>{prazoFilters.showArchived=e.target.checked; renderPrazos();};
+  document.getElementById('deadlineReportBtn').onclick = ()=>openDeadlineReportModal(rows);
   document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(prazoFilters.sort===s) prazoFilters.dir*=-1; else {prazoFilters.sort=s; prazoFilters.dir=1;} renderPrazos(); });
   document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
     const id = tr.dataset.id; const p = DB.prazos.find(x=>x.id===id);
