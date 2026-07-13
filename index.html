@@ -316,6 +316,13 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .archive-card .desc{font-size:12px; color:var(--ink-soft); margin-top:6px;}
 .archive-counts{display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end;}
 .archive-counts span{font-size:10.5px; font-weight:700; padding:4px 8px; border-radius:999px; background:#F2F4F7; color:var(--ink-2);}
+.archive-coverage{display:grid; grid-template-columns:1.1fr .9fr; gap:14px; margin:0 0 18px 0;}
+.coverage-panel{background:var(--white); border:1px solid var(--line); border-radius:8px; padding:16px; box-shadow:var(--shadow);}
+.coverage-panel h4{font-family:'Source Serif 4',serif; font-size:16px; margin-bottom:8px;}
+.coverage-panel p{font-size:12.5px; line-height:1.55; color:var(--ink-soft);}
+.coverage-months{display:flex; gap:7px; flex-wrap:wrap; margin-top:12px;}
+.coverage-month{font-size:10.5px; font-weight:800; padding:5px 8px; border-radius:999px; background:#EFF8FF; color:var(--azul); border:1px solid #B2DDFF;}
+.coverage-gap{border-left:3px solid var(--laranja); background:#FFFAEB; padding:10px 12px; border-radius:8px; color:#7A4B00; font-size:12.5px; line-height:1.45;}
 .archive-timeline{border-left:2px solid var(--line); padding-left:14px; display:flex; flex-direction:column; gap:8px;}
 .archive-event{position:relative; font-size:12px; color:var(--ink-2);}
 .archive-event::before{content:''; position:absolute; left:-20px; top:4px; width:8px; height:8px; border-radius:50%; background:var(--azul);}
@@ -377,7 +384,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .check-item:last-child{border-bottom:none;}
 .check-item input{width:16px; height:16px; accent-color:var(--verde);}
 .check-item.checked span{text-decoration:line-through; color:var(--ink-soft);}
-@media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary,.archive-summary,.archive-card{grid-template-columns:1fr;} .archive-counts{justify-content:flex-start;} }
+@media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary,.archive-summary,.archive-card,.archive-coverage{grid-template-columns:1fr;} .archive-counts{justify-content:flex-start;} }
 @media (max-width: 1180px){
   .dashboard-hero, .dashboard-grid{grid-template-columns:1fr;}
   .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
@@ -1825,6 +1832,39 @@ function acervoProcessos(){
     .sort((a,b)=>(b.lastDate || '').localeCompare(a.lastDate || ''));
 }
 
+function monthKey(dateVal){
+  const iso = isoOf(dateVal);
+  return iso ? iso.slice(0, 7) : '';
+}
+
+function monthLabel(key){
+  if(!key) return 'Sem data';
+  const [yy, mm] = key.split('-').map(Number);
+  const dt = new Date(yy, (mm || 1) - 1, 1);
+  return dt.toLocaleDateString('pt-BR', {month:'short', year:'numeric'}).replace('.', '');
+}
+
+function rowMonths(row){
+  const months = new Set();
+  row.publicacoes.forEach(p=>{ const k = monthKey(p.dataPublicacao); if(k) months.add(k); });
+  row.prazos.forEach(p=>{ const k = monthKey(p.prazoFatal || p.dataPublicacao); if(k) months.add(k); });
+  row.audiencias.forEach(a=>{ const k = monthKey(a.data); if(k) months.add(k); });
+  row.tarefas.forEach(t=>{ const k = monthKey(t.dataLimite); if(k) months.add(k); });
+  return [...months].sort();
+}
+
+function acervoCoverage(rows){
+  const monthMap = new Map();
+  rows.forEach(row=>{
+    rowMonths(row).forEach(k=>monthMap.set(k, (monthMap.get(k) || 0) + 1));
+  });
+  const months = [...monthMap.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
+  const datedRows = rows.filter(r=>r.firstDate || r.lastDate);
+  const first = datedRows.reduce((acc,r)=>!acc || (r.firstDate && r.firstDate < acc) ? r.firstDate : acc, '');
+  const last = datedRows.reduce((acc,r)=>!acc || (r.lastDate && r.lastDate > acc) ? r.lastDate : acc, '');
+  return {months, first, last};
+}
+
 function openPublicationAnalysisModal(pub){
   const box = document.getElementById('modalBox');
   const s = deadlineSuggestion(pub);
@@ -3099,7 +3139,7 @@ function renderAlertas(){
 }
 
 /* ===================== HISTÓRICO / ACERVO ===================== */
-let historicoFilters = {q:'', status:'todos'};
+let historicoFilters = {q:'', status:'todos', period:'todos'};
 
 function processStatusPill(row){
   return row.encerrado ? pill('Encerrado/acervo', 'cinza') : pill('Ativo', 'verde');
@@ -3149,9 +3189,11 @@ function renderProcessArchiveModal(row){
 
 function renderHistorico(){
   const all = acervoProcessos();
+  const coverage = acervoCoverage(all);
   let rows = all.slice();
   if(historicoFilters.status === 'ativos') rows = rows.filter(r=>!r.encerrado);
   if(historicoFilters.status === 'encerrados') rows = rows.filter(r=>r.encerrado);
+  if(historicoFilters.period && historicoFilters.period !== 'todos') rows = rows.filter(r=>rowMonths(r).includes(historicoFilters.period));
   if(historicoFilters.q){
     const q = normalizePersonName(historicoFilters.q);
     rows = rows.filter(r=>normalizePersonName(`${r.processo} ${r.cliente} ${r.tribunal}`).includes(q));
@@ -3166,9 +3208,28 @@ function renderHistorico(){
       <div class="archive-metric"><span>Encerrados/arquivados</span><strong>${encerrados}</strong></div>
       <div class="archive-metric"><span>Eventos auditados</span><strong>${eventos.length}</strong></div>
     </div>
+    <div class="archive-coverage">
+      <div class="coverage-panel">
+        <h4>Cobertura histórica carregada</h4>
+        <p>Este acervo mostra somente processos, publicações, prazos, audiências e tarefas que já foram sincronizados ou criados dentro do LexFlow.</p>
+        <div class="analysis-meta-grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:12px;">
+          <div class="analysis-kv"><div class="k">Primeiro registro</div><div class="v">${coverage.first ? fmtDate(coverage.first) : 'Sem dados'}</div></div>
+          <div class="analysis-kv"><div class="k">Último registro</div><div class="v">${coverage.last ? fmtDate(coverage.last) : 'Sem dados'}</div></div>
+          <div class="analysis-kv"><div class="k">Meses com dados</div><div class="v">${coverage.months.length}</div></div>
+        </div>
+        <div class="coverage-months">
+          ${coverage.months.length ? coverage.months.slice(0,18).map(([k,count])=>`<span class="coverage-month">${monthLabel(k)} · ${count}</span>`).join('') : '<span class="coverage-month">Sem meses carregados</span>'}
+        </div>
+      </div>
+      <div class="coverage-panel">
+        <h4>Meses e anos anteriores</h4>
+        <div class="coverage-gap">Se o advogado quiser consultar processos anteriores ao primeiro registro carregado, precisamos executar uma carga histórica retroativa por OAB, processo ou fonte conectada. O LexFlow não deve inventar acervo: ele precisa buscar em DJEN/CNJ, ControlJus autorizado ou portal autenticado.</div>
+      </div>
+    </div>
     <div class="filters">
       <input type="text" id="histBusca" placeholder="Buscar processo, cliente ou tribunal..." value="${esc(historicoFilters.q)}">
       <select id="histStatus"><option value="todos">Todos os processos</option><option value="ativos">Somente ativos</option><option value="encerrados">Encerrados/arquivados</option></select>
+      <select id="histPeriod"><option value="todos">Todos os períodos carregados</option>${coverage.months.map(([k,count])=>`<option value="${esc(k)}">${monthLabel(k)} (${count})</option>`).join('')}</select>
     </div>
     <div class="section-title">Acervo de processos <span class="cnt">${rows.length}</span></div>
   `;
@@ -3197,8 +3258,10 @@ function renderHistorico(){
   html += `</div>`;
   document.getElementById('content').innerHTML = html;
   document.getElementById('histStatus').value = historicoFilters.status;
+  document.getElementById('histPeriod').value = historicoFilters.period || 'todos';
   document.getElementById('histBusca').oninput = e=>{ historicoFilters.q=e.target.value; renderHistorico(); };
   document.getElementById('histStatus').onchange = e=>{ historicoFilters.status=e.target.value; renderHistorico(); };
+  document.getElementById('histPeriod').onchange = e=>{ historicoFilters.period=e.target.value; renderHistorico(); };
   document.querySelectorAll('[data-act="open-archive"]').forEach(btn=>btn.onclick = e=>{
     const processo = e.target.closest('.archive-card').dataset.processo;
     const row = acervoProcessos().find(r=>r.processo === processo);
