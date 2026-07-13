@@ -259,6 +259,21 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .analysis-panel{border:1px solid var(--line); border-radius:8px; background:#fff; padding:16px;}
 .analysis-panel h4{font-family:'Source Serif 4',serif; font-size:16px; margin-bottom:10px;}
 .analysis-full-text{max-height:54vh; overflow:auto; white-space:pre-wrap; color:var(--ink-2); font-size:12.5px; line-height:1.55;}
+.analysis-hero{border:1px solid var(--line); border-radius:10px; background:#F8FAFC; padding:16px; display:flex; flex-direction:column; gap:12px;}
+.analysis-title{font-size:17px; font-weight:800; line-height:1.25;}
+.analysis-sub{display:flex; flex-wrap:wrap; gap:7px; align-items:center;}
+.analysis-meta-grid{display:grid; grid-template-columns:repeat(4, minmax(130px,1fr)); gap:10px;}
+.analysis-kv{border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 12px; min-width:0;}
+.analysis-kv .k{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:800; margin-bottom:4px;}
+.analysis-kv .v{font-size:12.5px; color:var(--ink); font-weight:700; overflow-wrap:anywhere;}
+.analysis-actions{display:flex; flex-wrap:wrap; gap:8px; align-items:center;}
+.filter-chipbar{display:flex; gap:7px; flex-wrap:wrap; margin:-5px 0 14px 0;}
+.filter-chip{border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 10px; font-size:11.5px; font-weight:800; color:var(--ink-2); cursor:pointer;}
+.filter-chip.active{background:#EFF8FF; border-color:#B2DDFF; color:var(--azul);}
+.source-status{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap;}
+.source-status.ok{background:#ECFDF3; color:var(--verde);}
+.source-status.warn{background:#FFFAEB; color:#A15C00;}
+.source-status.bad{background:#FEF3F2; color:var(--vermelho);}
 .modal-foot{padding:16px 22px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:8px;}
 .field{display:flex; flex-direction:column; gap:5px;}
 .field label{font-size:11.5px; font-weight:600; color:var(--ink-2);}
@@ -316,6 +331,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
   .dashboard-hero, .dashboard-grid{grid-template-columns:1fr;}
   .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
   .analysis-grid{grid-template-columns:1fr;}
+  .analysis-meta-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
 }
 @media (max-width: 680px){
   .today-panel{grid-template-columns:1fr;}
@@ -324,6 +340,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
   .command-row{grid-template-columns:44px minmax(0,1fr); align-items:start;}
   .command-side{grid-column:2; text-align:left; display:flex; gap:8px; align-items:center;}
   .command-title .cliente{white-space:normal;}
+  .analysis-meta-grid{grid-template-columns:1fr;}
 }
 
 @media (max-width: 860px){
@@ -956,6 +973,31 @@ function officialA3Target(pub){
   return /^https?:\/\//i.test(sourceUrl) ? sourceUrl : '';
 }
 
+function isOfficialJusticeUrl(url){
+  const value = cleanText(url).toLowerCase();
+  if(!/^https?:\/\//.test(value)) return false;
+  if(value.includes('comunicaapi.pje.jus.br')) return true;
+  if(value.includes('.jus.br')) return true;
+  if(/\b(pje|projudi|esaj|seeu)\b/.test(value)) return true;
+  return false;
+}
+
+function sourceLinkStatus(pub){
+  const url = officialA3Target(pub);
+  if(isOfficialJusticeUrl(url)){
+    return {state:'ok', label:'Link oficial pronto', detail:'Fonte oficial do Judiciário disponível para abertura no navegador.'};
+  }
+  if(url){
+    return {state:'warn', label:'Link de origem', detail:'Há URL de origem, mas ela não parece ser link oficial do tribunal.'};
+  }
+  return {state:'bad', label:'Sem link oficial', detail:'Publicação ainda precisa de URL oficial/autenticada para abrir com A3.'};
+}
+
+function sourceStatusTag(pub){
+  const status = sourceLinkStatus(pub);
+  return `<span class="source-status ${status.state}" title="${esc(status.detail)}">${esc(status.label)}</span>`;
+}
+
 async function openRestrictedWithA3(pub){
   const cfg = a3AgentConfig();
   if(cfg.requireConsent && !confirm(`Abrir a fonte oficial do tribunal para o processo ${pub?.processo || ''}?\n\nO token/certificado A3 será solicitado pelo navegador deste computador, quando o tribunal exigir.`)){
@@ -963,6 +1005,10 @@ async function openRestrictedWithA3(pub){
   }
   let target = officialA3Target(pub);
   let requestId = '';
+  if(!isOfficialJusticeUrl(target)){
+    toast('Esta publicação ainda não tem link oficial do tribunal mapeado para abertura com A3.');
+    return;
+  }
   try{
     const res = await apiFetch('/api/a3/requests', {
       method:'POST',
@@ -993,6 +1039,10 @@ async function openRestrictedWithA3(pub){
   }
   if(!target){
     toast('Esta publicação ainda não possui link oficial mapeado para abertura autenticada.');
+    return;
+  }
+  if(!isOfficialJusticeUrl(target)){
+    toast('Link encontrado não parece ser fonte oficial do tribunal. Precisa mapear a URL correta.');
     return;
   }
   logHist(`Solicitação A3 registrada${requestId?` (${requestId})`:''} para ${displayClientName(pub)} (${pub.processo}). A fonte oficial será aberta no navegador do usuário para uso do certificado físico, quando exigido.`);
@@ -1363,7 +1413,7 @@ function openDashboardFilter(view, filter){
     prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, showValidation:false, sort:'prazoFatal', dir:1};
   }
   if(view==='publicacoes'){
-    pubFilters = {status:'', cliente:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
+    pubFilters = {status:'', cliente:'', origin:'', quick:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
   }
   if(view==='audiencias'){
     audiFilters = {status:'', cliente:'', showArchived:false, sort:'data', dir:1};
@@ -1572,6 +1622,7 @@ function publicationActionCard(pub){
     : (s.dueDate ? `Prazo sugerido: ${fmtDate(s.dueDate)}` : 'Sem prazo automático');
   const cardClass = s.restricted ? 'auth' : (s.dueDate && s.confidence !== 'baixa' ? 'ok' : 'warn');
   const confidence = s.confidence || 'baixa';
+  const linkStatus = sourceLinkStatus(pub);
   return `
     <div class="pub-action-card ${cardClass}">
       <div>
@@ -1579,25 +1630,67 @@ function publicationActionCard(pub){
         <div class="pub-action-meta">${esc(ruleTitle)} · confiança ${esc(confidence)}</div>
       </div>
       <div class="pub-action-meta"><b>Base:</b> ${esc(basis)}</div>
-      ${s.restricted ? `<div class="pub-action-meta"><b>Restrição:</b> ${esc(s.restrictedReason || 'conteúdo exige fonte autenticada')}</div>` : ''}
+      ${s.restricted ? `<div class="pub-action-meta"><b>Restrição:</b> ${esc(s.restrictedReason || 'conteúdo exige fonte autenticada')}</div><div>${sourceStatusTag(pub)}</div>` : ''}
       <div class="pub-action-buttons">
         <button class="btn small ghost" data-act="details">Ver análise</button>
         ${s.dueDate ? `<button class="btn small azul" data-act="suggest">Gerar prazo</button>` : ''}
-        ${s.restricted ? `<button class="btn small azul" data-act="a3">Abrir fonte</button>` : ''}
+        <button class="btn small ghost" data-act="task">Criar tarefa</button>
+        ${s.restricted && linkStatus.state === 'ok' ? `<button class="btn small azul" data-act="a3">Abrir fonte</button>` : ''}
       </div>
     </div>
   `;
 }
 
+function publicationHistoryHTML(pub){
+  const processo = cleanText(pub?.processo);
+  const rows = (DB.historico || [])
+    .filter(item => !processo || cleanText(item.texto).includes(processo))
+    .slice(0, 5);
+  if(!rows.length) return '<div class="analysis-full-text" style="max-height:none;">Sem histórico específico para este processo.</div>';
+  return rows.map(item=>`<div class="hist-item"><div class="t">${esc(fmtDateTime(item.ts))}</div><div>${esc(item.texto)}</div></div>`).join('');
+}
+
 function openPublicationAnalysisModal(pub){
   const box = document.getElementById('modalBox');
+  const s = deadlineSuggestion(pub);
+  const restricao = restrictedInfo(pub);
+  const linkStatus = sourceLinkStatus(pub);
+  const officialUrl = officialA3Target(pub);
   box.className = 'modal analysis-modal';
   box.innerHTML = `
     <div class="modal-head">
-      <h3>Análise da publicação</h3>
+      <h3>Detalhe da publicação</h3>
       <button class="close-x" id="mClose">✕</button>
     </div>
     <div class="modal-body">
+      <section class="analysis-hero">
+        <div>
+          <div class="analysis-title">${esc(displayClientName(pub))}</div>
+          <div class="analysis-sub">
+            ${originTag(pub)}
+            ${restrictionTag(pub)}
+            ${deadlineInfoTag(pub)}
+            ${sourceStatusTag(pub)}
+          </div>
+        </div>
+        <div class="analysis-meta-grid">
+          <div class="analysis-kv"><div class="k">Processo</div><div class="v mono">${esc(pub.processo || '—')}</div></div>
+          <div class="analysis-kv"><div class="k">Tribunal</div><div class="v">${esc(pub.tribunal || '—')}</div></div>
+          <div class="analysis-kv"><div class="k">Publicação</div><div class="v">${esc(fmtDate(pub.dataPublicacao))}</div></div>
+          <div class="analysis-kv"><div class="k">Tipo</div><div class="v">${esc(pub.tipoPublicacao || '—')}</div></div>
+          <div class="analysis-kv"><div class="k">Advogado monitorado</div><div class="v">${esc(pub.advogadoMonitorado || '—')}</div></div>
+          <div class="analysis-kv"><div class="k">Status</div><div class="v">${esc(pub.status || 'Novo')}</div></div>
+          <div class="analysis-kv"><div class="k">Responsável</div><div class="v">${esc(pub.responsavel || 'sem responsável')}</div></div>
+          <div class="analysis-kv"><div class="k">Link oficial</div><div class="v">${esc(linkStatus.label)}</div></div>
+        </div>
+        ${restricao.restricted ? `<div style="font-size:12.5px; color:var(--vermelho); font-weight:800;">Restrição: ${esc(restricao.reason || 'requer fonte autenticada')}.</div>` : ''}
+        <div class="analysis-actions">
+          ${restricao.restricted && linkStatus.state === 'ok'?`<button class="btn azul" id="mOpenA3Top">Abrir fonte oficial</button>`:''}
+          ${officialUrl ? `<a class="btn" href="${esc(officialUrl)}" target="_blank" rel="noopener">Ver URL de origem</a>` : ''}
+          <button class="btn" id="mCreateTaskTop">Criar tarefa</button>
+          <button class="btn" id="mEditPub">Editar dados</button>
+        </div>
+      </section>
       <div class="analysis-grid">
         <section class="analysis-panel">
           <h4>Texto completo da publicação</h4>
@@ -1605,20 +1698,27 @@ function openPublicationAnalysisModal(pub){
         </section>
         <section>${suggestionDetailsHTML(pub)}</section>
       </div>
+      <section class="analysis-panel">
+        <h4>Histórico relacionado</h4>
+        ${publicationHistoryHTML(pub)}
+      </section>
     </div>
     <div class="modal-foot">
-      ${isRestrictedPublication(pub)?`<button class="btn azul" id="mOpenA3">Abrir fonte oficial</button>`:''}
-      ${deadlineSuggestion(pub).dueDate?`<button class="btn azul" id="mSuggestPrazo">Gerar prazo sugerido</button>`:''}
+      ${restricao.restricted && linkStatus.state === 'ok'?`<button class="btn azul" id="mOpenA3">Abrir fonte oficial</button>`:''}
+      ${s.dueDate?`<button class="btn azul" id="mSuggestPrazo">Gerar prazo sugerido</button>`:''}
+      <button class="btn" id="mCreateTask">Criar tarefa</button>
       <button class="btn primary" id="mClose2">Fechar</button>
     </div>
   `;
   showModal();
   document.getElementById('mClose').onclick = hideModal;
   document.getElementById('mClose2').onclick = hideModal;
-  const openA3Btn = document.getElementById('mOpenA3');
-  if(openA3Btn) openA3Btn.onclick = ()=>openRestrictedWithA3(pub);
+  document.getElementById('mEditPub').onclick = ()=>openPubModal(pub);
+  const openA3Btns = [document.getElementById('mOpenA3'), document.getElementById('mOpenA3Top')].filter(Boolean);
+  openA3Btns.forEach(btn=>btn.onclick = ()=>openRestrictedWithA3(pub));
   const suggestBtn = document.getElementById('mSuggestPrazo');
   if(suggestBtn) suggestBtn.onclick = ()=>createSuggestedPrazoFromPublication(pub);
+  [document.getElementById('mCreateTask'), document.getElementById('mCreateTaskTop')].filter(Boolean).forEach(btn=>btn.onclick = ()=>createTaskFromPublication(pub));
 }
 
 function validationStatusLabel(status){
@@ -1775,7 +1875,20 @@ function renderDashboard(){
 }
 
 /* ===================== PUBLICAÇÕES / RECORTES ===================== */
-let pubFilters = {status:'', cliente:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
+let pubFilters = {status:'', cliente:'', origin:'', quick:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
+
+function publicationMatchesQuickFilter(pub, quick){
+  if(!quick) return true;
+  const suggestion = deadlineSuggestion(pub);
+  const linkStatus = sourceLinkStatus(pub);
+  if(quick === 'restricted') return isRestrictedPublication(pub);
+  if(quick === 'no_client') return displayClientName(pub) === 'Parte não identificada';
+  if(quick === 'with_suggestion') return Boolean(suggestion.dueDate);
+  if(quick === 'low_confidence') return suggestion.needsReview;
+  if(quick === 'official_link') return linkStatus.state === 'ok';
+  if(quick === 'no_official_link') return isRestrictedPublication(pub) && linkStatus.state !== 'ok';
+  return true;
+}
 
 function renderPublicacoes(){
   let rows = publicacoesOperacionais();
@@ -1783,18 +1896,34 @@ function renderPublicacoes(){
   if(dashboardFilter==='pub_restritas') rows = rows.filter(isRestrictedPublication);
   if(!pubFilters.showArchived) rows = rows.filter(p=>!PUB_ARCHIVED.includes(p.status));
   if(pubFilters.showRestricted) rows = rows.filter(isRestrictedPublication);
+  if(pubFilters.origin) rows = rows.filter(p=>publicacaoOrigem(p)===pubFilters.origin);
+  if(pubFilters.quick) rows = rows.filter(p=>publicationMatchesQuickFilter(p, pubFilters.quick));
   if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
   if(pubFilters.cliente) rows = rows.filter(p=>String(p.cliente||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.processo||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.advogadoMonitorado||'').toLowerCase().includes(pubFilters.cliente.toLowerCase()));
   rows.sort((a,b)=>{ let va=parseDateLocal(a[pubFilters.sort])||new Date(0), vb=parseDateLocal(b[pubFilters.sort])||new Date(0); if(va<vb) return -1*pubFilters.dir; if(va>vb) return 1*pubFilters.dir; return 0; });
 
+  const allRows = publicacoesOperacionais().filter(p=>pubFilters.showArchived || !PUB_ARCHIVED.includes(p.status));
+  const quickFilters = [
+    {id:'restricted', label:'Restritas', count:allRows.filter(isRestrictedPublication).length},
+    {id:'no_client', label:'Parte não identificada', count:allRows.filter(p=>displayClientName(p)==='Parte não identificada').length},
+    {id:'with_suggestion', label:'Com prazo sugerido', count:allRows.filter(p=>deadlineSuggestion(p).dueDate).length},
+    {id:'low_confidence', label:'Revisão recomendada', count:allRows.filter(p=>deadlineSuggestion(p).needsReview).length},
+    {id:'official_link', label:'Link oficial pronto', count:allRows.filter(p=>sourceLinkStatus(p).state==='ok').length},
+    {id:'no_official_link', label:'Sem link oficial', count:allRows.filter(p=>isRestrictedPublication(p) && sourceLinkStatus(p).state!=='ok').length}
+  ];
   const filterNote = dashboardFilter==='pub_sem_tratamento'
     ? `<div class="section-title">Filtro: Publicações sem tratamento <span class="cnt">${rows.length}</span></div>`
     : (dashboardFilter==='pub_restritas' ? `<div class="section-title">Filtro: Publicações restritas <span class="cnt">${rows.length}</span></div>` : '');
   let html = `${filterNote}<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${pubFilters.cliente}">
+    <select id="fOrigem"><option value="">Todas as origens</option><option value="DJEN" ${pubFilters.origin==='DJEN'?'selected':''}>DJEN</option><option value="ControlJus" ${pubFilters.origin==='ControlJus'?'selected':''}>ControlJus</option></select>
     <select id="fStatus"><option value="">Todos os status</option>${PUB_STATUSES.map(s=>`<option ${pubFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <label class="chk"><input type="checkbox" id="fRestritas" ${pubFilters.showRestricted?'checked':''}> Somente restritas</label>
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
+  </div>
+  <div class="filter-chipbar">
+    <button class="filter-chip ${!pubFilters.quick?'active':''}" data-quick="">Todos <span class="mono">${allRows.length}</span></button>
+    ${quickFilters.map(item=>`<button class="filter-chip ${pubFilters.quick===item.id?'active':''}" data-quick="${esc(item.id)}">${esc(item.label)} <span class="mono">${item.count}</span></button>`).join('')}
   </div>`;
   html += `<div class="table-wrap"><table class="pub-table"><thead><tr>
     <th data-s="dataPublicacao">Publicação</th><th>Origem</th><th>Cliente / parte</th><th>Advogado</th><th>Processo</th><th>Tribunal</th><th>Tipo</th><th>Publicação</th><th>Prazo / inteligência</th><th>Tratamento</th>
@@ -1830,9 +1959,11 @@ function renderPublicacoes(){
   document.getElementById('content').innerHTML = html;
 
   document.getElementById('fCliente').oninput = e=>{pubFilters.cliente=e.target.value; renderPublicacoes();};
+  document.getElementById('fOrigem').onchange = e=>{pubFilters.origin=e.target.value; renderPublicacoes();};
   document.getElementById('fStatus').onchange = e=>{pubFilters.status=e.target.value; renderPublicacoes();};
   document.getElementById('fRestritas').onchange = e=>{pubFilters.showRestricted=e.target.checked; renderPublicacoes();};
   document.getElementById('fArch').onchange = e=>{pubFilters.showArchived=e.target.checked; renderPublicacoes();};
+  document.querySelectorAll('[data-quick]').forEach(btn=>btn.onclick=()=>{ pubFilters.quick = btn.dataset.quick || ''; renderPublicacoes(); });
   document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(pubFilters.sort===s) pubFilters.dir*=-1; else {pubFilters.sort=s; pubFilters.dir=-1;} renderPublicacoes(); });
   document.querySelectorAll('tbody tr.pub-main[data-id]').forEach(tr=>{
     const id=tr.dataset.id; const p = DB.publicacoes.find(x=>x.id===id);
@@ -1844,6 +1975,8 @@ function renderPublicacoes(){
     detailsBtns.forEach(btn=>btn.onclick = ()=>openPublicationAnalysisModal(p));
     const suggestBtn = tr.querySelector('[data-act="suggest"]');
     if(suggestBtn) suggestBtn.onclick = ()=>createSuggestedPrazoFromPublication(p);
+    const taskBtn = tr.querySelector('[data-act="task"]');
+    if(taskBtn) taskBtn.onclick = ()=>createTaskFromPublication(p);
     const a3Btn = tr.querySelector('[data-act="a3"]');
     if(a3Btn) a3Btn.onclick = ()=>openRestrictedWithA3(p);
     tr.querySelector('[data-act="edit"]').onclick = ()=>openPubModal(p);
@@ -1981,6 +2114,48 @@ async function createSuggestedPrazoFromPublication(pub){
   prazoFilters.showValidation = true;
   renderAll();
   toast('Prazo calculado pelo LexFlow');
+}
+
+async function createTaskFromPublication(pub){
+  if(pub.tarefaGeradaId && DB.tarefas.some(t=>t.id===pub.tarefaGeradaId)){
+    toast('Esta publicação já possui tarefa vinculada');
+    currentView = 'tarefas';
+    renderAll();
+    return;
+  }
+  const suggestion = deadlineSuggestion(pub);
+  const restricao = restrictedInfo(pub);
+  const cliente = displayClientName(pub);
+  const tituloBase = suggestion.rule?.act || pub.tipoPublicacao || 'Analisar publicação';
+  const task = {
+    id:uid(),
+    titulo:`Tratar publicação: ${tituloBase}`,
+    processo:pub.processo || '',
+    cliente,
+    responsavel:pub.responsavel || '',
+    dataLimite:suggestion.dueDate || '',
+    status:'Aberta',
+    prioridade:restricao.restricted || suggestion.needsReview ? 'Alta' : 'Média',
+    observacao:[
+      `Tarefa criada a partir da publicação ${pub.refId || pub.id || ''}.`,
+      `Origem: ${publicacaoOrigem(pub)}.`,
+      suggestion.dueDate ? `Prazo sugerido: ${fmtDate(suggestion.dueDate)} (${suggestion.rule?.basis || 'fundamento não mapeado'}).` : 'Sem prazo automático confiável.',
+      restricao.restricted ? `Restrição: ${restricao.reason || 'requer fonte autenticada'}.` : ''
+    ].filter(Boolean).join(' '),
+    publicacaoId:pub.id || '',
+    origemPublicacaoId:pub.refId || pub.id || '',
+    link:pub.linkOrigem || '',
+    concluidoEm:''
+  };
+  DB.tarefas.push(task);
+  pub.tarefaGeradaId = task.id;
+  if(PUB_UNTREATED.includes(pub.status)) pub.status = 'Tarefa criada';
+  logHist(`Tarefa criada a partir da publicação de ${cliente} (${pub.processo}): "${task.titulo}".`);
+  await saveDB();
+  hideModal();
+  currentView = 'tarefas';
+  renderAll();
+  toast('Tarefa criada a partir da publicação');
 }
 
 /* ===================== PRAZOS ===================== */

@@ -1,6 +1,6 @@
 # LexFlow - Backlog do Produto
 
-Atualizado em: 2026-07-08
+Atualizado em: 2026-07-13
 
 ## Norte do Produto
 
@@ -49,6 +49,9 @@ Legenda:
 - [x] Backend Cloudflare Worker publicado.
 - [x] Secrets sensiveis no Cloudflare.
 - [x] Token/API DJEN criptografado e enviado como Bearer quando configurado.
+- [x] Fluxo A3 SaaS publicado: publicacao restrita abre fonte oficial no navegador do advogado, sem `127.0.0.1`.
+- [x] Layout executivo revisado para aparencia SaaS juridica mais confiavel.
+- [x] Analise de publicacao em modal, evitando que a tabela fique torta/expandida.
 
 ## Decisoes de Produto
 
@@ -61,6 +64,7 @@ Legenda:
 - [ ] Definir fonte autenticada principal para processos em segredo de justica.
 - [x] Definir estrategia oficial para certificado digital A3: fluxo SaaS abre a fonte oficial no navegador do advogado; token fisico fica local.
 - [ ] Definir se aceitaremos certificado A1 como alternativa operacional.
+- [x] Agente local nao faz parte do fluxo principal do MVP.
 
 ## Epic 1 - Inbox de Publicacoes Integradas
 
@@ -331,14 +335,48 @@ Critérios de aceite:
 
 ## Ordem Recomendada dos Proximos Itens
 
+## Sprint Atual - Publicacao vira decisao operacional
+
+Objetivo: fazer o advogado enxergar rapidamente o que precisa ser feito com cada publicacao integrada.
+
+Janela sugerida: 2026-07-13 a 2026-07-19.
+
+Prioridade 1 - Confianca da Inbox:
+
+- [x] Detalhe completo da publicacao em modal com blocos: fonte, partes, advogado monitorado, texto, analise de prazo e historico.
+- [x] Filtros rapidos: origem, restrito, parte nao identificada, com sugestao de prazo, sem regra confiavel.
+- [ ] Deduplicacao forte DJEN x ControlJus.
+- [x] Indicador claro quando a publicacao tem link oficial valido para abrir com A3.
+
+Prioridade 2 - Motor de prazo validavel:
+
+- [ ] Transformar prazo sugerido em entidade persistente com memoria de calculo completa.
+- [ ] Criar acao `Confirmar prazo LexFlow`.
+- [ ] Criar acao `Rejeitar/ajustar prazo` com justificativa.
+- [ ] Criar alerta para prazo sugerido sem validacao.
+
+Prioridade 3 - Operacao:
+
+- [x] Criar tarefa a partir da publicacao.
+- [ ] Responsavel obrigatorio para prazos criticos.
+- [ ] Checklist inicial por tipo de ato.
+- [ ] Campo comprovante/protocolo ao concluir prazo/tarefa.
+
+Fora da sprint:
+
+- [ ] Billing/planos.
+- [ ] WhatsApp/email.
+- [ ] Automacao de tribunal restrito sem API oficial.
+- [ ] Certificado A1.
+
 ### Sprint 1 - Higiene da Inbox Integrada
 
 - [x] Marcar publicacoes de segredo de justica/restritas.
 - [x] Trocar traco vazio de prazo por estado operacional de triagem.
-- [ ] Melhorar detalhe da publicacao.
+- [x] Melhorar detalhe da publicacao.
 - [ ] Criar campo "parte nao identificada" como status/filtro.
 - [ ] Deduplicacao forte.
-- [ ] Filtro por origem: DJEN / ControlJus / restrito.
+- [x] Filtro por origem: DJEN / ControlJus / restrito.
 
 ### Sprint 2 - Credenciais e Fontes Restritas
 
@@ -357,7 +395,7 @@ Critérios de aceite:
 
 ### Sprint 4 - Workflow de Execucao
 
-- [ ] Criar tarefas a partir de publicacao.
+- [x] Criar tarefas a partir de publicacao.
 - [ ] Checklist por tipo de ato.
 - [ ] Responsavel obrigatorio em itens criticos.
 - [ ] Conclusao com comprovante.
@@ -366,15 +404,17 @@ Critérios de aceite:
 
 Sugestao de proximo item:
 
-`Sprint 3.1 - Motor de Prazo Validavel`
+`Sprint Atual - Publicacao vira decisao operacional`
 
 Motivo:
 
-Este e o item mais critico do produto. O LexFlow precisa entregar uma sugestao de prazo com fundamento legal, considerando area do processo, vara/ramo, tipo de ato e base normativa, removendo a dependencia operacional de controller/intermediador.
+Este e o item mais critico do produto agora: a publicacao integrada precisa virar uma decisao operacional clara. Para isso, a inbox deve mostrar origem, parte, restricao, link oficial, analise de prazo, memoria de calculo e acoes de confirmar/rejeitar/gerar tarefa. O motor de prazo continua dentro da sprint, mas conectado ao fluxo real do usuario.
 
 Critérios de aceite:
 
+- Publicacao mostra detalhe completo em modal, sem deformar a tabela.
 - Publicacao mostra sugestao de prazo quando houver regra aplicavel.
 - Sugestao informa area inferida, ato/peca, fundamento, contagem e confianca.
-- Prazo sugerido criado fica como calculado pelo LexFlow quando a regra for confiavel; baixa confianca vira revisao recomendada.
-- Base de Prazos mostra normas oficiais e regras assistivas cadastradas.
+- Usuario consegue confirmar ou rejeitar/ajustar o prazo sugerido com justificativa.
+- Publicacoes com baixa confianca ou sem validacao geram alerta.
+- Publicacoes restritas indicam se ha link oficial valido para abertura com A3.
