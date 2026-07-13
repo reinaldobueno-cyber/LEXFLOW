@@ -332,6 +332,10 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .task-card .task-actions{display:flex; gap:5px; flex-wrap:wrap;}
 .calendar-actions{display:inline-flex; gap:4px; flex-wrap:wrap; align-items:center;}
 .calendar-actions .btn{padding:4px 7px; font-size:10.5px;}
+.responsible-assign{display:flex; gap:6px; align-items:center; flex-wrap:wrap; min-width:180px;}
+.responsible-assign input{font-family:'IBM Plex Sans'; font-size:11.5px; border:1px solid var(--line); border-radius:999px; padding:6px 9px; min-width:140px; max-width:190px; background:#fff;}
+.responsible-assign button{padding:5px 8px;}
+.task-discard{color:var(--vermelho);}
 .checklist-mini{display:flex; flex-direction:column; gap:4px; border-top:1px solid var(--line); padding-top:8px;}
 .checklist-mini div{font-size:11px; color:var(--ink-soft); display:flex; gap:5px; align-items:flex-start;}
 .checklist-mini .done{text-decoration:line-through; opacity:.65;}
@@ -540,11 +544,20 @@ function downloadCalendarICS(type, item){
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
   toast('Arquivo de agenda gerado');
 }
+function whatsappMessageFor(type, item){
+  const ev = calendarEventFor(type, item);
+  if(type === 'audiencia') return [`LexFlow - audiência`, item.cliente, item.processo, `${fmtDate(item.data)} ${item.horario || ''}`, item.tipo, item.link].filter(Boolean).join('\n');
+  if(type === 'tarefa') return [`LexFlow - tarefa`, item.titulo, item.cliente, item.processo, item.dataLimite ? `Limite: ${fmtDate(item.dataLimite)}` : '', item.responsavel ? `Responsável: ${item.responsavel}` : 'Sem responsável'].filter(Boolean).join('\n');
+  return [`LexFlow - prazo`, item.cliente, item.processo, item.tipoPrazo, item.prazoFatal ? `Prazo fatal: ${fmtDate(item.prazoFatal)}` : '', item.responsavel ? `Responsável: ${item.responsavel}` : 'Sem responsável'].filter(Boolean).join('\n');
+}
+function openWhatsAppShare(type, item){
+  window.open(`https://wa.me/?text=${encodeURIComponent(whatsappMessageFor(type, item))}`, '_blank', 'noopener');
+}
 function calendarActionsHTML(type, item){
   const ev = calendarEventFor(type, item);
-  if(!ev.start) return '';
+  if(!ev.start) return `<span class="calendar-actions"><button class="btn small ghost" data-act="whatsapp">WhatsApp</button></span>`;
   const provider = DB.config?.calendarProvider || 'google';
-  return `<span class="calendar-actions"><a class="btn small ${provider==='google'?'azul':'ghost'}" href="${esc(calendarGoogleUrl(ev))}" target="_blank" rel="noopener">Google</a><a class="btn small ${provider==='outlook'?'azul':'ghost'}" href="${esc(calendarOutlookUrl(ev))}" target="_blank" rel="noopener">Outlook</a><button class="btn small ${provider==='ics'?'azul':'ghost'}" data-act="ics" data-cal-type="${esc(type)}">ICS</button></span>`;
+  return `<span class="calendar-actions"><a class="btn small ${provider==='google'?'azul':'ghost'}" href="${esc(calendarGoogleUrl(ev))}" target="_blank" rel="noopener">Google</a><a class="btn small ${provider==='outlook'?'azul':'ghost'}" href="${esc(calendarOutlookUrl(ev))}" target="_blank" rel="noopener">Outlook</a><button class="btn small ${provider==='ics'?'azul':'ghost'}" data-act="ics" data-cal-type="${esc(type)}">ICS</button><button class="btn small ghost" data-act="whatsapp">WhatsApp</button></span>`;
 }
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 function diasRestantes(dateVal){
@@ -569,10 +582,10 @@ const PRAZO_REVIEW_RECOMMENDED = ['revisao_recomendada','sem_regra_confiavel'];
 const AUDI_STATUSES = ['Agendada','Preparar documentos','Confirmar cliente','Confirmar link','Realizada','Remarcada','Cancelada','Arquivado'];
 const AUDI_DONE = ['Realizada','Cancelada','Arquivado'];
 const AUDI_ARCHIVED = ['Arquivado'];
-const TAREFA_STATUSES = ['Aberta','Em andamento','Aguardando terceiro','Revisão','Concluída','Atrasada','Arquivado'];
+const TAREFA_STATUSES = ['Aberta','Em andamento','Aguardando terceiro','Revisão','Concluída','Atrasada','Desconsiderada','Arquivado'];
 const DEFAULT_TASK_COLUMNS = ['Aberta','Em andamento','Aguardando terceiro','Revisão','Concluída'];
-const TAREFA_DONE = ['Concluída','Arquivado'];
-const TAREFA_ARCHIVED = ['Arquivado'];
+const TAREFA_DONE = ['Concluída'];
+const TAREFA_ARCHIVED = ['Arquivado','Desconsiderada'];
 const PUB_STATUSES = ['Novo','Em análise','Gerou prazo','Não gera prazo','Tarefa criada','Concluído','Arquivado'];
 const PUB_UNTREATED = ['Novo','Em análise'];
 const PUB_ARCHIVED = ['Arquivado'];
@@ -1929,6 +1942,36 @@ function responsavelPrazoHTML(prazo){
   return '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>';
 }
 
+function responsavelSuggestions(){
+  const set = new Set();
+  if(AUTH.user?.name) set.add(AUTH.user.name);
+  [...(DB.prazos||[]), ...(DB.audiencias||[]), ...(DB.tarefas||[]), ...(DB.publicacoes||[])]
+    .forEach(item=>{ if(cleanText(item.responsavel)) set.add(cleanText(item.responsavel)); });
+  return [...set].sort((a,b)=>a.localeCompare(b, 'pt-BR'));
+}
+
+function responsavelDatalistHTML(){
+  return `<datalist id="responsavelOptions">${responsavelSuggestions().map(r=>`<option value="${esc(r)}"></option>`).join('')}</datalist>`;
+}
+
+function responsibleAssignHTML(item, placeholder='Responsável'){
+  const val = cleanText(item?.responsavel || '');
+  return `<div class="responsible-assign">
+    <input data-act="resp-input" list="responsavelOptions" value="${esc(val)}" placeholder="${esc(placeholder)}">
+    <button class="btn small ghost" data-act="resp-save">${val?'Trocar':'Assumir'}</button>
+  </div>`;
+}
+
+async function saveInlineResponsible(item, value, label='item'){
+  const next = cleanText(value);
+  const old = item.responsavel || '';
+  item.responsavel = next;
+  logHist(`${label} ${next ? `atribuído a ${next}` : 'ficou sem responsável'}${old && old !== next ? ` (antes: ${old})` : ''}.`);
+  await saveDB();
+  renderAll();
+  toast(next ? 'Responsável atualizado' : 'Responsável removido');
+}
+
 function prazoMemoryHTML(d){
   if(!d?.motorPrazo) return `<div class="empty">Este prazo ainda não tem memória de cálculo do motor LexFlow.</div>`;
   const fatoresCalculo = Array.isArray(d.fatoresCalculo) && d.fatoresCalculo.length
@@ -2206,7 +2249,7 @@ function renderPublicacoes(){
   const filterNote = dashboardFilter==='pub_sem_tratamento'
     ? `<div class="section-title">Filtro: Publicações sem tratamento <span class="cnt">${rows.length}</span></div>`
     : (dashboardFilter==='pub_restritas' ? `<div class="section-title">Filtro: Publicações restritas <span class="cnt">${rows.length}</span></div>` : '');
-  let html = `${filterNote}<div class="filters">
+  let html = `${filterNote}${responsavelDatalistHTML()}<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${pubFilters.cliente}">
     <select id="fOrigem"><option value="">Todas as origens</option><option value="DJEN" ${pubFilters.origin==='DJEN'?'selected':''}>DJEN</option><option value="ControlJus" ${pubFilters.origin==='ControlJus'?'selected':''}>ControlJus</option></select>
     <select id="fStatus"><option value="">Todos os status</option>${PUB_STATUSES.map(s=>`<option ${pubFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
@@ -2238,9 +2281,10 @@ function renderPublicacoes(){
       <td>${publicationActionCard(p)}</td>
       <td class="pub-ops"><div class="pub-ops-box">
         <select class="status-select" data-act="status">${PUB_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select>
-        <div class="pub-resp">${p.responsavel ? `Resp.: ${esc(p.responsavel)}` : '<span style="color:var(--vermelho);">sem responsável</span>'}</div>
+        ${responsibleAssignHTML(p, 'Responsável')}
         <div class="row-actions-inner">
         ${canGerarPrazo?`<button class="btn small azul" data-act="genprazo">Gerar prazo →</button>`:''}
+        <button class="btn small ghost" data-act="whatsapp">WhatsApp</button>
         <button class="btn small ghost" data-act="edit">✎</button>
         ${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}
         </div>
@@ -2271,6 +2315,11 @@ function renderPublicacoes(){
     if(taskBtn) taskBtn.onclick = ()=>createTaskFromPublication(p);
     const a3Btn = tr.querySelector('[data-act="a3"]');
     if(a3Btn) a3Btn.onclick = ()=>openRestrictedWithA3(p);
+    const whatsBtn = tr.querySelector('[data-act="whatsapp"]');
+    if(whatsBtn) whatsBtn.onclick = ()=>openWhatsAppShare('prazo', {cliente:displayClientName(p), processo:p.processo, tipoPrazo:p.tipoPublicacao || 'Publicação', prazoFatal:p.prazoFatal, responsavel:p.responsavel});
+    const respInput = tr.querySelector('[data-act="resp-input"]');
+    const respSave = tr.querySelector('[data-act="resp-save"]');
+    if(respInput && respSave) respSave.onclick = ()=>saveInlineResponsible(p, respInput.value, `Publicação de ${displayClientName(p)} (${p.processo})`);
     tr.querySelector('[data-act="edit"]').onclick = ()=>openPubModal(p);
     const archBtn = tr.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{ p.status='Arquivado'; logHist(`Publicação de ${displayClientName(p)} (${p.processo}) arquivada.`); await saveDB(); renderAll(); toast('Recorte arquivado'); };
@@ -2475,7 +2524,7 @@ function renderPrazos(){
     prazos_7:'Prazos dos próximos 7 dias'
   };
   const filterNote = filterLabels[dashboardFilter] ? `<div class="section-title">Filtro: ${filterLabels[dashboardFilter]} <span class="cnt">${rows.length}</span></div>` : '';
-  let html = `${filterNote}<div class="filters">
+  let html = `${filterNote}${responsavelDatalistHTML()}<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${prazoFilters.cliente}">
     <select id="fStatus"><option value="">Todos os status</option>${PRAZO_STATUSES.map(s=>`<option ${prazoFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <select id="fResp"><option value="">Todos os responsáveis</option>${respSet.map(r=>`<option ${prazoFilters.responsavel===r?'selected':''}>${r}</option>`).join('')}</select>
@@ -2504,7 +2553,7 @@ function renderPrazos(){
       <td>${validationPill(p)}${p.prazoAjustado?`<div class="recorte-meta">ajustado</div>`:''}</td>
       <td>${fmtDate(p.prazoFatal)}</td>
       <td>${pill(done?'Concluído':(dr<0?'Vencido':dr===0?'Hoje':dr+'d'), color)}</td>
-      <td>${responsavelPrazoHTML(p)}</td>
+      <td>${responsibleAssignHTML(p, requiresPrazoResponsavel(p)?'Responsável obrigatório':'Responsável')}</td>
       <td><select class="status-select" data-act="status">${PRAZO_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td><span class="priority-tag priority-${p.prioridade==='Alta'?'alta':p.prioridade==='Baixa'?'baixa':'media'}">${p.prioridade}</span></td>
       <td class="row-actions">
@@ -2541,6 +2590,10 @@ function renderPrazos(){
     const validateBtn = tr.querySelector('[data-act="validate"]');
     if(validateBtn) validateBtn.onclick = ()=>openDeadlineValidationModal(p);
     tr.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('prazo', p));
+    tr.querySelectorAll('[data-act="whatsapp"]').forEach(btn=>btn.onclick = ()=>openWhatsAppShare('prazo', p));
+    const respInput = tr.querySelector('[data-act="resp-input"]');
+    const respSave = tr.querySelector('[data-act="resp-save"]');
+    if(respInput && respSave) respSave.onclick = ()=>saveInlineResponsible(p, respInput.value, `Prazo de ${p.cliente} (${p.processo})`);
     tr.querySelector('[data-act="edit"]').onclick = ()=>openPrazoModal(p);
     const archBtn = tr.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{
@@ -2629,7 +2682,7 @@ function renderAudiencias(){
   rows.sort((a,b)=>{ let va=a[audiFilters.sort], vb=b[audiFilters.sort]; if(audiFilters.sort==='data'){va=new Date(a.data+'T'+(a.horario||'00:00')); vb=new Date(b.data+'T'+(b.horario||'00:00'));} if(va<vb) return -1*audiFilters.dir; if(va>vb) return 1*audiFilters.dir; return 0; });
 
   const filterNote = dashboardFilter==='audi_7' ? `<div class="section-title">Filtro: Audiências próximas (7 dias) <span class="cnt">${rows.length}</span></div>` : '';
-  let html = `${filterNote}<div class="filters">
+  let html = `${filterNote}${responsavelDatalistHTML()}<div class="filters">
     <input type="text" id="fAudCliente" placeholder="Buscar cliente ou processo..." value="${audiFilters.cliente}">
     <select id="fAudStatus"><option value="">Todos os status</option>${AUDI_STATUSES.map(s=>`<option ${audiFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <label class="chk"><input type="checkbox" id="fArch" ${audiFilters.showArchived?'checked':''}> Mostrar arquivados</label>
@@ -2676,6 +2729,7 @@ function renderAudiencias(){
       await saveDB(); renderAll(); toast('Status atualizado');
     };
     tr.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('audiencia', a));
+    tr.querySelectorAll('[data-act="whatsapp"]').forEach(btn=>btn.onclick = ()=>openWhatsAppShare('audiencia', a));
     tr.querySelector('[data-act="edit"]').onclick = ()=>openAudiModal(a);
     const archBtn = tr.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{ a.status='Arquivado'; logHist(`Audiência de ${a.cliente} (${a.processo}) arquivada.`); await saveDB(); renderAll(); toast('Audiência arquivada'); };
@@ -2885,7 +2939,8 @@ function renderTarefas(){
           return `<article class="task-card ${TAREFA_ARCHIVED.includes(t.status)?'archived':''}" data-id="${esc(t.id)}">
             <div class="task-title">${esc(t.titulo)}</div>
             <div class="task-meta"><span class="mono">${esc(t.processo || 'sem processo')}</span><br>${esc(t.cliente || 'sem cliente')}</div>
-            <div class="task-meta">Resp.: ${esc(t.responsavel || 'sem responsável')} · ${t.dataLimite?fmtDate(t.dataLimite):'sem data'} · ${dr===null?'':(dr<0?'atrasada':dr===0?'vence hoje':`${dr}d`)}</div>
+            <div class="task-meta">${t.dataLimite?fmtDate(t.dataLimite):'sem data'} · ${dr===null?'':(dr<0?'atrasada':dr===0?'vence hoje':`${dr}d`)}</div>
+            ${responsibleAssignHTML(t, 'Responsável')}
             ${taskChecklistMiniHTML(t)}
             <div class="task-foot">
               <span class="priority-tag priority-${t.prioridade==='Alta'?'alta':t.prioridade==='Baixa'?'baixa':'media'}">${esc(t.prioridade)}</span>
@@ -2895,6 +2950,7 @@ function renderTarefas(){
                 ${colIdx>0?`<button class="btn small ghost" data-act="prev">←</button>`:''}
                 ${colIdx<cols.length-1?`<button class="btn small ghost" data-act="next">→</button>`:''}
                 <button class="btn small ghost" data-act="edit">✎</button>
+                ${!TAREFA_ARCHIVED.includes(t.status)?`<button class="btn small ghost task-discard" data-act="discard">Desconsiderar</button>`:''}
                 ${!TAREFA_ARCHIVED.includes(t.status)?`<button class="btn small ghost" data-act="archive" title="Arquivar">🗄</button>`:''}
               </div>
             </div>
@@ -2911,12 +2967,12 @@ function renderTarefas(){
       html += `<tr data-id="${t.id}" class="${archived?'archived':''}">
         <td class="cliente">${esc(t.titulo)}</td>
         <td><div class="proc">${esc(t.processo||'—')}</div><div style="font-size:11px; color:var(--ink-soft);">${esc(t.cliente||'')}</div></td>
-        <td>${esc(t.responsavel||'sem resp.')}</td>
+        <td>${responsibleAssignHTML(t, 'Responsável')}</td>
         <td>${t.dataLimite?fmtDate(t.dataLimite):'—'}</td>
         <td><span class="checklist-progress">${progress.label}</span></td>
         <td><span class="priority-tag priority-${t.prioridade==='Alta'?'alta':t.prioridade==='Baixa'?'baixa':'media'}">${esc(t.prioridade)}</span></td>
         <td><select class="status-select" data-act="status">${taskStatusOptions(t.status)}</select></td>
-        <td class="row-actions">${calendarActionsHTML('tarefa', t)}<button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
+        <td class="row-actions">${calendarActionsHTML('tarefa', t)}<button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost task-discard" data-act="discard">Desconsiderar</button><button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
@@ -2933,6 +2989,10 @@ function renderTarefas(){
     const statusSelect = el.querySelector('[data-act="status"]');
     if(statusSelect) statusSelect.onchange = e=>saveTaskStatus(t, e.target.value);
     el.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('tarefa', t));
+    el.querySelectorAll('[data-act="whatsapp"]').forEach(btn=>btn.onclick = ()=>openWhatsAppShare('tarefa', t));
+    const respInput = el.querySelector('[data-act="resp-input"]');
+    const respSave = el.querySelector('[data-act="resp-save"]');
+    if(respInput && respSave) respSave.onclick = ()=>saveInlineResponsible(t, respInput.value, `Tarefa "${t.titulo}"`);
     const editBtn = el.querySelector('[data-act="edit"]'); if(editBtn) editBtn.onclick = ()=>openTaskModal(t);
     const cols = taskColumnSet(rows);
     const idx = cols.indexOf(t.status);
@@ -2940,6 +3000,8 @@ function renderTarefas(){
     const nextBtn = el.querySelector('[data-act="next"]'); if(nextBtn) nextBtn.onclick = ()=>saveTaskStatus(t, cols[Math.min(cols.length-1, idx+1)]);
     const archBtn = el.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{ t.status='Arquivado'; logHist(`Tarefa "${t.titulo}" arquivada.`); await saveDB(); renderAll(); toast('Tarefa arquivada'); };
+    const discardBtn = el.querySelector('[data-act="discard"]');
+    if(discardBtn) discardBtn.onclick = async ()=>{ t.status='Desconsiderada'; logHist(`Tarefa "${t.titulo}" desconsiderada pelo usuário.`); await saveDB(); renderAll(); toast('Tarefa desconsiderada'); };
   });
 }
 
@@ -3304,7 +3366,7 @@ function renderConfiguracoes(){
       <div class="path-card">
         <div class="path-tag">Camada ativa</div>
         <h4>Links Google, Outlook e arquivo .ics</h4>
-        <p>Não existe login obrigatório aqui. O LexFlow gera links de criação de evento ou arquivo .ics no próprio item. O usuário escolhe Google, Outlook ou baixa o arquivo.</p>
+        <p>Não existe login obrigatório aqui. O LexFlow gera links de criação de evento ou arquivo .ics no próprio item. ICS é um arquivo universal de calendário: ao baixar e abrir, ele adiciona o compromisso no Google, Outlook, Apple Calendar ou agenda do celular.</p>
       </div>
       <div class="path-card">
         <div class="path-tag">Próxima camada</div>
