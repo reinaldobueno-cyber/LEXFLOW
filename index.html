@@ -300,21 +300,26 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .filter-chipbar{display:flex; gap:7px; flex-wrap:wrap; margin:-5px 0 14px 0;}
 .filter-chip{border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 10px; font-size:11.5px; font-weight:800; color:var(--ink-2); cursor:pointer;}
 .filter-chip.active{background:#EFF8FF; border-color:#B2DDFF; color:var(--azul);}
-.publication-workspace{display:grid; grid-template-columns:minmax(420px,.92fr) minmax(440px,1.08fr); gap:16px; align-items:start;}
+.publication-workspace{display:grid; grid-template-columns:minmax(360px,.72fr) minmax(640px,1.28fr); gap:16px; align-items:start;}
 .publication-inbox{display:flex; flex-direction:column; gap:10px;}
-.publication-card{border:1px solid var(--line); background:#fff; border-radius:10px; padding:14px; box-shadow:var(--shadow); cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s; display:grid; grid-template-columns:84px minmax(0,1fr); gap:12px;}
+.publication-card{position:relative; border:1px solid var(--line); background:#fff; border-radius:10px; padding:14px; box-shadow:var(--shadow); cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s; display:grid; grid-template-columns:84px minmax(0,1fr); gap:12px;}
 .publication-card:hover{border-color:#C8D0DA; transform:translateY(-1px);}
-.publication-card.active{border-color:#84CAFF; box-shadow:0 0 0 3px rgba(40,100,166,.10), var(--shadow);}
+.publication-card.active{border-color:#84CAFF; box-shadow:0 0 0 3px rgba(40,100,166,.12), 0 14px 28px rgba(16,24,40,.10); background:linear-gradient(90deg,#EFF8FF 0,#fff 38%);}
+.publication-card.active::before{content:''; position:absolute; left:-1px; top:10px; bottom:10px; width:4px; border-radius:999px; background:var(--azul);}
+.publication-selected-badge{display:none; font-size:10px; text-transform:uppercase; letter-spacing:.04em; font-weight:900; color:var(--azul); background:#D1E9FF; border-radius:999px; padding:3px 7px; white-space:nowrap;}
+.publication-card.active .publication-selected-badge{display:inline-flex;}
 .publication-date{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-2);}
 .publication-main{min-width:0; display:flex; flex-direction:column; gap:7px;}
 .publication-topline{display:flex; justify-content:space-between; gap:8px; align-items:flex-start;}
+.publication-title-stack{display:flex; align-items:center; gap:7px; min-width:0; flex-wrap:wrap;}
 .publication-client{font-size:13.5px; font-weight:900; color:var(--ink); line-height:1.25;}
 .publication-proc{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft);}
 .publication-summary{font-size:12px; color:var(--ink-2); line-height:1.45; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
 .publication-tags{display:flex; flex-wrap:wrap; gap:5px; align-items:center;}
-.publication-detail{position:sticky; top:112px; border:1px solid var(--line); background:#fff; border-radius:12px; box-shadow:var(--shadow); overflow:hidden;}
-.publication-detail-head{padding:18px 20px; border-bottom:1px solid var(--line); background:#F8FAFC; display:flex; justify-content:space-between; gap:14px; align-items:flex-start;}
-.publication-detail-title{font-size:17px; font-weight:900; line-height:1.25;}
+.publication-detail{position:sticky; top:112px; border:1px solid #B2DDFF; background:#fff; border-radius:12px; box-shadow:0 16px 42px rgba(16,24,40,.12); overflow:hidden;}
+.publication-detail-head{padding:18px 20px; border-bottom:1px solid #D1E9FF; background:linear-gradient(135deg,#EFF8FF 0,#F8FAFC 70%); display:flex; justify-content:space-between; gap:14px; align-items:flex-start;}
+.selected-eyebrow{font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--azul); font-weight:900; margin-bottom:6px;}
+.publication-detail-title{font-size:18px; font-weight:900; line-height:1.25;}
 .publication-detail-sub{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); margin-top:5px;}
 .publication-detail-body{padding:18px 20px; display:flex; flex-direction:column; gap:16px;}
 .decision-panel{border:1px solid var(--line); border-radius:10px; padding:14px; background:#FBFCFE; display:flex; flex-direction:column; gap:12px;}
@@ -326,9 +331,10 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .decision-meta{font-size:12px; color:var(--ink-soft); line-height:1.45;}
 .decision-actions{display:flex; flex-wrap:wrap; gap:8px;}
 .publication-form-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
-.publication-mini-text{border:1px solid var(--line); border-radius:10px; padding:12px; background:#fff; max-height:220px; overflow:auto;}
+.publication-mini-text{border:1px solid var(--line); border-radius:10px; padding:14px; background:#fff; max-height:420px; overflow:auto;}
 .publication-mini-text h4{font-family:'Source Serif 4',serif; font-size:15px; margin-bottom:8px;}
 .publication-secondary-actions{display:flex; flex-wrap:wrap; gap:8px; padding-top:2px;}
+.origin-unavailable{font-size:11.5px; color:var(--ink-soft); border:1px dashed var(--line); border-radius:8px; padding:7px 10px; background:#F8FAFC;}
 .source-status{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap;}
 .source-status.ok{background:#ECFDF3; color:var(--verde);}
 .source-status.warn{background:#FFFAEB; color:#A15C00;}
@@ -396,7 +402,10 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .task-card .task-meta{font-size:11px; color:var(--ink-soft); line-height:1.35;}
 .task-card .task-foot{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;}
 .task-card .task-actions{display:flex; gap:5px; flex-wrap:wrap;}
-.calendar-actions{display:flex; gap:7px; flex-wrap:wrap; align-items:center; min-width:190px;}
+.calendar-actions{display:flex; gap:7px; flex-wrap:wrap; align-items:center; min-width:180px;}
+.row-actions .calendar-actions{min-width:0;}
+.calendar-actions.compact{flex-direction:column; align-items:flex-start;}
+.calendar-actions.inline{flex-direction:row;}
 .channel-action{font-family:'IBM Plex Sans'; font-size:11.2px; font-weight:800; min-height:32px; padding:6px 9px; border-radius:9px; border:1px solid var(--line); background:#fff; color:var(--ink-2); cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:7px; transition:background .12s, border-color .12s, transform .12s, box-shadow .12s;}
 .channel-action:hover{transform:translateY(-1px); box-shadow:0 1px 2px rgba(16,24,40,.08);}
 .channel-action.active{box-shadow:0 0 0 2px rgba(40,100,166,.10);}
@@ -408,11 +417,19 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .channel-action.ics.active{background:#F2F4F7;}
 .channel-action.whatsapp{border-color:#B7E4CC; color:#16794C;}
 .channel-action.whatsapp.active{background:#ECFDF3;}
+.channel-action.agenda{border-color:#B2DDFF; color:var(--azul);}
+.channel-action.share-intelligence{border-color:#F3D59B; color:#A15C00; background:#FFFAEB;}
 .brand-mark{width:20px; height:20px; border-radius:7px; display:inline-flex; align-items:center; justify-content:center; background:#F2F4F7; font-size:10.5px; font-weight:900; line-height:1; flex-shrink:0;}
 .brand-mark.google{background:conic-gradient(from 0deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0); color:#fff;}
 .brand-mark.outlook{background:#0A66C2; color:#fff;}
 .brand-mark.ics{background:#F2F4F7; color:#475467; border:1px solid #D0D5DD;}
 .brand-mark.whatsapp{background:#22C55E; color:#fff;}
+.brand-mark.agenda{background:#2864A6; color:#fff;}
+.agenda-choice-grid{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px;}
+.agenda-choice{border:1px solid var(--line); border-radius:10px; background:#fff; padding:14px; text-decoration:none; color:var(--ink); display:flex; flex-direction:column; gap:8px; min-height:118px; cursor:pointer;}
+.agenda-choice:hover{border-color:#B2DDFF; box-shadow:0 8px 18px rgba(16,24,40,.08);}
+.agenda-choice strong{font-size:14px;}
+.agenda-choice span{font-size:12px; color:var(--ink-soft); line-height:1.45;}
 .responsible-assign{display:flex; gap:6px; align-items:center; flex-wrap:wrap; min-width:180px;}
 .responsible-assign input{font-family:'IBM Plex Sans'; font-size:11.5px; border:1px solid var(--line); border-radius:999px; padding:6px 9px; min-width:140px; max-width:190px; background:#fff;}
 .responsible-assign button{padding:5px 8px;}
@@ -638,17 +655,45 @@ function openWhatsAppShare(type, item){
 }
 function calendarActionsHTML(type, item){
   const ev = calendarEventFor(type, item);
-  if(!ev.start) return `<details class="action-menu"><summary>Compartilhar</summary><div class="menu-panel"><button class="channel-action whatsapp" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button></div></details>`;
-  const provider = DB.config?.calendarProvider || 'google';
-  return `<details class="action-menu">
-    <summary>Compartilhar</summary>
-    <div class="menu-panel">
-    <a class="channel-action google ${provider==='google'?'active':''}" href="${esc(calendarGoogleUrl(ev))}" target="_blank" rel="noopener"><span class="brand-mark google">G</span>Google Agenda</a>
-    <a class="channel-action outlook ${provider==='outlook'?'active':''}" href="${esc(calendarOutlookUrl(ev))}" target="_blank" rel="noopener"><span class="brand-mark outlook">O</span>Outlook</a>
-    <button class="channel-action ics ${provider==='ics'?'active':''}" data-act="ics" data-cal-type="${esc(type)}"><span class="brand-mark ics">ICS</span>Arquivo</button>
-    <button class="channel-action whatsapp" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button>
+  const agenda = ev.start ? `<button class="channel-action agenda" data-act="agenda"><span class="brand-mark agenda">A</span>Agenda</button>` : '';
+  return `<div class="calendar-actions compact">${agenda}<button class="channel-action whatsapp" data-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button></div>`;
+}
+function openAgendaModal(type, item){
+  const ev = calendarEventFor(type, item);
+  if(!ev.start){ toast('Item sem data para agenda'); return; }
+  const box = document.getElementById('modalBox');
+  box.className = 'modal';
+  box.innerHTML = `
+    <div class="modal-head"><h3>Adicionar à agenda</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="analysis-hero">
+        <div class="analysis-title">${esc(ev.title)}</div>
+        <div class="analysis-sub">${esc(fmtDate(ev.start))}${ev.time ? ` · ${esc(ev.time)}` : ''}</div>
+      </div>
+      <div class="agenda-choice-grid">
+        <a class="agenda-choice" href="${esc(calendarGoogleUrl(ev))}" target="_blank" rel="noopener">
+          <span class="brand-mark google">G</span>
+          <strong>Google Agenda</strong>
+          <span>Abre o compromisso no Google Calendar para confirmar e salvar.</span>
+        </a>
+        <a class="agenda-choice" href="${esc(calendarOutlookUrl(ev))}" target="_blank" rel="noopener">
+          <span class="brand-mark outlook">O</span>
+          <strong>Outlook</strong>
+          <span>Abre o evento no calendário Microsoft/Outlook.</span>
+        </a>
+        <button class="agenda-choice" id="mDownloadIcs">
+          <span class="brand-mark ics">ICS</span>
+          <strong>Arquivo .ics</strong>
+          <span>Baixa um arquivo de calendário compatível com Apple, Google e Outlook.</span>
+        </button>
+      </div>
     </div>
-  </details>`;
+    <div class="modal-foot"><button class="btn primary" id="mClose2">Fechar</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mClose2').onclick = hideModal;
+  document.getElementById('mDownloadIcs').onclick = ()=>downloadCalendarICS(type, item);
 }
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 function diasRestantes(dateVal){
@@ -1174,9 +1219,15 @@ function officialA3Target(pub){
   return /^https?:\/\//i.test(sourceUrl) ? sourceUrl : '';
 }
 
+function isPrivateSourceUrl(url){
+  const value = cleanText(url).toLowerCase();
+  return value.includes('app.controljus.com.br/api/') || value.includes('/api/controljus/');
+}
+
 function isOfficialJusticeUrl(url){
   const value = cleanText(url).toLowerCase();
   if(!/^https?:\/\//.test(value)) return false;
+  if(isPrivateSourceUrl(value)) return false;
   if(value.includes('comunicaapi.pje.jus.br')) return true;
   if(value.includes('.jus.br')) return true;
   if(/\b(pje|projudi|esaj|seeu)\b/.test(value)) return true;
@@ -1188,10 +1239,29 @@ function sourceLinkStatus(pub){
   if(isOfficialJusticeUrl(url)){
     return {state:'ok', label:'Link oficial pronto', detail:'Fonte oficial do Judiciário disponível para abertura no navegador.'};
   }
+  if(url && isPrivateSourceUrl(url)){
+    return {state:'warn', label:'Origem privada', detail:'A origem é API/fonte autenticada e não abre direto no navegador.'};
+  }
   if(url){
     return {state:'warn', label:'Link de origem', detail:'Há URL de origem, mas ela não parece ser link oficial do tribunal.'};
   }
   return {state:'bad', label:'Sem link oficial', detail:'Publicação ainda precisa de URL oficial/autenticada para abrir com A3.'};
+}
+
+function usableOfficialUrl(pub){
+  const url = officialA3Target(pub);
+  if(!url || isPrivateSourceUrl(url)) return '';
+  return url;
+}
+
+function originAccessHTML(pub){
+  const url = usableOfficialUrl(pub);
+  if(url) return `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Abrir URL oficial</a>`;
+  const raw = officialA3Target(pub);
+  if(raw && isPrivateSourceUrl(raw)){
+    return `<span class="origin-unavailable" title="A URL recebida é privada/autenticada e não abre direto no navegador.">Origem privada: abrir pela sincronização ou pelo tribunal</span>`;
+  }
+  return `<span class="origin-unavailable">Sem URL oficial mapeada</span>`;
 }
 
 function sourceStatusTag(pub){
@@ -1801,6 +1871,57 @@ function suggestionDetailsHTML(pub){
   `;
 }
 
+function publicationIntelligenceText(pub){
+  const s = deadlineSuggestion(pub);
+  return [
+    'LexFlow - Inteligência de prazo',
+    `Parte/cliente: ${displayClientName(pub)}`,
+    `Processo: ${pub?.processo || 'não informado'}`,
+    `Tribunal: ${pub?.tribunal || 'não informado'}`,
+    `Publicação: ${fmtDate(pub?.dataPublicacao)}`,
+    `Origem: ${publicacaoOrigem(pub)}`,
+    `Ato identificado: ${s.rule?.act || pub?.tipoPublicacao || 'ainda não classificado'}`,
+    `Área inferida: ${s.area?.label || 'não identificada'} (${s.area?.reason || 'sem motivo'})`,
+    s.restricted ? `Status: requer autenticação (${s.restrictedReason || 'conteúdo restrito'})` : '',
+    s.dueDate ? `Prazo sugerido: ${fmtDate(s.dueDate)}` : 'Prazo sugerido: não calculado automaticamente',
+    s.dueDate && s.rule ? `Contagem: ${s.rule.days} ${s.rule.count === 'business' ? 'dias úteis' : 'dias corridos'}` : '',
+    s.startDate ? `Primeiro dia contado: ${fmtDate(s.startDate)}` : '',
+    `Fundamento: ${s.rule?.basis || 'regra normativa ainda não mapeada para este ato'}`,
+    `Fonte normativa: ${s.code?.name || 'base legal não identificada'}`,
+    `Confiança: ${s.confidence || 'baixa'}`,
+    s.needsReview ? 'Observação: revisão recomendada pelo LexFlow antes de protocolar.' : 'Observação: sugestão pronta para conferência operacional.'
+  ].filter(Boolean).join('\n');
+}
+
+function openIntelligenceShareModal(pub){
+  const report = publicationIntelligenceText(pub);
+  const box = document.getElementById('modalBox');
+  box.className = 'modal';
+  box.innerHTML = `
+    <div class="modal-head"><h3>Compartilhar inteligência de prazo</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="analysis-hero">
+        <div class="analysis-title">${esc(displayClientName(pub))}</div>
+        <div class="analysis-sub">${esc(pub?.processo || 'sem processo')} · ${esc(pub?.tribunal || 'sem tribunal')}</div>
+      </div>
+      <div class="report-box">${esc(report)}</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="mCopyIntelligence">Copiar texto</button>
+      <button class="btn azul" id="mWhatsappIntelligence">Enviar por WhatsApp</button>
+      <button class="btn primary" id="mClose2">Fechar</button>
+    </div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mClose2').onclick = hideModal;
+  document.getElementById('mCopyIntelligence').onclick = async ()=>{
+    await navigator.clipboard.writeText(report).catch(()=>{});
+    toast('Inteligência copiada');
+  };
+  document.getElementById('mWhatsappIntelligence').onclick = ()=>window.open(`https://wa.me/?text=${encodeURIComponent(report)}`, '_blank', 'noopener');
+}
+
 function publicationDeadlineInfo(pub){
   if(pub?.prazoSugerido) return {label:`Sugestão: ${fmtDate(pub.prazoSugerido)}`, color:'azul'};
   const identified = cleanText(pub?.prazoIdentificado);
@@ -1866,12 +1987,12 @@ function formattedPublicationTextHTML(text){
   const parts = prepared.split(/\n+/).map(cleanText).filter(Boolean);
   const labelFor = part => {
     const norm = normalizePersonName(part);
+    if(/^https?:\/\//i.test(part) || norm.includes('INTEIRO TEOR') || norm.includes('HTTPS')) return 'Link / inteiro teor';
     if(norm.includes('PROCESSO') || /^\d{7}-\d{2}\./.test(part)) return 'Processo';
     if(norm.includes('DATA DE DISPONIBILIZACAO')) return 'Disponibilização';
     if(norm.includes('POLO ATIVO')) return 'Polo ativo';
     if(norm.includes('POLO PASSIVO')) return 'Polo passivo';
     if(norm.includes('ADVOGADO')) return 'Advogados';
-    if(norm.includes('INTEIRO TEOR') || norm.includes('HTTPS')) return 'Link / inteiro teor';
     if(norm.includes('TRIBUNAL') || norm.includes('PODER JUDICIARIO') || norm.includes('DIARIO DA JUSTICA')) return 'Órgão / origem';
     if(norm.includes('CERTIFICO') || norm.includes('CODIGO DA CERTIDAO')) return 'Certidão';
     return '';
@@ -1986,7 +2107,7 @@ function openPublicationAnalysisModal(pub){
   const s = deadlineSuggestion(pub);
   const restricao = restrictedInfo(pub);
   const linkStatus = sourceLinkStatus(pub);
-  const officialUrl = officialA3Target(pub);
+  const officialUrl = usableOfficialUrl(pub);
   box.className = 'modal analysis-modal';
   box.innerHTML = `
     <div class="modal-head">
@@ -2018,6 +2139,7 @@ function openPublicationAnalysisModal(pub){
         <div class="analysis-actions">
           ${restricao.restricted && linkStatus.state === 'ok'?`<button class="btn azul" id="mOpenA3Top">Abrir fonte oficial</button>`:''}
           ${officialUrl ? `<a class="btn" href="${esc(officialUrl)}" target="_blank" rel="noopener">Ver URL de origem</a>` : ''}
+          <button class="btn" id="mShareIntelligenceTop">Compartilhar inteligência</button>
           <button class="btn" id="mCreateTaskTop">Criar tarefa</button>
           <button class="btn" id="mEditPub">Editar dados</button>
         </div>
@@ -2037,6 +2159,7 @@ function openPublicationAnalysisModal(pub){
     <div class="modal-foot">
       ${restricao.restricted && linkStatus.state === 'ok'?`<button class="btn azul" id="mOpenA3">Abrir fonte oficial</button>`:''}
       ${s.dueDate?`<button class="btn azul" id="mSuggestPrazo">Gerar prazo sugerido</button>`:''}
+      <button class="btn" id="mShareIntelligence">Compartilhar inteligência</button>
       <button class="btn" id="mCreateTask">Criar tarefa</button>
       <button class="btn primary" id="mClose2">Fechar</button>
     </div>
@@ -2049,6 +2172,7 @@ function openPublicationAnalysisModal(pub){
   openA3Btns.forEach(btn=>btn.onclick = ()=>openRestrictedWithA3(pub));
   const suggestBtn = document.getElementById('mSuggestPrazo');
   if(suggestBtn) suggestBtn.onclick = ()=>createSuggestedPrazoFromPublication(pub);
+  [document.getElementById('mShareIntelligence'), document.getElementById('mShareIntelligenceTop')].filter(Boolean).forEach(btn=>btn.onclick = ()=>openIntelligenceShareModal(pub));
   [document.getElementById('mCreateTask'), document.getElementById('mCreateTaskTop')].filter(Boolean).forEach(btn=>btn.onclick = ()=>createTaskFromPublication(pub));
 }
 
@@ -2393,6 +2517,7 @@ function publicationDetailPanelHTML(p){
     <section class="publication-detail" data-selected-pub="${esc(p.id)}">
       <div class="publication-detail-head">
         <div>
+          <div class="selected-eyebrow">Publicação selecionada na lista</div>
           <div class="publication-detail-title">${esc(displayClientName(p))}</div>
           <div class="publication-detail-sub">${esc(p.processo || 'sem processo')} · ${esc(p.tribunal || 'sem tribunal')}</div>
         </div>
@@ -2412,6 +2537,7 @@ function publicationDetailPanelHTML(p){
           <div class="decision-actions">
             ${s.dueDate ? `<button class="btn primary" data-detail-act="suggest">Gerar prazo</button>` : (canGerarPrazo ? `<button class="btn primary" data-detail-act="genprazo">Gerar prazo</button>` : '')}
             <button class="btn" data-detail-act="details">Ver análise completa</button>
+            <button class="btn" data-detail-act="share-intelligence">Compartilhar inteligência</button>
             <button class="btn" data-detail-act="task">Criar tarefa</button>
             ${restricted && linkStatus.state === 'ok' ? `<button class="btn azul" data-detail-act="a3">Abrir fonte oficial</button>` : ''}
           </div>
@@ -2442,7 +2568,7 @@ function publicationDetailPanelHTML(p){
 
         <div class="publication-secondary-actions">
           <button class="channel-action whatsapp" data-detail-act="whatsapp"><span class="brand-mark whatsapp">W</span>WhatsApp</button>
-          ${officialA3Target(p) ? `<a class="btn" href="${esc(officialA3Target(p))}" target="_blank" rel="noopener">Ver URL de origem</a>` : ''}
+          ${originAccessHTML(p)}
           <button class="btn" data-detail-act="edit">Editar dados</button>
           ${!PUB_ARCHIVED.includes(p.status) ? `<button class="btn danger" data-detail-act="archive">Arquivar</button>` : ''}
         </div>
@@ -2499,7 +2625,7 @@ function renderPublicacoes(){
             <div class="publication-date">${esc(fmtDate(p.dataPublicacao))}</div>
             <div class="publication-main">
               <div class="publication-topline">
-                <div class="publication-client">${esc(displayClientName(p))}</div>
+                <div class="publication-title-stack"><div class="publication-client">${esc(displayClientName(p))}</div><span class="publication-selected-badge">Selecionada</span></div>
                 ${deadlineInfoTag(p)}
               </div>
               <div class="publication-proc">${esc(p.processo || 'sem processo')} · ${esc(p.tribunal || 'sem tribunal')}</div>
@@ -2539,6 +2665,7 @@ function renderPublicacoes(){
     bind('suggest', ()=>createSuggestedPrazoFromPublication(p));
     bind('genprazo', ()=>openPrazoModal(null, p));
     bind('details', ()=>openPublicationAnalysisModal(p));
+    bind('share-intelligence', ()=>openIntelligenceShareModal(p));
     bind('task', ()=>createTaskFromPublication(p));
     bind('a3', ()=>openRestrictedWithA3(p));
     bind('whatsapp', ()=>openWhatsAppShare('prazo', {cliente:displayClientName(p), processo:p.processo, tipoPrazo:p.tipoPublicacao || 'Publicação', prazoFatal:p.prazoFatal, responsavel:p.responsavel}));
@@ -2879,6 +3006,7 @@ function renderPrazos(){
     };
     const validateBtn = tr.querySelector('[data-act="validate"]');
     if(validateBtn) validateBtn.onclick = ()=>openDeadlineValidationModal(p);
+    tr.querySelectorAll('[data-act="agenda"]').forEach(btn=>btn.onclick = ()=>openAgendaModal('prazo', p));
     tr.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('prazo', p));
     tr.querySelectorAll('[data-act="whatsapp"]').forEach(btn=>btn.onclick = ()=>openWhatsAppShare('prazo', p));
     const respInput = tr.querySelector('[data-act="resp-input"]');
@@ -3018,6 +3146,7 @@ function renderAudiencias(){
       logHist(`Audiência de ${a.cliente} (${a.processo}) alterada: ${old} → ${a.status}`);
       await saveDB(); renderAll(); toast('Status atualizado');
     };
+    tr.querySelectorAll('[data-act="agenda"]').forEach(btn=>btn.onclick = ()=>openAgendaModal('audiencia', a));
     tr.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('audiencia', a));
     tr.querySelectorAll('[data-act="whatsapp"]').forEach(btn=>btn.onclick = ()=>openWhatsAppShare('audiencia', a));
     tr.querySelector('[data-act="edit"]').onclick = ()=>openAudiModal(a);
@@ -3278,6 +3407,7 @@ function renderTarefas(){
     if(!t) return;
     const statusSelect = el.querySelector('[data-act="status"]');
     if(statusSelect) statusSelect.onchange = e=>saveTaskStatus(t, e.target.value);
+    el.querySelectorAll('[data-act="agenda"]').forEach(btn=>btn.onclick = ()=>openAgendaModal('tarefa', t));
     el.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('tarefa', t));
     el.querySelectorAll('[data-act="whatsapp"]').forEach(btn=>btn.onclick = ()=>openWhatsAppShare('tarefa', t));
     const respInput = el.querySelector('[data-act="resp-input"]');
