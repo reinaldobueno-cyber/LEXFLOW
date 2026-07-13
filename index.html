@@ -3904,6 +3904,17 @@ async function openDailySummaryPreview(sendNow = false){
   const res = await apiFetch('/api/daily-summary' + suffix + (sendNow ? (suffix ? '&send=1' : '?send=1') : ''), {method:sendNow ? 'POST' : 'GET'});
   const payload = await res.json().catch(()=>({}));
   if(!res.ok) throw new Error(payload.message || 'Falha ao gerar resumo diário');
+  const dailyText = payload.summary?.text || payload.text || 'Sem conteúdo para exibir.';
+  const results = payload.results || [];
+  const missingWebhook = results.some(r=>r.result?.reason === 'webhook_not_configured');
+  const statusText = results.length
+    ? results.map(r=>{
+        if(r.result?.ok) return `${r.channel}: enviado para ${r.to}`;
+        if(r.result?.reason === 'webhook_not_configured') return `${r.channel}: provedor/webhook ainda não configurado`;
+        return `${r.channel}: pendente (${r.result?.reason || r.result?.status || 'sem retorno'})`;
+      }).join(' | ')
+    : 'Nenhum canal configurado ou nenhum destinatário informado.';
+  const whatsappTarget = (payload.config?.whatsappNumbers || []).map(n=>String(n||'').replace(/\D/g,'')).find(Boolean) || '';
   const box = document.getElementById('modalBox');
   box.className = 'modal';
   box.innerHTML = `
@@ -3913,10 +3924,11 @@ async function openDailySummaryPreview(sendNow = false){
         <div class="analysis-title">Compromissos do dia</div>
         <div class="analysis-sub">Snapshot: ${esc(payload.snapshotUpdatedAt ? fmtDateTime(payload.snapshotUpdatedAt) : 'ainda sem snapshot')}</div>
       </div>
-      <div class="report-box">${esc(payload.summary?.text || payload.text || 'Sem conteúdo para exibir.')}</div>
-      ${sendNow ? `<div class="coverage-gap">Resultado do teste: ${(payload.results || []).length ? esc((payload.results || []).map(r=>`${r.channel}: ${r.result?.ok ? 'enviado' : (r.result?.reason || 'pendente')}`).join(' | ')) : 'nenhum canal configurado ou webhook ausente.'}</div>` : ''}
+      <div class="report-box">${esc(dailyText)}</div>
+      ${sendNow ? `<div class="coverage-gap"><b>Resultado do teste:</b> ${esc(statusText)}${missingWebhook ? '<br><br>Para envio automático real, configure um provedor de WhatsApp/e-mail nos secrets do Cloudflare. Enquanto isso, use o botão de WhatsApp manual para validar a mensagem.' : ''}</div>` : ''}
     </div>
     <div class="modal-foot">
+      ${missingWebhook && whatsappTarget ? `<button class="btn azul" id="mOpenWhatsManual">Abrir no WhatsApp</button>` : ''}
       <button class="btn" id="mCopyDaily">Copiar texto</button>
       <button class="btn primary" id="mClose2">Fechar</button>
     </div>
@@ -3925,9 +3937,11 @@ async function openDailySummaryPreview(sendNow = false){
   document.getElementById('mClose').onclick = hideModal;
   document.getElementById('mClose2').onclick = hideModal;
   document.getElementById('mCopyDaily').onclick = async ()=>{
-    await navigator.clipboard.writeText(payload.summary?.text || payload.text || '').catch(()=>{});
+    await navigator.clipboard.writeText(dailyText).catch(()=>{});
     toast('Resumo copiado');
   };
+  const openWhatsManual = document.getElementById('mOpenWhatsManual');
+  if(openWhatsManual) openWhatsManual.onclick = ()=>window.open(`https://wa.me/${whatsappTarget}?text=${encodeURIComponent(dailyText)}`, '_blank', 'noopener');
 }
 
 function renderConfiguracoes(){

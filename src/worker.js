@@ -730,7 +730,7 @@ async function handleDailySummary(request, env, auth){
   if(request.method === 'POST' || url.searchParams.get('send') === '1'){
     const dispatched = await dispatchDailySummary(env, tenant, settings, data, {day});
     await auditLog(env, tenantId, auth.user, 'daily_summary.manual_send', {day, results:dispatched.results});
-    return json({ok:true, ...dispatched});
+    return json({ok:true, config:cfg, snapshotUpdatedAt:data.updatedAt || '', ...dispatched});
   }
   return json({ok:true, day, config:cfg, ...buildDailySummaryText(tenant, data, day), snapshotUpdatedAt:data.updatedAt || ''});
 }
