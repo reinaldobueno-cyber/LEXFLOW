@@ -330,6 +330,8 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .task-card .task-meta{font-size:11px; color:var(--ink-soft); line-height:1.35;}
 .task-card .task-foot{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;}
 .task-card .task-actions{display:flex; gap:5px; flex-wrap:wrap;}
+.calendar-actions{display:inline-flex; gap:4px; flex-wrap:wrap; align-items:center;}
+.calendar-actions .btn{padding:4px 7px; font-size:10.5px;}
 .checklist-mini{display:flex; flex-direction:column; gap:4px; border-top:1px solid var(--line); padding-top:8px;}
 .checklist-mini div{font-size:11px; color:var(--ink-soft); display:flex; gap:5px; align-items:flex-start;}
 .checklist-mini .done{text-decoration:line-through; opacity:.65;}
@@ -500,6 +502,46 @@ function fmtDate(d){
 }
 function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); if(isNaN(dt)) return '—'; return dt.toLocaleString('pt-BR'); }
 function isoOf(d){ const dt=parseDateLocal(d); if(!dt) return ''; const mm=String(dt.getMonth()+1).padStart(2,'0'); const dd=String(dt.getDate()).padStart(2,'0'); return `${dt.getFullYear()}-${mm}-${dd}`; }
+function compactDate(d){ return isoOf(d).replace(/-/g,''); }
+function addDaysISO(d, days=1){ const dt=parseDateLocal(d); if(!dt) return ''; dt.setDate(dt.getDate()+days); return isoOf(dt); }
+function isoDateTime(dateVal, timeVal='09:00'){
+  const iso = isoOf(dateVal); if(!iso) return '';
+  const [h='09',m='00'] = String(timeVal || '09:00').split(':');
+  return `${iso}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`;
+}
+function plusOneHour(timeVal='09:00'){
+  const [h='09',m='00'] = String(timeVal || '09:00').split(':');
+  return `${String(Number(h)+1).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+function calendarEventFor(type, item){
+  if(type === 'audiencia') return {title:`Audiência - ${item.cliente || item.processo || 'LexFlow'}`, start:item.data, time:item.horario || '09:00', allDay:false, details:[item.tipo,item.modalidade,item.processo,item.observacoes,item.link].filter(Boolean).join('\n'), location:item.link || item.estado || ''};
+  if(type === 'tarefa') return {title:`Tarefa - ${item.titulo || item.cliente || 'LexFlow'}`, start:item.dataLimite, time:'09:00', allDay:true, details:[item.cliente,item.processo,item.responsavel?`Responsável: ${item.responsavel}`:'',item.observacao].filter(Boolean).join('\n'), location:''};
+  return {title:`Prazo fatal - ${item.cliente || item.processo || 'LexFlow'}`, start:item.prazoFatal, time:'09:00', allDay:true, details:[item.tipoPrazo,item.processo,item.tribunal,item.responsavel?`Responsável: ${item.responsavel}`:'',item.observacao].filter(Boolean).join('\n'), location:item.link || ''};
+}
+function calendarGoogleUrl(ev){
+  const dates = ev.allDay ? `${compactDate(ev.start)}/${compactDate(addDaysISO(ev.start,1))}` : `${compactDate(ev.start)}T${(ev.time||'09:00').replace(':','')}00/${compactDate(ev.start)}T${plusOneHour(ev.time).replace(':','')}00`;
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(ev.title)}&dates=${dates}&details=${encodeURIComponent(ev.details||'')}&location=${encodeURIComponent(ev.location||'')}`;
+}
+function calendarOutlookUrl(ev){
+  return `https://outlook.live.com/calendar/0/deeplink/compose?subject=${encodeURIComponent(ev.title)}&startdt=${encodeURIComponent(isoDateTime(ev.start,ev.time))}&enddt=${encodeURIComponent(ev.allDay?isoDateTime(addDaysISO(ev.start,1),ev.time):isoDateTime(ev.start,plusOneHour(ev.time)))}&body=${encodeURIComponent(ev.details||'')}&location=${encodeURIComponent(ev.location||'')}&allday=${ev.allDay?'true':'false'}`;
+}
+function downloadCalendarICS(type, item){
+  const ev = calendarEventFor(type, item);
+  if(!ev.start){ toast('Item sem data para agenda'); return; }
+  const dtStart = ev.allDay ? `DTSTART;VALUE=DATE:${compactDate(ev.start)}` : `DTSTART:${compactDate(ev.start)}T${(ev.time||'09:00').replace(':','')}00`;
+  const dtEnd = ev.allDay ? `DTEND;VALUE=DATE:${compactDate(addDaysISO(ev.start,1))}` : `DTEND:${compactDate(ev.start)}T${plusOneHour(ev.time).replace(':','')}00`;
+  const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LexFlow//Agenda//PT-BR','BEGIN:VEVENT',`UID:${type}-${item.id || uid()}@lexflow`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')}`,dtStart,dtEnd,`SUMMARY:${ev.title.replace(/\n/g,' ')}`,`DESCRIPTION:${(ev.details||'').replace(/\n/g,'\\n')}`,`LOCATION:${(ev.location||'').replace(/\n/g,' ')}`,'END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `${type}-${(item.processo || item.titulo || item.cliente || 'lexflow').replace(/[^\w.-]+/g,'-')}.ics`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('Arquivo de agenda gerado');
+}
+function calendarActionsHTML(type, item){
+  const ev = calendarEventFor(type, item);
+  if(!ev.start) return '';
+  return `<span class="calendar-actions"><a class="btn small ghost" href="${esc(calendarGoogleUrl(ev))}" target="_blank" rel="noopener">Google</a><a class="btn small ghost" href="${esc(calendarOutlookUrl(ev))}" target="_blank" rel="noopener">Outlook</a><button class="btn small ghost" data-act="ics" data-cal-type="${esc(type)}">ICS</button></span>`;
+}
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 function diasRestantes(dateVal){
   const dt = parseDateLocal(dateVal);
@@ -2459,6 +2501,7 @@ function renderPrazos(){
       <td><select class="status-select" data-act="status">${PRAZO_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td><span class="priority-tag priority-${p.prioridade==='Alta'?'alta':p.prioridade==='Baixa'?'baixa':'media'}">${p.prioridade}</span></td>
       <td class="row-actions">
+        ${calendarActionsHTML('prazo', p)}
         ${p.motorPrazo?`<button class="btn small azul" data-act="validate">${canConfirmLexflowDeadline(p)?'Validar':'Ver cálculo'}</button>`:''}
         <button class="btn small ghost" data-act="edit">✎</button>
         ${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}
@@ -2490,6 +2533,7 @@ function renderPrazos(){
     };
     const validateBtn = tr.querySelector('[data-act="validate"]');
     if(validateBtn) validateBtn.onclick = ()=>openDeadlineValidationModal(p);
+    tr.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('prazo', p));
     tr.querySelector('[data-act="edit"]').onclick = ()=>openPrazoModal(p);
     const archBtn = tr.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{
@@ -2605,7 +2649,7 @@ function renderAudiencias(){
       <td>${a.link?`<a class="link-audi" href="${a.link.split(' ')[0]}" target="_blank">acessar ↗</a>`:'—'}</td>
       <td><select class="status-select" data-act="status">${AUDI_STATUSES.map(s=>`<option ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td>${pill(done?'—':(dr<0?'Passou':dr===0?'Hoje':dr+'d'), color)}</td>
-      <td class="row-actions"><button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
+      <td class="row-actions">${calendarActionsHTML('audiencia', a)}<button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
     </tr>`;
   });
   html += `</tbody></table></div>`;
@@ -2624,6 +2668,7 @@ function renderAudiencias(){
       logHist(`Audiência de ${a.cliente} (${a.processo}) alterada: ${old} → ${a.status}`);
       await saveDB(); renderAll(); toast('Status atualizado');
     };
+    tr.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('audiencia', a));
     tr.querySelector('[data-act="edit"]').onclick = ()=>openAudiModal(a);
     const archBtn = tr.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{ a.status='Arquivado'; logHist(`Audiência de ${a.cliente} (${a.processo}) arquivada.`); await saveDB(); renderAll(); toast('Audiência arquivada'); };
@@ -2839,6 +2884,7 @@ function renderTarefas(){
               <span class="priority-tag priority-${t.prioridade==='Alta'?'alta':t.prioridade==='Baixa'?'baixa':'media'}">${esc(t.prioridade)}</span>
               <span class="checklist-progress">${progress.label}</span>
               <div class="task-actions">
+                ${calendarActionsHTML('tarefa', t)}
                 ${colIdx>0?`<button class="btn small ghost" data-act="prev">←</button>`:''}
                 ${colIdx<cols.length-1?`<button class="btn small ghost" data-act="next">→</button>`:''}
                 <button class="btn small ghost" data-act="edit">✎</button>
@@ -2863,7 +2909,7 @@ function renderTarefas(){
         <td><span class="checklist-progress">${progress.label}</span></td>
         <td><span class="priority-tag priority-${t.prioridade==='Alta'?'alta':t.prioridade==='Baixa'?'baixa':'media'}">${esc(t.prioridade)}</span></td>
         <td><select class="status-select" data-act="status">${taskStatusOptions(t.status)}</select></td>
-        <td class="row-actions"><button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
+        <td class="row-actions">${calendarActionsHTML('tarefa', t)}<button class="btn small ghost" data-act="edit">✎</button>${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}</td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
@@ -2879,6 +2925,7 @@ function renderTarefas(){
     if(!t) return;
     const statusSelect = el.querySelector('[data-act="status"]');
     if(statusSelect) statusSelect.onchange = e=>saveTaskStatus(t, e.target.value);
+    el.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('tarefa', t));
     const editBtn = el.querySelector('[data-act="edit"]'); if(editBtn) editBtn.onclick = ()=>openTaskModal(t);
     const cols = taskColumnSet(rows);
     const idx = cols.indexOf(t.status);
@@ -3117,6 +3164,13 @@ function renderIntegracao(){
       <div class="path-card"><div class="path-tag">LexFlow Cloudflare · fonte privada</div><h4>ControlJus / Aviso Urgente</h4><p><span class="mono">${DB.config.controlJusEndpoint}</span></p><p>Fonte transitória e complementar. O LexFlow consome quando autorizada, mas a inteligência de prazo e cobrança fica no LexFlow.</p></div>
       <div class="path-card"><div class="path-tag">LexFlow Cloudflare · rota fixa</div><h4>Coletor DJEN/CNJ por OAB</h4><p><span class="mono">${DB.config.lexflowDjenEndpoint}</span></p><p>Rota operacional do LexFlow para consultar o DJEN por OAB, consolidar duplicidades e transformar comunicações oficiais em recortes.</p></div>
       <div class="path-card"><div class="path-tag">CNJ · público oficial</div><h4>DJEN / Comunicações Processuais</h4><p><span class="mono">${DB.config.djenEndpoint}</span></p><p>Fonte oficial pública. O LexFlow consulta por OAB e data de disponibilização, sem depender de recorte intermediado.</p></div>
+    </div>
+
+    <div class="section-title">Integrações operacionais</div>
+    <div class="path-cards">
+      <div class="path-card"><div class="path-tag">Agenda · ativo</div><h4>Google Agenda, Outlook e ICS</h4><p>Prazos, audiências e tarefas já podem ser adicionados à agenda por link direto ou arquivo .ics. Não depende de senha do Google no LexFlow.</p></div>
+      <div class="path-card"><div class="path-tag">Agenda · próximo</div><h4>Sincronização OAuth por escritório</h4><p>Próxima camada: conectar conta Google/Microsoft por tenant para criar eventos automaticamente, com logs e permissão revogável.</p></div>
+      <div class="path-card"><div class="path-tag">Alertas · roadmap</div><h4>E-mail, WhatsApp e notificações</h4><p>Alertas de prazo, tarefa sem responsável, publicação restrita e falha de integração entram como canais configuráveis por escritório.</p></div>
     </div>
 
     <div class="section-title">Sincronização de fonte privada</div>

@@ -35,6 +35,7 @@ Legenda:
 - [x] Central de Alertas.
 - [x] Historico de alteracoes.
 - [x] Acervo historico de processos com busca e consulta de itens passados.
+- [x] Integracao de agenda por links Google/Outlook e arquivo ICS.
 - [x] Login e sessao autenticada.
 - [x] Estrutura multi-tenant inicial.
 - [x] Usuario Master com visao administrativa.
@@ -369,6 +370,7 @@ Prioridade 3 - Operacao:
 Fora da sprint:
 
 - [ ] Billing/planos.
+- [ ] Sincronizacao OAuth automatica com Google Agenda/Microsoft Calendar.
 - [ ] WhatsApp/email.
 - [ ] Automacao de tribunal restrito sem API oficial.
 - [ ] Certificado A1.
@@ -403,6 +405,7 @@ Fora da sprint:
 - [x] Checklist por tipo de ato.
 - [x] Responsavel obrigatorio em itens criticos.
 - [x] Kanban de tarefas com fluxo configuravel.
+- [x] Adicionar prazos, audiencias e tarefas ao Google Agenda/Outlook/ICS.
 - [ ] Conclusao com comprovante.
 
 ## Proximo Item Ativo
