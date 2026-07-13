@@ -2377,7 +2377,7 @@ async function createTaskFromPublication(pub){
     cliente,
     responsavel:pub.responsavel || '',
     dataLimite:suggestion.dueDate || '',
-    status:'Aberta',
+    status:initialTaskStatus(),
     prioridade:restricao.restricted || suggestion.needsReview ? 'Alta' : 'Média',
     observacao:[
       `Tarefa criada a partir da publicação ${pub.refId || pub.id || ''}.`,
@@ -2685,6 +2685,10 @@ function taskColumns(){
   return [...new Set(cols.length ? cols : DEFAULT_TASK_COLUMNS)];
 }
 
+function initialTaskStatus(){
+  return taskColumns()[0] || 'Aberta';
+}
+
 function isTaskDone(task){
   const cols = taskColumns();
   const finalCol = cols[cols.length - 1];
@@ -2817,9 +2821,7 @@ function renderTarefas(){
     <button class="btn small" id="taskColsBtn">Configurar colunas</button>
     <button class="btn primary small" id="addTaskBtn">+ Nova tarefa</button>
   </div>`;
-  if(rows.length===0){
-    html += `<div class="empty">Nenhuma tarefa cadastrada. Crie tarefas vinculadas a prazos, audiências ou publicações.</div>`;
-  } else if(view === 'kanban'){
+  if(view === 'kanban'){
     const cols = taskColumnSet(rows);
     html += `<div class="kanban-board">${cols.map((col, colIdx)=>{
       const items = rows.filter(t=>t.status === col || (!cols.includes(t.status) && colIdx === 0));
@@ -2849,6 +2851,7 @@ function renderTarefas(){
     }).join('')}</div>`;
   } else {
     html += `<div class="table-wrap"><table><thead><tr><th>Título</th><th>Processo / Cliente</th><th>Responsável</th><th>Data limite</th><th>Checklist</th><th>Prioridade</th><th>Status</th><th></th></tr></thead><tbody>`;
+    if(rows.length===0){ html += `<tr><td colspan="8"><div class="empty">Nenhuma tarefa cadastrada. Crie tarefas vinculadas a prazos, audiências ou publicações.</div></td></tr>`; }
     rows.forEach(t=>{
       const archived = TAREFA_ARCHIVED.includes(t.status);
       const progress = taskChecklistProgress(t);
@@ -2888,7 +2891,7 @@ function renderTarefas(){
 
 function openTaskModal(t){
   const isNew = !t;
-  const d = t || {id:uid(), titulo:'', processo:'', cliente:'', responsavel:'', dataLimite:'', status:'Aberta', prioridade:'Média', observacao:''};
+  const d = t || {id:uid(), titulo:'', processo:'', cliente:'', responsavel:'', dataLimite:'', status:initialTaskStatus(), prioridade:'Média', observacao:''};
   ensureTaskChecklist(d);
   const box = document.getElementById('modalBox');
   box.innerHTML = `
