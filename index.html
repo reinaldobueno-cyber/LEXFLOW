@@ -274,6 +274,15 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .source-status.ok{background:#ECFDF3; color:var(--verde);}
 .source-status.warn{background:#FFFAEB; color:#A15C00;}
 .source-status.bad{background:#FEF3F2; color:var(--vermelho);}
+.deadline-validation-grid{display:grid; grid-template-columns:1.1fr .9fr; gap:14px;}
+.deadline-decision-card{border:1px solid var(--line); border-radius:10px; padding:14px; background:#F8FAFC;}
+.deadline-decision-card h4{font-family:'Source Serif 4',serif; font-size:16px; margin-bottom:6px;}
+.deadline-decision-card p{font-size:12.5px; color:var(--ink-soft); line-height:1.55;}
+.deadline-summary{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;}
+.deadline-summary div{border:1px solid var(--line); background:var(--white); border-radius:8px; padding:9px;}
+.deadline-summary span{display:block; color:var(--ink-soft); font-size:10px; text-transform:uppercase; font-weight:800; margin-bottom:4px;}
+.deadline-summary strong{display:block; font-size:13px;}
+.validation-note{border-left:3px solid var(--azul); padding:8px 10px; background:#EFF8FF; color:var(--ink-2); font-size:12px; line-height:1.45;}
 .modal-foot{padding:16px 22px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:8px;}
 .field{display:flex; flex-direction:column; gap:5px;}
 .field label{font-size:11.5px; font-weight:600; color:var(--ink-2);}
@@ -326,7 +335,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .check-item:last-child{border-bottom:none;}
 .check-item input{width:16px; height:16px; accent-color:var(--verde);}
 .check-item.checked span{text-decoration:line-through; color:var(--ink-soft);}
-@media (max-width: 860px){ .path-cards{grid-template-columns:1fr;} }
+@media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary{grid-template-columns:1fr;} }
 @media (max-width: 1180px){
   .dashboard-hero, .dashboard-grid{grid-template-columns:1fr;}
   .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
@@ -1382,7 +1391,7 @@ function computeAlertCount(){
   DB.prazos.filter(isIntegratedPrazo).forEach(p=>{ if(PRAZO_DONE.includes(p.status)) return; const dr=diasRestantes(p.prazoFatal); if(dr!==null && dr<=0) crit++; });
   DB.audiencias.forEach(a=>{ if(AUDI_DONE.includes(a.status)) return; const dr=diasRestantes(a.data); if(dr!==null && dr>=0 && dr<=1) crit++; });
   crit += publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status) && isRestrictedPublication(p)).length;
-  crit += DB.prazos.filter(p=>!PRAZO_DONE.includes(p.status) && PRAZO_REVIEW_RECOMMENDED.includes(p.validacaoStatus)).length;
+  crit += DB.prazos.filter(p=>!PRAZO_DONE.includes(p.status) && canConfirmLexflowDeadline(p)).length;
   return crit;
 }
 
@@ -1754,19 +1763,130 @@ function canConfirmLexflowDeadline(prazo){
   return Boolean(prazo?.motorPrazo && !['confirmado','rejeitado'].includes(prazo.validacaoStatus));
 }
 
+function prazoMemoryHTML(d){
+  if(!d?.motorPrazo) return `<div class="empty">Este prazo ainda não tem memória de cálculo do motor LexFlow.</div>`;
+  const fatoresCalculo = Array.isArray(d.fatoresCalculo) && d.fatoresCalculo.length
+    ? `<ul class="calc-factors">${d.fatoresCalculo.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`
+    : '';
+  const diasNaoContados = Array.isArray(d.diasNaoContados) && d.diasNaoContados.length
+    ? `<p><b>Dias não contados:</b> ${d.diasNaoContados.map(item => `${fmtDate(item.date)} (${esc(item.reason)})`).join(', ')}</p>`
+    : '';
+  return `
+    <div class="path-card" style="box-shadow:none;">
+      <div class="path-tag">Memória do motor de prazos</div>
+      <h4>${esc(d.regraPrazoAto || d.tipoPrazo)}</h4>
+      <p><b>Área:</b> ${esc(d.areaDireito || '—')} · <b>Confiança:</b> ${esc(d.confianca || '—')} · <b>Status:</b> ${esc(validationStatusLabel(d.validacaoStatus))}</p>
+      <p><b>Fundamento:</b> ${esc(d.fundamentoLegal || '—')}</p>
+      <p><b>Termo inicial:</b> ${esc(d.termoInicialDescricao || 'publicação oficial')} · <b>primeiro dia contado:</b> ${fmtDate(d.inicioContagem)}</p>
+      <p><b>Contagem:</b> ${esc(d.diasPrazo || '—')} ${d.contagem === 'business' ? 'dias úteis' : (d.contagem === 'calendar' ? 'dias corridos' : 'manual')} · <b>calendário:</b> ${esc(d.calendarioCalculo || '—')}</p>
+      ${diasNaoContados}
+      ${d.fonteLegal ? `<p><b>Fonte:</b> <a class="link-audi" href="${esc(d.fonteLegal)}" target="_blank" rel="noopener">norma oficial</a></p>` : ''}
+      ${fatoresCalculo}
+      ${d.validacaoEm ? `<p><b>Última validação:</b> ${esc(validationStatusLabel(d.validacaoStatus))} por ${esc(d.validacaoPor || d.confirmadoPor || '—')} em ${fmtDateTime(d.validacaoEm || d.confirmadoEm)}.</p>` : ''}
+      ${d.justificativaValidacao ? `<p><b>Justificativa:</b> ${esc(d.justificativaValidacao)}</p>` : ''}
+    </div>
+  `;
+}
+
+function defaultValidationReason(prazo){
+  if(needsDeadlineReview(prazo)) return 'Revisar termo inicial, área/ato e calendário antes de confirmar.';
+  return 'Prazo validado com base na memória de cálculo do LexFlow.';
+}
+
+function openDeadlineValidationModal(prazo){
+  if(!prazo?.motorPrazo){ toast('Este prazo não tem cálculo LexFlow para validar'); return; }
+  const initialDecision = prazo.validacaoStatus === 'rejeitado' ? 'rejeitar' : (prazo.prazoAjustado ? 'ajustar' : 'confirmar');
+  const box = document.getElementById('modalBox');
+  box.className = 'modal analysis-modal';
+  box.innerHTML = `
+    <div class="modal-head"><h3>Validar prazo LexFlow</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <section class="analysis-hero">
+        <div>
+          <div class="analysis-title">${esc(prazo.cliente)}</div>
+          <div class="analysis-sub">${esc(prazo.processo)} · ${esc(prazo.tribunal)} · ${esc(prazo.tipoPrazo)}</div>
+        </div>
+        <div class="deadline-summary">
+          <div><span>Publicação</span><strong>${fmtDate(prazo.dataPublicacao)}</strong></div>
+          <div><span>Prazo sugerido</span><strong>${fmtDate(prazo.prazoFatal)}</strong></div>
+          <div><span>Confiança</span><strong>${esc(prazo.confianca || validationStatusLabel(prazo.validacaoStatus))}</strong></div>
+        </div>
+      </section>
+      <div class="deadline-validation-grid">
+        <div>
+          ${prazoMemoryHTML(prazo)}
+        </div>
+        <div class="deadline-decision-card">
+          <h4>Decisão da validação</h4>
+          <p>Use ajuste quando a data sugerida estiver correta na regra, mas precisar de correção por termo inicial, calendário local ou informação do processo.</p>
+          <div class="field"><label>Decisão</label><select id="vDecision"><option value="confirmar">Confirmar prazo sugerido</option><option value="ajustar">Ajustar e confirmar</option><option value="rejeitar">Rejeitar sugestão</option></select></div>
+          <div class="field"><label>Prazo fatal validado</label><input type="date" id="vFatal" value="${esc(prazo.prazoFatal || '')}"></div>
+          <div class="field"><label>Justificativa</label><textarea id="vReason">${esc(prazo.justificativaValidacao || defaultValidationReason(prazo))}</textarea></div>
+          <div class="validation-note">A decisão fica gravada no prazo e no histórico. Quando rejeitada, a sugestão deixa de ser operacional e volta para análise.</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mApplyValidation">Salvar validação</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCancel').onclick = hideModal;
+  document.getElementById('vDecision').value = initialDecision;
+  document.getElementById('vFatal').disabled = initialDecision === 'rejeitar';
+  document.getElementById('vDecision').onchange = e=>{
+    const reject = e.target.value === 'rejeitar';
+    document.getElementById('vFatal').disabled = reject;
+    if(reject) document.getElementById('vReason').value = 'Sugestão rejeitada. Necessário recalcular o prazo com base no processo/fonte autenticada.';
+    else if(!document.getElementById('vReason').value.trim()) document.getElementById('vReason').value = defaultValidationReason(prazo);
+  };
+  document.getElementById('mApplyValidation').onclick = async ()=>{
+    const decision = document.getElementById('vDecision').value;
+    const fatal = document.getElementById('vFatal').value;
+    const reason = document.getElementById('vReason').value.trim();
+    if(decision !== 'rejeitar' && !fatal){ toast('Informe o prazo fatal validado'); return; }
+    if(!reason){ toast('Informe a justificativa da validação'); return; }
+    const user = AUTH.user?.name || AUTH.user?.email || 'LexFlow';
+    const now = new Date().toISOString();
+    const oldFatal = prazo.prazoFatal;
+    prazo.validacaoPor = user;
+    prazo.validacaoEm = now;
+    prazo.justificativaValidacao = reason;
+    prazo.validacaoDecisao = decision;
+    if(decision === 'rejeitar'){
+      prazo.validacaoStatus = 'rejeitado';
+      prazo.status = 'Em análise';
+      prazo.rejeitadoPor = user;
+      prazo.rejeitadoEm = now;
+      prazo.observacao = [
+        prazo.observacao,
+        `Validação LexFlow: sugestão rejeitada por ${user} em ${fmtDateTime(now)}. Motivo: ${reason}`
+      ].filter(Boolean).join(' ');
+      logHist(`Prazo LexFlow rejeitado: ${prazo.cliente} (${prazo.processo}). Motivo: ${reason}`);
+      toast('Sugestão rejeitada e enviada para análise');
+    } else {
+      prazo.validacaoStatus = 'confirmado';
+      prazo.confirmadoPor = user;
+      prazo.confirmadoEm = now;
+      prazo.prazoFatal = fatal;
+      prazo.prazoAjustado = decision === 'ajustar' || fatal !== oldFatal;
+      prazo.prazoFatalOriginalLexFlow = prazo.prazoFatalOriginalLexFlow || oldFatal;
+      if(['Novo','Em análise'].includes(prazo.status)) prazo.status = 'Protocolar';
+      const actionText = prazo.prazoAjustado ? `ajustado de ${fmtDate(oldFatal)} para ${fmtDate(fatal)}` : `confirmado em ${fmtDate(fatal)}`;
+      prazo.observacao = [
+        prazo.observacao,
+        `Validação LexFlow: prazo ${actionText} por ${user} em ${fmtDateTime(now)}. Justificativa: ${reason}`
+      ].filter(Boolean).join(' ');
+      logHist(`Prazo LexFlow ${actionText}: ${prazo.cliente} (${prazo.processo}).`);
+      toast(prazo.prazoAjustado ? 'Prazo ajustado e confirmado' : 'Prazo confirmado');
+    }
+    await saveDB();
+    hideModal();
+    renderAll();
+  };
+}
+
 async function confirmLexflowDeadline(prazo){
-  prazo.validacaoStatus = 'confirmado';
-  prazo.confirmadoPor = AUTH.user?.name || AUTH.user?.email || 'LexFlow';
-  prazo.confirmadoEm = new Date().toISOString();
-  if(prazo.status === 'Em análise') prazo.status = 'Protocolar';
-  prazo.observacao = [
-    prazo.observacao,
-    `Confirmação: prazo calculado pelo LexFlow confirmado por ${prazo.confirmadoPor} em ${fmtDateTime(prazo.confirmadoEm)}.`
-  ].filter(Boolean).join(' ');
-  logHist(`Prazo LexFlow confirmado: ${prazo.cliente} (${prazo.processo}) — ${fmtDate(prazo.prazoFatal)}.`);
-  await saveDB();
-  renderAll();
-  toast('Prazo LexFlow confirmado');
+  openDeadlineValidationModal(prazo);
 }
 
 /* ===================== DASHBOARD EXECUTIVO ===================== */
@@ -1785,7 +1905,8 @@ function renderDashboard(){
   const audiProximas = activeAudi.filter(a=>{if(AUDI_DONE.includes(a.status))return false; const d=diasRestantes(a.data); return d>=0&&d<=7;}).length;
   const semRespTotal = activePrazos.filter(p=>!PRAZO_DONE.includes(p.status)&&!p.responsavel).length + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&!a.responsavel).length;
   const pubsRestritas = activePubs.filter(isRestrictedPublication).length;
-  const itensCriticos = vencidos + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&diasRestantes(a.data)===0).length + semRespTotal + pubsRestritas;
+  const prazosSemValidacao = activePrazos.filter(canConfirmLexflowDeadline).length;
+  const itensCriticos = vencidos + activeAudi.filter(a=>!AUDI_DONE.includes(a.status)&&diasRestantes(a.data)===0).length + semRespTotal + pubsRestritas + prazosSemValidacao;
 
   const items = [];
   activePrazos.filter(p=>!PRAZO_DONE.includes(p.status)).forEach(p=>{
@@ -1806,6 +1927,7 @@ function renderDashboard(){
     {n:vencidos, l:'Prazos vencidos', copy:'Precisa de ação imediata ou justificativa.', c:'vermelho', go:'prazos', filter:'prazos_vencidos'},
     {n:pubSemTratamento, l:'Publicações novas', copy:'Triar, gerar prazo ou arquivar.', c:'azul', go:'publicacoes', filter:'pub_sem_tratamento'},
     {n:pubsRestritas, l:'Restritas', copy:'Exigem fonte autenticada/A3.', c:'vermelho', go:'publicacoes', filter:'pub_restritas'},
+    {n:prazosSemValidacao, l:'Prazos a validar', copy:'Confirmar, ajustar ou rejeitar cálculo.', c:'laranja', go:'alertas', filter:'prazo_validacao'},
     {n:semRespTotal, l:'Sem responsável', copy:'Risco de ninguém assumir.', c:'laranja', go:'alertas', filter:'criticos'},
     {n:audiProximas, l:'Agenda 7d', copy:'Audiências próximas para preparar.', c:'ink', go:'audiencias', filter:'audi_7'}
   ];
@@ -2208,14 +2330,14 @@ function renderPrazos(){
       <td>${p.origemPublicacaoId?`<span class="pill st-azul"><span class="dot"></span>Integrada</span>`:'<span class="pill st-cinza"><span class="dot"></span>Validação</span>'}</td>
       <td>${fmtDate(p.dataPublicacao)}</td>
       <td>${esc(p.tipoPrazo)}${p.fundamentoLegal?`<div class="recorte-meta">${esc(p.fundamentoLegal)}</div>`:''}</td>
-      <td>${validationPill(p)}</td>
+      <td>${validationPill(p)}${p.prazoAjustado?`<div class="recorte-meta">ajustado</div>`:''}</td>
       <td>${fmtDate(p.prazoFatal)}</td>
       <td>${pill(done?'Concluído':(dr<0?'Vencido':dr===0?'Hoje':dr+'d'), color)}</td>
       <td>${p.responsavel || '<span style="color:var(--vermelho); font-size:11px;">sem resp.</span>'}</td>
       <td><select class="status-select" data-act="status">${PRAZO_STATUSES.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td><span class="priority-tag priority-${p.prioridade==='Alta'?'alta':p.prioridade==='Baixa'?'baixa':'media'}">${p.prioridade}</span></td>
       <td class="row-actions">
-        ${canConfirmLexflowDeadline(p)?`<button class="btn small azul" data-act="confirm">Confirmar</button>`:''}
+        ${p.motorPrazo?`<button class="btn small azul" data-act="validate">${canConfirmLexflowDeadline(p)?'Validar':'Ver cálculo'}</button>`:''}
         <button class="btn small ghost" data-act="edit">✎</button>
         ${!archived?`<button class="btn small ghost" data-act="archive" title="Arquivar (nunca excluir)">🗄</button>`:''}
       </td>
@@ -2238,8 +2360,8 @@ function renderPrazos(){
       logHist(`Prazo de ${p.cliente} (${p.processo}) alterado: ${old} → ${p.status}`);
       await saveDB(); renderAll(); toast('Status atualizado');
     };
-    const confirmBtn = tr.querySelector('[data-act="confirm"]');
-    if(confirmBtn) confirmBtn.onclick = ()=>confirmLexflowDeadline(p);
+    const validateBtn = tr.querySelector('[data-act="validate"]');
+    if(validateBtn) validateBtn.onclick = ()=>openDeadlineValidationModal(p);
     tr.querySelector('[data-act="edit"]').onclick = ()=>openPrazoModal(p);
     const archBtn = tr.querySelector('[data-act="archive"]');
     if(archBtn) archBtn.onclick = async ()=>{
@@ -2252,26 +2374,7 @@ function renderPrazos(){
 function openPrazoModal(p, fromPub){
   const isNew = !p;
   const d = p || {id:uid(), processo:fromPub?fromPub.processo:'', cliente:fromPub?displayClientName(fromPub):'', tribunal:fromPub?fromPub.tribunal:'', dataPublicacao:fromPub?fromPub.dataPublicacao:'', tipoPrazo:fromPub?fromPub.tipoPublicacao:'', prazoFatal:fromPub?fromPub.prazoFatal:'', origemPublicacaoId:fromPub?fromPub.refId:'', responsavel:'', status:'Novo', prioridade:'Média', observacao:'', link:'', concluidoEm:''};
-  const fatoresCalculo = Array.isArray(d.fatoresCalculo) && d.fatoresCalculo.length
-    ? `<ul class="calc-factors">${d.fatoresCalculo.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`
-    : '';
-  const diasNaoContados = Array.isArray(d.diasNaoContados) && d.diasNaoContados.length
-    ? `<p><b>Dias não contados:</b> ${d.diasNaoContados.map(item => `${fmtDate(item.date)} (${esc(item.reason)})`).join(', ')}</p>`
-    : '';
-  const memoriaMotor = d.motorPrazo ? `
-    <div class="path-card" style="box-shadow:none;">
-      <div class="path-tag">Memória do motor de prazos</div>
-      <h4>${esc(d.regraPrazoAto || d.tipoPrazo)}</h4>
-      <p><b>Área:</b> ${esc(d.areaDireito || '—')} · <b>Confiança:</b> ${esc(d.confianca || '—')} · <b>Status:</b> ${esc(validationStatusLabel(d.validacaoStatus))}</p>
-      <p><b>Fundamento:</b> ${esc(d.fundamentoLegal || '—')}</p>
-      <p><b>Termo inicial:</b> ${esc(d.termoInicialDescricao || 'publicação oficial')} · <b>primeiro dia contado:</b> ${fmtDate(d.inicioContagem)}</p>
-      <p><b>Contagem:</b> ${esc(d.diasPrazo || '—')} ${d.contagem === 'business' ? 'dias úteis' : (d.contagem === 'calendar' ? 'dias corridos' : 'manual')} · <b>calendário:</b> ${esc(d.calendarioCalculo || '—')}</p>
-      ${diasNaoContados}
-      ${d.fonteLegal ? `<p><b>Fonte:</b> <a class="link-audi" href="${esc(d.fonteLegal)}" target="_blank" rel="noopener">norma oficial</a></p>` : ''}
-      ${fatoresCalculo}
-      ${d.confirmadoEm ? `<p><b>Confirmado por:</b> ${esc(d.confirmadoPor || '—')} em ${fmtDateTime(d.confirmadoEm)}</p>` : '<p><b>Entrega:</b> calculada pelo LexFlow. Revisão só é recomendada quando a confiança estiver baixa.</p>'}
-    </div>
-  ` : '';
+  const memoriaMotor = d.motorPrazo ? prazoMemoryHTML(d) : '';
   const box = document.getElementById('modalBox');
   box.innerHTML = `
     <div class="modal-head"><h3>${isNew?'Novo prazo':'Editar prazo'}</h3><button class="close-x" id="mClose">✕</button></div>
@@ -2296,13 +2399,13 @@ function openPrazoModal(p, fromPub){
       <div class="field"><label>Link do processo</label><input id="mLink" value="${d.link}" placeholder="https://..."></div>
       <div class="field"><label>Observações</label><textarea id="mObs">${d.observacao}</textarea></div>
     </div>
-    <div class="modal-foot">${canConfirmLexflowDeadline(d)?`<button class="btn azul" id="mConfirm">Confirmar cálculo</button>`:''}<button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar prazo</button></div>
+    <div class="modal-foot">${d.motorPrazo?`<button class="btn azul" id="mConfirm">${canConfirmLexflowDeadline(d)?'Validar cálculo':'Ver validação'}</button>`:''}<button class="btn" id="mCancel">Cancelar</button><button class="btn primary" id="mSave">Salvar prazo</button></div>
   `;
   showModal();
   document.getElementById('mClose').onclick = hideModal;
   document.getElementById('mCancel').onclick = hideModal;
   const confirmBtn = document.getElementById('mConfirm');
-  if(confirmBtn) confirmBtn.onclick = ()=>confirmLexflowDeadline(d).then(hideModal);
+  if(confirmBtn) confirmBtn.onclick = ()=>openDeadlineValidationModal(d);
   document.getElementById('mSave').onclick = async ()=>{
     const cliente = document.getElementById('mCliente').value.trim();
     const processo = document.getElementById('mProcesso').value.trim();
@@ -2533,6 +2636,7 @@ function renderAlertas(){
   const activePubs = publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status));
 
   const groups = [
+    {label:'Prazos LexFlow aguardando validação', color:'laranja', items: activePrazos.filter(canConfirmLexflowDeadline), type:'prazo'},
     {label:'Prazos com revisão recomendada pelo LexFlow', color:'amarelo', items: activePrazos.filter(needsDeadlineReview), type:'prazo'},
     {label:'Prazos vencidos', color:'vermelho', items: activePrazos.filter(p=>diasRestantes(p.prazoFatal)<0), type:'prazo'},
     {label:'Prazos que vencem hoje', color:'vermelho', items: activePrazos.filter(p=>diasRestantes(p.prazoFatal)===0), type:'prazo'},

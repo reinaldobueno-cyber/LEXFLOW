@@ -118,8 +118,8 @@ Itens:
 - [ ] Integrar feriados estaduais/tribunais.
 - [x] Registrar base do calculo: data inicial, dias, calendario usado, regra e fonte oficial.
 - [x] Criar status de confianca: calculado LexFlow, revisao recomendada, sem regra confiavel.
-- [ ] Permitir recontagem manual com justificativa.
-- [ ] Alertar quando prazo tiver baixa confianca, termo inicial sensivel ou dados incompletos.
+- [x] Permitir validacao, ajuste ou rejeicao do prazo sugerido com justificativa.
+- [x] Alertar quando prazo tiver baixa confianca, termo inicial sensivel ou dados incompletos.
 
 Critérios de aceite:
 
@@ -238,7 +238,7 @@ Itens:
 - [x] Fila de prioridade critica.
 - [x] Alertas por vencimento e responsavel.
 - [x] Alertas por publicacao restrita.
-- [ ] Alertas por prazo sugerido sem validacao.
+- [x] Alertas por prazo sugerido sem validacao.
 - [ ] Alertas por falha de sincronizacao.
 - [ ] Alertas por credencial expirada.
 - [ ] Envio por email/WhatsApp futuramente.
@@ -350,10 +350,10 @@ Prioridade 1 - Confianca da Inbox:
 
 Prioridade 2 - Motor de prazo validavel:
 
-- [ ] Transformar prazo sugerido em entidade persistente com memoria de calculo completa.
-- [ ] Criar acao `Confirmar prazo LexFlow`.
-- [ ] Criar acao `Rejeitar/ajustar prazo` com justificativa.
-- [ ] Criar alerta para prazo sugerido sem validacao.
+- [x] Transformar prazo sugerido em entidade persistente com memoria de calculo completa.
+- [x] Criar acao `Confirmar prazo LexFlow`.
+- [x] Criar acao `Rejeitar/ajustar prazo` com justificativa.
+- [x] Criar alerta para prazo sugerido sem validacao.
 
 Prioridade 3 - Operacao:
 
@@ -390,8 +390,8 @@ Fora da sprint:
 - [x] Criar base normativa inicial a partir de codigos oficiais.
 - [x] Criar prazo sugerido com fundamento na publicacao.
 - [x] Modelar memoria de calculo persistente e auditavel.
-- [ ] Criar validacao humana.
-- [ ] Criar alerta de prazo sem validacao.
+- [x] Criar validacao humana.
+- [x] Criar alerta de prazo sem validacao.
 
 ### Sprint 4 - Workflow de Execucao
 
