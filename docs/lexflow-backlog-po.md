@@ -34,6 +34,7 @@ Legenda:
 - [x] Aba de Tarefas.
 - [x] Central de Alertas.
 - [x] Historico de alteracoes.
+- [x] Acervo historico de processos com busca e consulta de itens passados.
 - [x] Login e sessao autenticada.
 - [x] Estrutura multi-tenant inicial.
 - [x] Usuario Master com visao administrativa.
@@ -267,6 +268,7 @@ Itens:
 - [x] Responsavel obrigatorio para itens criticos.
 - [ ] Aprovacao/revisao antes de concluir.
 - [ ] Campo "comprovante/protocolo".
+- [x] Consulta historica de processos encerrados/arquivados no acervo.
 
 ## Epic 7 - SaaS Multi-Tenant e Administracao
 
@@ -359,6 +361,7 @@ Prioridade 3 - Operacao:
 
 - [x] Criar tarefa a partir da publicacao.
 - [x] Responsavel obrigatorio para prazos criticos.
+- [x] Criar acervo historico pesquisavel por processo/cliente/tribunal.
 - [ ] Checklist inicial por tipo de ato.
 - [ ] Campo comprovante/protocolo ao concluir prazo/tarefa.
 

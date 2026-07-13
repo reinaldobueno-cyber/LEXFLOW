@@ -305,6 +305,21 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .hist-item{display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:12px;}
 .hist-item:last-child{border-bottom:none;}
 .hist-item .t{color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:10.5px; white-space:nowrap;}
+.archive-summary{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px;}
+.archive-metric{background:var(--white); border:1px solid var(--line); border-radius:8px; padding:14px; box-shadow:var(--shadow);}
+.archive-metric span{display:block; font-size:10px; text-transform:uppercase; font-weight:800; color:var(--ink-soft); letter-spacing:.05em;}
+.archive-metric strong{display:block; margin-top:5px; font-size:24px; font-family:'Source Serif 4',serif;}
+.archive-list{display:flex; flex-direction:column; gap:10px;}
+.archive-card{background:var(--white); border:1px solid var(--line); border-radius:8px; padding:14px 16px; box-shadow:var(--shadow); display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center;}
+.archive-card .title{font-weight:800; font-size:14px; color:var(--ink);}
+.archive-card .meta{display:flex; gap:7px; flex-wrap:wrap; margin-top:7px; align-items:center;}
+.archive-card .desc{font-size:12px; color:var(--ink-soft); margin-top:6px;}
+.archive-counts{display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end;}
+.archive-counts span{font-size:10.5px; font-weight:700; padding:4px 8px; border-radius:999px; background:#F2F4F7; color:var(--ink-2);}
+.archive-timeline{border-left:2px solid var(--line); padding-left:14px; display:flex; flex-direction:column; gap:8px;}
+.archive-event{position:relative; font-size:12px; color:var(--ink-2);}
+.archive-event::before{content:''; position:absolute; left:-20px; top:4px; width:8px; height:8px; border-radius:50%; background:var(--azul);}
+.archive-event .date{font-family:'IBM Plex Mono',monospace; color:var(--ink-soft); font-size:10.5px; margin-bottom:2px;}
 
 /* Integração / roadmap tab */
 .roadmap-hero{background:#101828; color:#F9FAFB; border-radius:8px; padding:26px 28px; margin-bottom:24px;}
@@ -336,7 +351,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .check-item:last-child{border-bottom:none;}
 .check-item input{width:16px; height:16px; accent-color:var(--verde);}
 .check-item.checked span{text-decoration:line-through; color:var(--ink-soft);}
-@media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary{grid-template-columns:1fr;} }
+@media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary,.archive-summary,.archive-card{grid-template-columns:1fr;} .archive-counts{justify-content:flex-start;} }
 @media (max-width: 1180px){
   .dashboard-hero, .dashboard-grid{grid-template-columns:1fr;}
   .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
@@ -1660,6 +1675,71 @@ function publicationHistoryHTML(pub){
   return rows.map(item=>`<div class="hist-item"><div class="t">${esc(fmtDateTime(item.ts))}</div><div>${esc(item.texto)}</div></div>`).join('');
 }
 
+function acervoProcessos(){
+  const map = new Map();
+  const ensure = processo => {
+    const key = cleanText(processo || 'SEM PROCESSO');
+    if(!map.has(key)){
+      map.set(key, {processo:key, clientes:new Set(), tribunais:new Set(), publicacoes:[], prazos:[], audiencias:[], tarefas:[], eventos:[], firstDate:'', lastDate:'', active:false});
+    }
+    return map.get(key);
+  };
+  const touchDate = (row, dateVal) => {
+    if(!dateVal) return;
+    if(!row.firstDate || dateVal < row.firstDate) row.firstDate = dateVal;
+    if(!row.lastDate || dateVal > row.lastDate) row.lastDate = dateVal;
+  };
+  publicacoesOperacionais().forEach(pub=>{
+    const row = ensure(pub.processo);
+    row.publicacoes.push(pub);
+    row.clientes.add(displayClientName(pub));
+    if(pub.tribunal) row.tribunais.add(pub.tribunal);
+    row.active = row.active || !PUB_ARCHIVED.includes(pub.status);
+    touchDate(row, pub.dataPublicacao);
+  });
+  DB.prazos.filter(isIntegratedPrazo).forEach(p=>{
+    const row = ensure(p.processo);
+    row.prazos.push(p);
+    if(p.cliente) row.clientes.add(p.cliente);
+    if(p.tribunal) row.tribunais.add(p.tribunal);
+    row.active = row.active || !PRAZO_DONE.includes(p.status);
+    touchDate(row, p.prazoFatal || p.dataPublicacao);
+  });
+  DB.audiencias.forEach(a=>{
+    const row = ensure(a.processo);
+    row.audiencias.push(a);
+    if(a.cliente) row.clientes.add(a.cliente);
+    if(a.estado) row.tribunais.add(a.estado);
+    row.active = row.active || !AUDI_DONE.includes(a.status);
+    touchDate(row, a.data);
+  });
+  DB.tarefas.forEach(t=>{
+    const row = ensure(t.processo);
+    row.tarefas.push(t);
+    if(t.cliente) row.clientes.add(t.cliente);
+    row.active = row.active || !TAREFA_DONE.includes(t.status);
+    touchDate(row, t.dataLimite);
+  });
+  (DB.historico || []).forEach(ev=>{
+    const text = cleanText(ev.texto);
+    for(const row of map.values()){
+      if(row.processo !== 'SEM PROCESSO' && text.includes(row.processo)){
+        row.eventos.push(ev);
+      }
+    }
+  });
+  return [...map.values()]
+    .filter(row=>row.processo !== 'SEM PROCESSO')
+    .map(row=>({
+      ...row,
+      cliente:[...row.clientes].filter(Boolean)[0] || 'Parte não identificada',
+      tribunal:[...row.tribunais].filter(Boolean)[0] || '—',
+      encerrado:!row.active,
+      total:row.publicacoes.length + row.prazos.length + row.audiencias.length + row.tarefas.length
+    }))
+    .sort((a,b)=>(b.lastDate || '').localeCompare(a.lastDate || ''));
+}
+
 function openPublicationAnalysisModal(pub){
   const box = document.getElementById('modalBox');
   const s = deadlineSuggestion(pub);
@@ -2702,13 +2782,112 @@ function renderAlertas(){
   document.getElementById('content').innerHTML = html;
 }
 
-/* ===================== HISTÓRICO ===================== */
+/* ===================== HISTÓRICO / ACERVO ===================== */
+let historicoFilters = {q:'', status:'todos'};
+
+function processStatusPill(row){
+  return row.encerrado ? pill('Encerrado/acervo', 'cinza') : pill('Ativo', 'verde');
+}
+
+function renderProcessArchiveModal(row){
+  const box = document.getElementById('modalBox');
+  box.className = 'modal analysis-modal';
+  const timeline = [
+    ...row.publicacoes.map(p=>({date:p.dataPublicacao, label:`Publicação ${publicacaoOrigem(p)}: ${p.tipoPublicacao || 'sem tipo'} · ${publicationDeadlineInfo(p).label}`})),
+    ...row.prazos.map(p=>({date:p.prazoFatal || p.dataPublicacao, label:`Prazo: ${p.tipoPrazo} · ${fmtDate(p.prazoFatal)} · ${validationStatusLabel(p.validacaoStatus)}`})),
+    ...row.audiencias.map(a=>({date:a.data, label:`Audiência: ${a.tipo} · ${a.horario || 'sem horário'} · ${a.status}`})),
+    ...row.tarefas.map(t=>({date:t.dataLimite, label:`Tarefa: ${t.titulo} · ${t.status}`}))
+  ].filter(x=>x.date || x.label).sort((a,b)=>(b.date || '').localeCompare(a.date || ''));
+  box.innerHTML = `
+    <div class="modal-head"><h3>Acervo do processo</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <section class="analysis-hero">
+        <div>
+          <div class="analysis-title">${esc(row.cliente)}</div>
+          <div class="analysis-sub">${processStatusPill(row)} <span class="tribunal-tag">${esc(row.tribunal)}</span> <span class="mono">${esc(row.processo)}</span></div>
+        </div>
+        <div class="analysis-meta-grid">
+          <div class="analysis-kv"><div class="k">Publicações</div><div class="v">${row.publicacoes.length}</div></div>
+          <div class="analysis-kv"><div class="k">Prazos</div><div class="v">${row.prazos.length}</div></div>
+          <div class="analysis-kv"><div class="k">Audiências</div><div class="v">${row.audiencias.length}</div></div>
+          <div class="analysis-kv"><div class="k">Tarefas</div><div class="v">${row.tarefas.length}</div></div>
+        </div>
+      </section>
+      <div class="analysis-grid">
+        <section class="analysis-panel">
+          <h4>Linha do processo</h4>
+          ${timeline.length ? `<div class="archive-timeline">${timeline.map(ev=>`<div class="archive-event"><div class="date">${fmtDate(ev.date)}</div><div>${esc(ev.label)}</div></div>`).join('')}</div>` : '<div class="empty">Sem eventos estruturados para este processo.</div>'}
+        </section>
+        <section class="analysis-panel">
+          <h4>Auditoria relacionada</h4>
+          ${row.eventos.length ? row.eventos.slice(0,20).map(ev=>`<div class="hist-item"><div class="t">${esc(fmtDateTime(ev.ts))}</div><div>${esc(ev.texto)}</div></div>`).join('') : '<div class="empty">Sem eventos de auditoria vinculados ao número do processo.</div>'}
+        </section>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn primary" id="mCloseFoot">Fechar</button></div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCloseFoot').onclick = hideModal;
+}
+
 function renderHistorico(){
-  let html = `<div class="table-wrap" style="padding:8px 18px;">`;
-  if(DB.historico.length===0){ html += `<div class="empty">Sem alterações registradas ainda.</div>`; }
-  else{ html += DB.historico.map(h=>`<div class="hist-item"><span class="t">${new Date(h.ts).toLocaleString('pt-BR')}</span><span>${h.texto}</span></div>`).join(''); }
+  const all = acervoProcessos();
+  let rows = all.slice();
+  if(historicoFilters.status === 'ativos') rows = rows.filter(r=>!r.encerrado);
+  if(historicoFilters.status === 'encerrados') rows = rows.filter(r=>r.encerrado);
+  if(historicoFilters.q){
+    const q = normalizePersonName(historicoFilters.q);
+    rows = rows.filter(r=>normalizePersonName(`${r.processo} ${r.cliente} ${r.tribunal}`).includes(q));
+  }
+  const ativos = all.filter(r=>!r.encerrado).length;
+  const encerrados = all.filter(r=>r.encerrado).length;
+  const eventos = DB.historico || [];
+  let html = `
+    <div class="archive-summary">
+      <div class="archive-metric"><span>Processos no acervo</span><strong>${all.length}</strong></div>
+      <div class="archive-metric"><span>Ativos</span><strong>${ativos}</strong></div>
+      <div class="archive-metric"><span>Encerrados/arquivados</span><strong>${encerrados}</strong></div>
+      <div class="archive-metric"><span>Eventos auditados</span><strong>${eventos.length}</strong></div>
+    </div>
+    <div class="filters">
+      <input type="text" id="histBusca" placeholder="Buscar processo, cliente ou tribunal..." value="${esc(historicoFilters.q)}">
+      <select id="histStatus"><option value="todos">Todos os processos</option><option value="ativos">Somente ativos</option><option value="encerrados">Encerrados/arquivados</option></select>
+    </div>
+    <div class="section-title">Acervo de processos <span class="cnt">${rows.length}</span></div>
+  `;
+  if(!rows.length){
+    html += `<div class="empty">Nenhum processo encontrado para este filtro.</div>`;
+  } else {
+    html += `<div class="archive-list">${rows.map(row=>`
+      <div class="archive-card" data-processo="${esc(row.processo)}">
+        <div>
+          <div class="title">${esc(row.cliente)}</div>
+          <div class="meta">${processStatusPill(row)} <span class="tribunal-tag">${esc(row.tribunal)}</span> <span class="mono">${esc(row.processo)}</span></div>
+          <div class="desc">Último registro: ${fmtDate(row.lastDate)} · primeiro registro: ${fmtDate(row.firstDate)}</div>
+        </div>
+        <div class="archive-counts">
+          <span>${row.publicacoes.length} pub.</span>
+          <span>${row.prazos.length} prazos</span>
+          <span>${row.audiencias.length} aud.</span>
+          <span>${row.tarefas.length} tarefas</span>
+          <button class="btn small azul" data-act="open-archive">Ver acervo</button>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+  html += `<div class="section-title" style="margin-top:24px;">Linha do tempo geral <span class="cnt">${eventos.length}</span></div><div class="table-wrap" style="padding:8px 18px;">`;
+  if(eventos.length===0){ html += `<div class="empty">Sem alterações registradas ainda.</div>`; }
+  else{ html += eventos.slice(0,120).map(h=>`<div class="hist-item"><span class="t">${new Date(h.ts).toLocaleString('pt-BR')}</span><span>${esc(h.texto)}</span></div>`).join(''); }
   html += `</div>`;
   document.getElementById('content').innerHTML = html;
+  document.getElementById('histStatus').value = historicoFilters.status;
+  document.getElementById('histBusca').oninput = e=>{ historicoFilters.q=e.target.value; renderHistorico(); };
+  document.getElementById('histStatus').onchange = e=>{ historicoFilters.status=e.target.value; renderHistorico(); };
+  document.querySelectorAll('[data-act="open-archive"]').forEach(btn=>btn.onclick = e=>{
+    const processo = e.target.closest('.archive-card').dataset.processo;
+    const row = acervoProcessos().find(r=>r.processo === processo);
+    if(row) renderProcessArchiveModal(row);
+  });
 }
 
 /* ===================== INTEGRAÇÃO / ROADMAP ===================== */
