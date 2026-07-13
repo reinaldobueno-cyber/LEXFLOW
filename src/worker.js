@@ -693,6 +693,28 @@ async function postWebhook(url, token, payload){
   return {ok:response.ok, status:response.status, body:body.slice(0, 500)};
 }
 
+async function sendEmailNotification(env, payload){
+  if(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL){
+    const response = await fetch('https://api.resend.com/emails', {
+      method:'POST',
+      headers:{
+        'Authorization':`Bearer ${env.RESEND_API_KEY}`,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({
+        from:env.RESEND_FROM_EMAIL,
+        to:Array.isArray(payload.to) ? payload.to : [payload.to],
+        subject:payload.subject,
+        text:payload.text,
+        html:payload.html
+      })
+    });
+    const body = await response.text().catch(() => '');
+    return {ok:response.ok, provider:'resend', status:response.status, body:body.slice(0, 500)};
+  }
+  return postWebhook(env.EMAIL_WEBHOOK_URL, env.EMAIL_WEBHOOK_TOKEN, payload);
+}
+
 async function dispatchDailySummary(env, tenant, settings, data, opts = {}){
   const cfg = normalizeDailySummarySettings(settings);
   const day = opts.day || onlyDateInTimezone(new Date(), cfg.timezone);
@@ -705,7 +727,7 @@ async function dispatchDailySummary(env, tenant, settings, data, opts = {}){
   }
   if(cfg.channels.email){
     for(const to of cfg.emails){
-      results.push({channel:'email', to, result:await postWebhook(env.EMAIL_WEBHOOK_URL, env.EMAIL_WEBHOOK_TOKEN, {
+      results.push({channel:'email', to, result:await sendEmailNotification(env, {
         to,
         subject:`LexFlow - Compromissos do dia ${formatBrDate(day)}`,
         text:summary.text,

@@ -4028,8 +4028,13 @@ function renderConfiguracoes(){
       </div>
       <div class="path-card">
         <div class="path-tag">Canais</div>
-        <h4>WhatsApp e e-mail</h4>
-        <p>O cron já fica preparado no Cloudflare. Para envio real, configure webhook de WhatsApp/e-mail nos secrets do Worker ou conecte um provedor oficial.</p>
+        <h4>E-mail grátis e WhatsApp</h4>
+        <p>E-mail automático pode rodar com Resend Free no Worker. WhatsApp manual abre sem custo pelo navegador; WhatsApp automático exige provedor/API oficial configurado.</p>
+      </div>
+      <div class="path-card">
+        <div class="path-tag">Cloudflare secrets</div>
+        <h4>Configuração necessária</h4>
+        <p>Para e-mail real, cadastre <span class="mono">RESEND_API_KEY</span> e <span class="mono">RESEND_FROM_EMAIL</span>. Para WhatsApp automático, cadastre <span class="mono">WHATSAPP_WEBHOOK_URL</span> quando houver provedor.</p>
       </div>
     </div>
     <div class="table-wrap" style="padding:18px;">
