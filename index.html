@@ -797,6 +797,7 @@ const DEADLINE_RULES = [
   {id:'civil-ed', area:'civil', codeId:'cpc', act:'Embargos de declaração', days:5, count:'business', basis:'CPC, art. 1.023; contagem em dias úteis pelo art. 219', confidence:'media', keywords:['EMBARGOS DE DECLARACAO','ED']},
   {id:'civil-contestacao', area:'civil', codeId:'cpc', act:'Contestação', days:15, count:'business', basis:'CPC, art. 335', confidence:'media', keywords:['CONTESTACAO','CITACAO']},
   {id:'civil-emenda-inicial', area:'civil', codeId:'cpc', act:'Emenda à inicial', days:15, count:'business', basis:'CPC, art. 321; contagem em dias úteis pelo art. 219', confidence:'media', keywords:['EMENDA A INICIAL','EMENDAR A INICIAL','PETICAO INICIAL']},
+  {id:'civil-operacional-alvara', area:'civil', codeId:'cpc', act:'Levantamento / alvará', days:null, count:'manual', basis:'Ação operacional pós-sentença: acompanhar alvará, levantamento ou transferência de valores; não é prazo recursal automático', confidence:'media', keywords:['ALVARA','LEVANTAMENTO','MANDADO DE PAGAMENTO','TRANSFERENCIA','CONTA DO CLIENTE','EXPEDICAO DE ALVARA']},
   {id:'civil-manifestacao-generica', area:'civil', codeId:'cpc', act:'Manifestação', days:15, count:'business', basis:'Regra assistiva: prazo comum civil quando o ato não traz prazo específico; baixa confiança por genericidade do ato', confidence:'baixa', keywords:['MANIFESTACAO','MANIFESTAR','VISTA','INTIMACAO','DESPACHO','DECISAO','ACORDAO']},
   {id:'trabalho-ro', area:'trabalhista', codeId:'clt', act:'Recurso ordinário', days:8, count:'business', basis:'CLT, art. 895; observar regra de dias úteis e norma aplicável do TST', confidence:'media', keywords:['RECURSO ORDINARIO']},
   {id:'trabalho-rr', area:'trabalhista', codeId:'clt', act:'Recurso de revista', days:8, count:'business', basis:'CLT, art. 896; observar regra específica no caso concreto', confidence:'media', keywords:['RECURSO DE REVISTA']},
@@ -1837,6 +1838,11 @@ function keywordMatches(text, keywords = []){
 function inferDeadlineRule(pub, areaId){
   const text = normalizePersonName(`${pub?.tipoPublicacao || ''} ${pub?.textoRecorte || ''} ${pub?.observacoes || ''}`);
   const rules = DEADLINE_RULES.filter(rule => rule.area === areaId);
+  const operational = operationalPostJudgmentInfo(pub);
+  if(areaId === 'civil' && operational.active){
+    const rule = deadlineRuleById('civil-operacional-alvara');
+    return {rule, score:99, matches:operational.terms};
+  }
   let best = null;
   let bestScore = 0;
   let bestMatches = [];
@@ -1949,8 +1955,30 @@ function publicationDeadlineText(pub){
   return normalizePersonName(`${pub?.tribunal || ''} ${pub?.tipoPublicacao || ''} ${pub?.textoRecorte || ''} ${pub?.observacoes || ''}`);
 }
 
+function operationalPostJudgmentInfo(pub){
+  const text = publicationDeadlineText(pub);
+  const terms = [
+    'ALVARA',
+    'LEVANTAMENTO',
+    'MANDADO DE PAGAMENTO',
+    'TRANSFERENCIA',
+    'TRANSFERIR',
+    'CONTA DO CLIENTE',
+    'EXPEDICAO DE ALVARA',
+    'PAGAMENTO DO VALOR',
+    'DEPOSITO JUDICIAL'
+  ].filter(term => text.includes(term));
+  const isCompliance = text.includes('CUMPRIMENTO DE SENTENCA') || text.includes('CUMPRIMENTO DA SENTENCA') || text.includes('EXECUCAO');
+  return {
+    active:Boolean(terms.length && isCompliance),
+    terms,
+    reason: terms.length ? `Ato operacional pós-sentença: ${terms.join(', ')}` : ''
+  };
+}
+
 function scenarioRuleIdsForPublication(pub, areaId){
   const text = publicationDeadlineText(pub);
+  const operational = operationalPostJudgmentInfo(pub);
   const isSentenceCompliance = text.includes('CUMPRIMENTO DE SENTENCA') || text.includes('CUMPRIMENTO DA SENTENCA');
   const hasSentence = !isSentenceCompliance && (text.includes('SENTENCA') || text.includes('JULGO') || text.includes('PROCEDENTE') || text.includes('IMPROCEDENTE'));
   const hasAcordao = text.includes('ACORDAO') || text.includes('TURMA') || text.includes('CAMARA') || text.includes('COLEGIADO');
@@ -1961,17 +1989,21 @@ function scenarioRuleIdsForPublication(pub, areaId){
   const hasNonUnanimous = text.includes('NAO UNANIME') || text.includes('VOTO VENCIDO') || text.includes('POR MAIORIA');
   const ids = [];
   const add = (id, reason, role='concorrente') => ids.push({id, reason, role});
+  if(areaId === 'civil' && operational.active){
+    add('civil-operacional-alvara', operational.reason, 'tarefa operacional');
+    return ids;
+  }
 
   if(areaId === 'civil'){
     if(hasContrarrazoes) add('civil-contrarrazoes-apelacao', 'A publicação fala em contrarrazões, prazo próprio do CPC.');
     if(hasSentence) {
       add('civil-ed', 'Sentença pode admitir embargos de declaração antes da escolha recursal principal.', 'prejudicial/alternativo');
-      add('civil-apelacao', 'Sentença de primeiro grau normalmente abre cenário de apelação.', 'recurso principal');
+      add('civil-apelacao', 'Sentença de primeiro grau normalmente abre opção de apelação.', 'recurso principal');
     }
     if(hasAcordao) {
       add('civil-ed', 'Acórdão também pode admitir embargos de declaração para omissão, contradição, obscuridade ou erro material.', 'prejudicial/alternativo');
-      add('civil-resp', 'Acórdão pode abrir cenário de recurso especial quando houver matéria infraconstitucional federal.', 'tribunal superior');
-      add('civil-re', 'Acórdão pode abrir cenário de recurso extraordinário quando houver matéria constitucional.', 'tribunal superior');
+      add('civil-resp', 'Acórdão pode abrir opção de recurso especial quando houver matéria infraconstitucional federal.', 'tribunal superior');
+      add('civil-re', 'Acórdão pode abrir opção de recurso extraordinário quando houver matéria constitucional.', 'tribunal superior');
     }
     if(hasMonocratic) {
       add('civil-ed', 'Decisão monocrática pode admitir embargos de declaração conforme vício do ato.', 'prejudicial/alternativo');
@@ -2020,9 +2052,9 @@ function buildDeadlineScenario(pub, rule, area, reason='', role='concorrente', i
   const code = legalCodeById(rule.codeId);
   const factors = [
     `Área inferida: ${area.label} (${area.reason})`,
-    `Cenário: ${rule.act}`,
-    reason || 'Cenário identificado pelo tipo do ato e pelo código aplicável',
-    matches.length ? `Termos encontrados: ${matches.join(', ')}` : 'Sem termo textual forte; cenário criado pelo contexto do ato',
+    `Opção: ${rule.act}`,
+    reason || 'Opção identificada pelo tipo do ato e pelo código aplicável',
+    matches.length ? `Termos encontrados: ${matches.join(', ')}` : 'Sem termo textual forte; opção criada pelo contexto do ato',
     pubDate ? `Data-base: publicação em ${fmtDate(pub?.dataPublicacao)}` : 'Sem data de publicação confiável',
     business ? 'Calendário: dias úteis com finais de semana e feriados nacionais fixos' : 'Calendário: dias corridos',
     restricao.restricted ? `Restrição: ${restricao.reason || 'requer autenticação'}` : 'Conteúdo público suficiente para triagem inicial'
@@ -2081,7 +2113,8 @@ function deadlineSuggestionLabel(pub){
   const scenarios = deadlineScenarios(pub);
   const suggestion = scenarios[0] || deadlineSuggestion(pub);
   if(suggestion.restricted) return {label:'Requer autenticação', color:'vermelho'};
-  if(scenarios.length > 1) return {label:`${scenarios.length} cenários de prazo`, color:'amarelo'};
+  if(suggestion.rule?.id === 'civil-operacional-alvara') return {label:'Ação operacional', color:'azul'};
+  if(scenarios.length > 1) return {label:`${scenarios.length} opções recursais`, color:'amarelo'};
   if(suggestion.dueDate) return {label:`Sugestão: ${fmtDate(suggestion.dueDate)}`, color:suggestion.confidence === 'alta' ? 'azul' : 'amarelo'};
   if(suggestion.rule) return {label:'Regra sem data automática', color:'amarelo'};
   return {label:'Sem regra mapeada', color:'cinza'};
@@ -2102,7 +2135,7 @@ function suggestionDetailsHTML(pub){
     : `<p><b>Data sugerida:</b> ainda não calculada. Falta regra específica ou data de publicação confiável.</p>`;
   const factors = s.factors?.length ? `<ul class="calc-factors">${s.factors.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>` : '';
   const scenarioRows = scenarios.length > 1 ? `
-    <p><b>Cenários concorrentes:</b> esta publicação pode exigir mais de uma avaliação de prazo.</p>
+    <p><b>Opções recursais:</b> a mesma decisão não deve gerar todos estes prazos automaticamente; o LexFlow mostra as hipóteses para escolha do caminho aplicável.</p>
     <table class="scenario-table">
       <thead><tr><th>Ato</th><th>Prazo sugerido</th><th>Base</th><th>Confiança</th></tr></thead>
       <tbody>
@@ -2135,7 +2168,7 @@ function publicationIntelligenceText(pub){
   const scenarios = deadlineScenarios(pub);
   const s = scenarios[0] || deadlineSuggestion(pub);
   const scenarioText = scenarios.length > 1
-    ? ['Cenários de prazo identificados:', ...scenarios.map((item, idx)=>`${idx+1}. ${item.rule?.act || 'Ato'} | ${item.dueDate ? fmtDate(item.dueDate) : 'sem data automática'} | ${item.rule?.basis || item.reason || 'base não mapeada'} | confiança ${item.confidence || 'baixa'}`)]
+    ? ['Opções recursais identificadas:', ...scenarios.map((item, idx)=>`${idx+1}. ${item.rule?.act || 'Ato'} | ${item.dueDate ? fmtDate(item.dueDate) : 'sem data automática'} | ${item.rule?.basis || item.reason || 'base não mapeada'} | confiança ${item.confidence || 'baixa'}`)]
     : [];
   return [
     'LexFlow - Inteligência de prazo',
@@ -2207,7 +2240,7 @@ function publicationActionCard(pub){
   const basis = s.rule?.basis || 'Sem regra normativa mapeada para cálculo automático.';
   const due = s.restricted
     ? 'Requer autenticação'
-    : (scenarios.length > 1 ? `${scenarios.length} cenários de prazo` : (s.dueDate ? `Prazo sugerido: ${fmtDate(s.dueDate)}` : 'Sem prazo automático'));
+    : (s.rule?.id === 'civil-operacional-alvara' ? 'Ação operacional' : (scenarios.length > 1 ? `${scenarios.length} opções recursais` : (s.dueDate ? `Prazo sugerido: ${fmtDate(s.dueDate)}` : 'Sem prazo automático')));
   const cardClass = s.restricted ? 'auth' : (s.dueDate && s.confidence !== 'baixa' ? 'ok' : 'warn');
   const confidence = s.confidence || 'baixa';
   const linkStatus = sourceLinkStatus(pub);
@@ -2228,7 +2261,7 @@ function publicationActionCard(pub){
       ${scenarioStrip}
       ${s.restricted ? `<div class="pub-action-meta"><b>Restrição:</b> ${esc(s.restrictedReason || 'conteúdo exige fonte autenticada')}</div><div>${sourceStatusTag(pub)}</div>` : ''}
       <div class="pub-action-buttons">
-        ${s.dueDate ? `<button class="ops-action primary" data-act="suggest"><span class="mark lex">L</span>${scenarios.length > 1 ? 'Gerar cenários' : 'Gerar prazo'}</button>` : ''}
+        ${s.dueDate ? `<button class="ops-action primary" data-act="suggest"><span class="mark lex">L</span>${scenarios.length > 1 ? 'Escolher prazo' : 'Gerar prazo'}</button>` : ''}
         <button class="ops-action" data-act="details"><span class="mark lex">L</span>Análise</button>
         <details class="action-menu menu-left">
           <summary>Mais</summary>
@@ -2787,7 +2820,7 @@ function publicationDetailPanelHTML(p){
   const linkStatus = sourceLinkStatus(p);
   const restricted = isRestrictedPublication(p);
   const panelClass = restricted ? 'auth' : (s.dueDate && s.confidence !== 'baixa' ? 'ok' : 'warn');
-  const dueLabel = restricted ? 'Requer autenticação' : (scenarios.length > 1 ? `${scenarios.length} cenários de prazo possíveis` : (s.dueDate ? `Prazo sugerido: ${fmtDate(s.dueDate)}` : 'Sem prazo automático'));
+  const dueLabel = restricted ? 'Requer autenticação' : (s.rule?.id === 'civil-operacional-alvara' ? 'Ação operacional' : (scenarios.length > 1 ? `${scenarios.length} opções recursais possíveis` : (s.dueDate ? `Prazo sugerido: ${fmtDate(s.dueDate)}` : 'Sem prazo automático')));
   const canGerarPrazo = p.status === 'Gerou prazo' && !p.prazoGeradoId;
   const scenarioStrip = scenarios.length > 1 ? `<div class="scenario-strip">
     ${scenarios.map((item, idx)=>`<div class="scenario-chip ${idx===0?'primary':''}">
@@ -2819,7 +2852,7 @@ function publicationDetailPanelHTML(p){
           ${scenarioStrip}
           ${restricted ? `<div class="decision-meta"><b>Restrição:</b> ${esc(restrictedInfo(p).reason || 'conteúdo exige fonte autenticada')} · ${esc(linkStatus.label)}</div>` : ''}
           <div class="decision-actions">
-            ${s.dueDate ? `<button class="btn primary" data-detail-act="suggest">${scenarios.length > 1 ? 'Gerar cenários' : 'Gerar prazo'}</button>` : (canGerarPrazo ? `<button class="btn primary" data-detail-act="genprazo">Gerar prazo</button>` : '')}
+            ${s.dueDate ? `<button class="btn primary" data-detail-act="suggest">${scenarios.length > 1 ? 'Escolher prazo' : 'Gerar prazo'}</button>` : (canGerarPrazo ? `<button class="btn primary" data-detail-act="genprazo">Gerar prazo</button>` : '')}
             <button class="btn" data-detail-act="details">Ver análise completa</button>
             <button class="btn" data-detail-act="share-intelligence">Compartilhar inteligência</button>
             <button class="btn" data-detail-act="task">Criar tarefa</button>
@@ -3038,29 +3071,87 @@ function openPubModal(p){
 async function createSuggestedPrazoFromPublication(pub){
   const scenarios = deadlineScenarios(pub).filter(item=>item.dueDate && item.rule);
   if(!scenarios.length){ toast('Sem sugestão calculável para esta publicação'); return; }
-  const existingKeys = new Set((DB.prazos || []).map(p=>`${p.origemPublicacaoId || ''}:${p.regraPrazoId || ''}:${p.prazoFatal || ''}`));
-  const createdPrazos = [];
-  scenarios.forEach(suggestion=>{
-    const prazo = buildSuggestedPrazoFromPublication(pub, suggestion, scenarios.length);
-    const key = `${prazo.origemPublicacaoId || ''}:${prazo.regraPrazoId || ''}:${prazo.prazoFatal || ''}`;
-    if(existingKeys.has(key)) return;
-    DB.prazos.push(prazo);
-    existingKeys.add(key);
-    createdPrazos.push(prazo);
-  });
-  if(!createdPrazos.length){
-    toast('Esses cenários já foram gerados para esta publicação');
+  if(scenarios.length > 1){
+    openDeadlineScenarioChoiceModal(pub, scenarios);
     return;
   }
-  attachSuggestedPrazoToPublication(pub, createdPrazos[0], scenarios[0], createdPrazos);
-  const label = createdPrazos.length > 1 ? `${createdPrazos.length} cenários de prazo` : 'Prazo calculado';
-  logHist(`${label} pelo LexFlow para ${displayClientName(pub)} (${pub.processo}): ${createdPrazos.map(p=>`${p.regraPrazoAto} em ${fmtDate(p.prazoFatal)}`).join('; ')}.`);
+  const existingKeys = new Set((DB.prazos || []).map(p=>`${p.origemPublicacaoId || ''}:${p.regraPrazoId || ''}:${p.prazoFatal || ''}`));
+  const suggestion = scenarios[0];
+  const prazo = buildSuggestedPrazoFromPublication(pub, suggestion, 1);
+  const key = `${prazo.origemPublicacaoId || ''}:${prazo.regraPrazoId || ''}:${prazo.prazoFatal || ''}`;
+  if(existingKeys.has(key)){
+    toast('Esse prazo já foi gerado para esta publicação');
+    return;
+  }
+  DB.prazos.push(prazo);
+  attachSuggestedPrazoToPublication(pub, prazo, suggestion, [prazo]);
+  logHist(`Prazo calculado pelo LexFlow para ${displayClientName(pub)} (${pub.processo}): ${fmtDate(suggestion.dueDate)} — ${suggestion.rule.act}.`);
   await saveDB();
   hideModal();
   currentView = 'prazos';
   prazoFilters.showValidation = true;
   renderAll();
-  toast(createdPrazos.length > 1 ? 'Cenários de prazo gerados pelo LexFlow' : 'Prazo calculado pelo LexFlow');
+  toast('Prazo calculado pelo LexFlow');
+}
+
+function openDeadlineScenarioChoiceModal(pub, scenarios){
+  const box = document.getElementById('modalBox');
+  box.className = 'modal modal-wide';
+  box.innerHTML = `
+    <div class="modal-head"><h3>Escolher prazo aplicável</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <div class="analysis-hero">
+        <div class="analysis-title">${esc(displayClientName(pub))}</div>
+        <div class="analysis-sub">${esc(pub?.processo || 'sem processo')} · ${esc(pub?.tribunal || 'sem tribunal')}</div>
+      </div>
+      <div class="validation-note">
+        O LexFlow encontrou mais de uma opção recursal possível. Isso não significa que todas devem virar prazo ativo.
+        Escolha apenas o caminho que será acompanhado pelo escritório, ou crie uma tarefa de análise.
+      </div>
+      <div class="scenario-strip">
+        ${scenarios.map((item, idx)=>`
+          <label class="scenario-chip ${idx===0?'primary':''}" style="cursor:pointer;">
+            <input type="radio" name="deadlineScenario" value="${esc(item.rule.id)}" ${idx===0?'checked':''}>
+            <span class="scenario-act">${esc(item.rule.act)}</span>
+            <span class="scenario-date">${esc(fmtDate(item.dueDate))}</span>
+            <span class="scenario-basis">${esc(item.rule.basis || item.reason || '')}</span>
+            <span class="scenario-basis">${esc(item.role || 'opção recursal')} · confiança ${esc(item.confidence || 'baixa')}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="mTask">Criar tarefa de análise</button>
+      <button class="btn" id="mCancel">Cancelar</button>
+      <button class="btn primary" id="mConfirm">Gerar prazo escolhido</button>
+    </div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mCancel').onclick = hideModal;
+  document.getElementById('mTask').onclick = async ()=>{
+    await createTaskFromPublication(pub);
+    hideModal();
+  };
+  document.getElementById('mConfirm').onclick = async ()=>{
+    const selectedId = document.querySelector('input[name="deadlineScenario"]:checked')?.value;
+    const suggestion = scenarios.find(item=>item.rule.id === selectedId) || scenarios[0];
+    const key = `${pub.refId || pub.id || ''}:${suggestion.rule.id}:${suggestion.dueDate || ''}`;
+    const exists = (DB.prazos || []).some(p=>`${p.origemPublicacaoId || ''}:${p.regraPrazoId || ''}:${p.prazoFatal || ''}` === key);
+    if(exists){ toast('Esse prazo já foi gerado para esta publicação'); return; }
+    const prazo = buildSuggestedPrazoFromPublication(pub, suggestion, 1);
+    prazo.validacaoStatus = 'opcao_recursal_escolhida';
+    prazo.observacao = [prazo.observacao, `Opção escolhida entre ${scenarios.length} hipóteses recursais identificadas.`].join(' ');
+    DB.prazos.push(prazo);
+    attachSuggestedPrazoToPublication(pub, prazo, suggestion, [prazo]);
+    logHist(`Opção recursal escolhida no LexFlow para ${displayClientName(pub)} (${pub.processo}): ${suggestion.rule.act} em ${fmtDate(suggestion.dueDate)}.`);
+    await saveDB();
+    hideModal();
+    currentView = 'prazos';
+    prazoFilters.showValidation = true;
+    renderAll();
+    toast('Prazo escolhido gerado');
+  };
 }
 
 function buildSuggestedPrazoFromPublication(pub, suggestion, scenarioCount=1){
@@ -3082,7 +3173,7 @@ function buildSuggestedPrazoFromPublication(pub, suggestion, scenarioCount=1){
     responsavel:'',
     status:suggestion.confidence === 'baixa' || scenarioCount > 1 ? 'Em análise' : 'Protocolar',
     prioridade:suggestion.confidence === 'baixa' ? 'Alta' : 'Média',
-    validacaoStatus:scenarioCount > 1 ? 'cenarios_concorrentes' : (suggestion.confidence === 'baixa' ? 'revisao_recomendada' : 'calculado_lexflow'),
+    validacaoStatus:scenarioCount > 1 ? 'opcoes_recursais' : (suggestion.confidence === 'baixa' ? 'revisao_recomendada' : 'calculado_lexflow'),
     motorPrazo:'lexflow_normativo_v1',
     areaDireito:suggestion.area.label,
     regraPrazoId:suggestion.rule.id,
@@ -3105,7 +3196,8 @@ function buildSuggestedPrazoFromPublication(pub, suggestion, scenarioCount=1){
     confirmadoEm:'',
     observacao:[
       `Prazo calculado pelo LexFlow. Área: ${suggestion.area.label}.`,
-      scenarioCount > 1 ? `Cenário concorrente: ${suggestion.role || 'alternativo'}. ${suggestion.reason || ''}` : '',
+      suggestion.reason ? `Motivo da sugestão: ${suggestion.reason}` : '',
+      scenarioCount > 1 ? `Opção concorrente: ${suggestion.role || 'alternativo'}.` : '',
       `Fundamento: ${suggestion.rule.basis}.`,
       `Contagem: ${suggestion.rule.days} ${suggestion.rule.count === 'business' ? 'dias úteis' : 'dias corridos'}, início sugerido em ${fmtDate(suggestion.startDate)}.`,
       `Calendário: ${suggestion.rule.count === 'business' ? 'dias úteis nacionais v1' : 'dias corridos v1'}.`,
@@ -3121,9 +3213,9 @@ function attachSuggestedPrazoToPublication(pub, prazo, suggestion, prazos=[prazo
   pub.prazoGeradoId = prazo.id;
   pub.prazosGeradosIds = Array.from(new Set([...(pub.prazosGeradosIds || []), ...prazos.map(item=>item.id)]));
   pub.prazoSugerido = suggestion.dueDate;
-  pub.prazoIdentificado = prazos.length > 1 ? `${prazos.length} cenários de prazo gerados` : `Prazo sugerido em ${fmtDate(suggestion.dueDate)}`;
+  pub.prazoIdentificado = prazos.length > 1 ? `${prazos.length} opções recursais registradas` : `Prazo sugerido em ${fmtDate(suggestion.dueDate)}`;
   const resumo = prazos.length > 1
-    ? `Cenários LexFlow: ${prazos.map(item=>`${item.regraPrazoAto} (${fmtDate(item.prazoFatal)})`).join('; ')}.`
+    ? `Opções LexFlow: ${prazos.map(item=>`${item.regraPrazoAto} (${fmtDate(item.prazoFatal)})`).join('; ')}.`
     : `Sugestão LexFlow: ${suggestion.rule.act}, ${fmtDate(suggestion.dueDate)}, ${suggestion.rule.basis}.`;
   pub.observacoes = [pub.observacoes, resumo].filter(Boolean).join(' ');
 }
@@ -3183,6 +3275,18 @@ function autoCreatePrazosFromIntegratedPublications(publications){
     if(pub.prazosGeradosIds?.length || pub.prazoGeradoId) return;
     const scenarios = deadlineScenarios(pub).filter(item=>item.dueDate && item.rule);
     if(!scenarios.length) return;
+    if(scenarios.length > 1){
+      pub.status = pub.status && !PUB_UNTREATED.includes(pub.status) ? pub.status : 'Em análise';
+      pub.prazoIdentificado = `${scenarios.length} opções recursais para escolha`;
+      pub.prazoOpcoesIdentificadas = scenarios.map(item=>({
+        regraPrazoId:item.rule.id,
+        ato:item.rule.act,
+        prazoFatal:item.dueDate,
+        fundamento:item.rule.basis,
+        confianca:item.confidence
+      }));
+      return;
+    }
     const createdForPub = [];
     scenarios.forEach(suggestion=>{
       const prazo = buildSuggestedPrazoFromPublication(pub, suggestion, scenarios.length);
