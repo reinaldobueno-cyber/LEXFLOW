@@ -344,6 +344,14 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .scenario-table th,.scenario-table td{padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top;}
 .scenario-table th{font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); background:#F8FAFC;}
 .scenario-table tr:last-child td{border-bottom:0;}
+.recursal-timeline{position:relative; display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; padding:16px 2px 4px; margin-top:2px;}
+.recursal-timeline::before{content:''; position:absolute; left:18px; right:18px; top:30px; height:2px; background:#D0D5DD;}
+.timeline-step{position:relative; z-index:1; display:flex; flex-direction:column; gap:5px; min-width:0;}
+.timeline-dot{width:30px; height:30px; border-radius:50%; background:#fff; border:3px solid #D0D5DD; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:var(--ink-soft); box-shadow:0 0 0 4px #fff;}
+.timeline-step:first-child .timeline-dot{border-color:var(--selo); color:var(--selo);}
+.timeline-date{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--selo); font-weight:900;}
+.timeline-title{font-size:11px; color:var(--ink); font-weight:900; line-height:1.25;}
+.timeline-meta{font-size:10.5px; color:var(--ink-soft); line-height:1.3;}
 .publication-form-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
 .publication-mini-text{border:1px solid var(--line); border-radius:10px; padding:14px; background:#fff; max-height:330px; overflow:auto;}
 .publication-mini-text h4{font-family:'Source Serif 4',serif; font-size:15px; margin-bottom:8px;}
@@ -644,6 +652,21 @@ function refocusTextInput(id, caret){
     const pos = Math.min(Number.isFinite(caret) ? caret : input.value.length, input.value.length);
     if(typeof input.setSelectionRange === 'function') input.setSelectionRange(pos, pos);
   });
+}
+const textFilterTimers = {};
+function bindDebouncedTextInput(id, onValue, renderFn, delay=260){
+  const input = document.getElementById(id);
+  if(!input) return;
+  input.oninput = e=>{
+    const value = e.target.value;
+    const caret = e.target.selectionStart;
+    onValue(value);
+    clearTimeout(textFilterTimers[id]);
+    textFilterTimers[id] = setTimeout(()=>{
+      renderFn();
+      refocusTextInput(id, caret);
+    }, delay);
+  };
 }
 function isoDateTime(dateVal, timeVal='09:00'){
   const iso = isoOf(dateVal); if(!iso) return '';
@@ -1780,7 +1803,12 @@ function renderNav(){
     if(gi===1) html += `<div class="nav-label">Sistema</div>`;
     VIEWS.filter(v=>v.group===g && (!v.managerOnly || isUserManager())).forEach(v=>{
       let badge='';
-      if(v.id==='publicacoes'){ const pubs=publicacoesOperacionais(); const n=pubs.filter(p=>PUB_UNTREATED.includes(p.status)).length; if(n>0) badge=`<span class="badge crit">${n}</span>`; else badge=`<span class="badge">${pubs.length}</span>`; }
+      if(v.id==='publicacoes'){
+        const processosAtivos = acervoProcessos().filter(p=>!p.encerrado).length;
+        const pubs=publicacoesOperacionais().filter(p=>!PUB_ARCHIVED.includes(p.status));
+        const untreated=pubs.filter(p=>PUB_UNTREATED.includes(p.status)).length;
+        badge=`<span class="badge ${untreated>0?'crit':''}" title="${processosAtivos} processos no acervo · ${untreated} publicações sem tratamento">${processosAtivos}</span>`;
+      }
       if(v.id==='prazos') badge = `<span class="badge">${DB.prazos.filter(p=>isIntegratedPrazo(p) && !PRAZO_ARCHIVED.includes(p.status)).length}</span>`;
       if(v.id==='audiencias') badge = `<span class="badge">${DB.audiencias.filter(a=>!AUDI_ARCHIVED.includes(a.status)).length}</span>`;
       if(v.id==='tarefas') badge = `<span class="badge">${DB.tarefas.filter(t=>!isTaskDone(t)).length}</span>`;
@@ -2093,7 +2121,24 @@ function buildDeadlineScenario(pub, rule, area, reason='', role='concorrente', i
   };
 }
 
+const deadlineScenarioCache = new Map();
+function deadlineScenarioCacheKey(pub){
+  return [
+    pub?.id || '',
+    pub?.refId || '',
+    pub?.processo || '',
+    pub?.tribunal || '',
+    pub?.dataPublicacao || '',
+    pub?.tipoPublicacao || '',
+    pub?.textoRecorte || '',
+    pub?.observacoes || '',
+    pub?.prazoFatal || ''
+  ].join('|');
+}
+
 function deadlineScenarios(pub){
+  const cacheKey = deadlineScenarioCacheKey(pub);
+  if(deadlineScenarioCache.has(cacheKey)) return deadlineScenarioCache.get(cacheKey);
   const primary = deadlineSuggestion(pub);
   const area = primary.area || inferLegalArea(pub);
   const scenarios = [];
@@ -2108,7 +2153,7 @@ function deadlineScenarios(pub){
   scenarioRuleIdsForPublication(pub, area.id).forEach(item=>{
     addScenario(buildDeadlineScenario(pub, deadlineRuleById(item.id), area, item.reason, item.role, false));
   });
-  return scenarios
+  const result = scenarios
     .filter(s=>s.rule)
     .sort((a,b)=>{
       if(a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
@@ -2116,6 +2161,8 @@ function deadlineScenarios(pub){
       if(!a.isPrimary && b.isPrimary) return 1;
       return (a.rule?.act || '').localeCompare(b.rule?.act || '');
     });
+  deadlineScenarioCache.set(cacheKey, result);
+  return result;
 }
 
 function deadlineSuggestionLabel(pub){
@@ -2200,6 +2247,19 @@ function publicationIntelligenceText(pub){
   ].filter(Boolean).join('\n');
 }
 
+function recursalTimelineHTML(scenarios){
+  const items = (scenarios || []).filter(item=>item?.dueDate && item?.rule);
+  if(items.length <= 1) return '';
+  return `<div class="recursal-timeline" aria-label="Linha do tempo recursal">
+    ${items.map((item, idx)=>`<div class="timeline-step">
+      <div class="timeline-dot">${idx + 1}</div>
+      <div class="timeline-date">${esc(fmtDate(item.dueDate))}</div>
+      <div class="timeline-title">${esc(item.rule.act)}</div>
+      <div class="timeline-meta">${esc(item.role || 'opção recursal')}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
 function openIntelligenceShareModal(pub){
   const report = publicationIntelligenceText(pub);
   const box = document.getElementById('modalBox');
@@ -2268,6 +2328,7 @@ function publicationActionCard(pub){
       </div>
       <div class="pub-action-meta"><b>Base:</b> ${esc(basis)}</div>
       ${scenarioStrip}
+      ${recursalTimelineHTML(scenarios)}
       ${s.restricted ? `<div class="pub-action-meta"><b>Restrição:</b> ${esc(s.restrictedReason || 'conteúdo exige fonte autenticada')}</div><div>${sourceStatusTag(pub)}</div>` : ''}
       <div class="pub-action-buttons">
         ${s.dueDate ? `<button class="ops-action primary" data-act="suggest"><span class="mark lex">L</span>${scenarios.length > 1 ? 'Escolher prazo' : 'Gerar prazo'}</button>` : ''}
@@ -2865,6 +2926,7 @@ function publicationDetailPanelHTML(p){
           </div>
           <div class="decision-meta"><b>Base:</b> ${esc(s.rule?.basis || 'Sem regra normativa mapeada para cálculo automático.')}</div>
           ${scenarioStrip}
+          ${recursalTimelineHTML(scenarios)}
           ${restricted ? `<div class="decision-meta"><b>Restrição:</b> ${esc(restrictedInfo(p).reason || 'conteúdo exige fonte autenticada')} · ${esc(linkStatus.label)}</div>` : ''}
           <div class="decision-actions">
             ${s.dueDate ? `<button class="btn primary" data-detail-act="suggest">${scenarios.length > 1 ? 'Escolher prazo' : 'Gerar prazo'}</button>` : (canGerarPrazo ? `<button class="btn primary" data-detail-act="genprazo">Gerar prazo</button>` : '')}
@@ -2980,7 +3042,7 @@ function renderPublicacoes(){
   }
   document.getElementById('content').innerHTML = html;
 
-  document.getElementById('fCliente').oninput = e=>{ const caret=e.target.selectionStart; pubFilters.cliente=e.target.value; renderPublicacoes(); refocusTextInput('fCliente', caret); };
+  bindDebouncedTextInput('fCliente', value=>{ pubFilters.cliente=value; }, renderPublicacoes);
   document.getElementById('fOrigem').onchange = e=>{pubFilters.origin=e.target.value; renderPublicacoes();};
   document.getElementById('fStatus').onchange = e=>{pubFilters.status=e.target.value; renderPublicacoes();};
   document.getElementById('fRestritas').onchange = e=>{pubFilters.showRestricted=e.target.checked; renderPublicacoes();};
@@ -3152,6 +3214,7 @@ function openDeadlineTimelineModal(pub, scenarios){
         O LexFlow encontrou mais de uma janela possível. Todas podem ser acompanhadas na agenda do processo:
         se não fizer embargos, ainda aparece a apelação; se um caminho for descartado, marque como Descartado.
       </div>
+      ${recursalTimelineHTML(scenarios)}
       <div class="scenario-strip">
         ${scenarios.map((item, idx)=>`
           <div class="scenario-chip ${idx===0?'primary':''}">
@@ -3515,7 +3578,7 @@ function renderPrazos(){
   html += `</tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
 
-  document.getElementById('fCliente').oninput = e=>{ const caret=e.target.selectionStart; prazoFilters.cliente=e.target.value; renderPrazos(); refocusTextInput('fCliente', caret); };
+  bindDebouncedTextInput('fCliente', value=>{ prazoFilters.cliente=value; }, renderPrazos);
   document.getElementById('fStatus').onchange = e=>{prazoFilters.status=e.target.value; renderPrazos();};
   document.getElementById('fResp').onchange = e=>{prazoFilters.responsavel=e.target.value; renderPrazos();};
   document.getElementById('fValidation').onchange = e=>{prazoFilters.showValidation=e.target.checked; renderPrazos();};
@@ -3665,7 +3728,7 @@ function renderAudiencias(){
   html += `</tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
 
-  document.getElementById('fAudCliente').oninput = e=>{ const caret=e.target.selectionStart; audiFilters.cliente=e.target.value; renderAudiencias(); refocusTextInput('fAudCliente', caret); };
+  bindDebouncedTextInput('fAudCliente', value=>{ audiFilters.cliente=value; }, renderAudiencias);
   document.getElementById('fAudStatus').onchange = e=>{audiFilters.status=e.target.value; renderAudiencias();};
   document.getElementById('fArch').onchange = e=>{audiFilters.showArchived=e.target.checked; renderAudiencias();};
   document.getElementById('addAudiBtn').onclick = ()=>openAudiModal(null);
@@ -4177,7 +4240,7 @@ function renderHistorico(){
   document.getElementById('content').innerHTML = html;
   document.getElementById('histStatus').value = historicoFilters.status;
   document.getElementById('histPeriod').value = historicoFilters.period || 'todos';
-  document.getElementById('histBusca').oninput = e=>{ const caret=e.target.selectionStart; historicoFilters.q=e.target.value; renderHistorico(); refocusTextInput('histBusca', caret); };
+  bindDebouncedTextInput('histBusca', value=>{ historicoFilters.q=value; }, renderHistorico);
   document.getElementById('histStatus').onchange = e=>{ historicoFilters.status=e.target.value; renderHistorico(); };
   document.getElementById('histPeriod').onchange = e=>{ historicoFilters.period=e.target.value; renderHistorico(); };
   const retroBtn = document.getElementById('retroLoadBtn');
