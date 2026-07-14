@@ -636,6 +636,15 @@ function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); if(isNaN(dt)
 function isoOf(d){ const dt=parseDateLocal(d); if(!dt) return ''; const mm=String(dt.getMonth()+1).padStart(2,'0'); const dd=String(dt.getDate()).padStart(2,'0'); return `${dt.getFullYear()}-${mm}-${dd}`; }
 function compactDate(d){ return isoOf(d).replace(/-/g,''); }
 function addDaysISO(d, days=1){ const dt=parseDateLocal(d); if(!dt) return ''; dt.setDate(dt.getDate()+days); return isoOf(dt); }
+function refocusTextInput(id, caret){
+  requestAnimationFrame(()=>{
+    const input = document.getElementById(id);
+    if(!input) return;
+    input.focus({preventScroll:true});
+    const pos = Math.min(Number.isFinite(caret) ? caret : input.value.length, input.value.length);
+    if(typeof input.setSelectionRange === 'function') input.setSelectionRange(pos, pos);
+  });
+}
 function isoDateTime(dateVal, timeVal='09:00'){
   const iso = isoOf(dateVal); if(!iso) return '';
   const [h='09',m='00'] = String(timeVal || '09:00').split(':');
@@ -2965,7 +2974,7 @@ function renderPublicacoes(){
   }
   document.getElementById('content').innerHTML = html;
 
-  document.getElementById('fCliente').oninput = e=>{pubFilters.cliente=e.target.value; renderPublicacoes();};
+  document.getElementById('fCliente').oninput = e=>{ const caret=e.target.selectionStart; pubFilters.cliente=e.target.value; renderPublicacoes(); refocusTextInput('fCliente', caret); };
   document.getElementById('fOrigem').onchange = e=>{pubFilters.origin=e.target.value; renderPublicacoes();};
   document.getElementById('fStatus').onchange = e=>{pubFilters.status=e.target.value; renderPublicacoes();};
   document.getElementById('fRestritas').onchange = e=>{pubFilters.showRestricted=e.target.checked; renderPublicacoes();};
@@ -3484,7 +3493,7 @@ function renderPrazos(){
   html += `</tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
 
-  document.getElementById('fCliente').oninput = e=>{prazoFilters.cliente=e.target.value; renderPrazos();};
+  document.getElementById('fCliente').oninput = e=>{ const caret=e.target.selectionStart; prazoFilters.cliente=e.target.value; renderPrazos(); refocusTextInput('fCliente', caret); };
   document.getElementById('fStatus').onchange = e=>{prazoFilters.status=e.target.value; renderPrazos();};
   document.getElementById('fResp').onchange = e=>{prazoFilters.responsavel=e.target.value; renderPrazos();};
   document.getElementById('fValidation').onchange = e=>{prazoFilters.showValidation=e.target.checked; renderPrazos();};
@@ -3634,7 +3643,7 @@ function renderAudiencias(){
   html += `</tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
 
-  document.getElementById('fAudCliente').oninput = e=>{audiFilters.cliente=e.target.value; renderAudiencias();};
+  document.getElementById('fAudCliente').oninput = e=>{ const caret=e.target.selectionStart; audiFilters.cliente=e.target.value; renderAudiencias(); refocusTextInput('fAudCliente', caret); };
   document.getElementById('fAudStatus').onchange = e=>{audiFilters.status=e.target.value; renderAudiencias();};
   document.getElementById('fArch').onchange = e=>{audiFilters.showArchived=e.target.checked; renderAudiencias();};
   document.getElementById('addAudiBtn').onclick = ()=>openAudiModal(null);
@@ -4146,7 +4155,7 @@ function renderHistorico(){
   document.getElementById('content').innerHTML = html;
   document.getElementById('histStatus').value = historicoFilters.status;
   document.getElementById('histPeriod').value = historicoFilters.period || 'todos';
-  document.getElementById('histBusca').oninput = e=>{ historicoFilters.q=e.target.value; renderHistorico(); };
+  document.getElementById('histBusca').oninput = e=>{ const caret=e.target.selectionStart; historicoFilters.q=e.target.value; renderHistorico(); refocusTextInput('histBusca', caret); };
   document.getElementById('histStatus').onchange = e=>{ historicoFilters.status=e.target.value; renderHistorico(); };
   document.getElementById('histPeriod').onchange = e=>{ historicoFilters.period=e.target.value; renderHistorico(); };
   const retroBtn = document.getElementById('retroLoadBtn');
