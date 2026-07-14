@@ -366,8 +366,10 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .timeline-option b{display:block; font-size:11px; color:var(--ink); line-height:1.25;}
 .timeline-option span{display:block; font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
 .publication-form-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
-.publication-mini-text{border:1px solid var(--line); border-radius:10px; padding:14px; background:#fff; max-height:330px; overflow:auto;}
-.publication-mini-text h4{font-family:'Source Serif 4',serif; font-size:15px; margin-bottom:8px;}
+.publication-preview-card{border:1px solid var(--line); border-radius:10px; padding:14px; background:#fff; display:flex; flex-direction:column; gap:10px; min-width:0;}
+.publication-preview-card h4{font-family:'Source Serif 4',serif; font-size:15px;}
+.publication-preview-text{font-size:12.5px; line-height:1.6; color:var(--ink-2); overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:7; -webkit-box-orient:vertical; overflow:hidden;}
+.publication-preview-actions{display:flex; flex-wrap:wrap; gap:8px; padding-top:2px;}
 .publication-secondary-actions{display:flex; flex-wrap:wrap; gap:8px; padding:12px; border:1px solid var(--line); border-radius:10px; background:#F8FAFC; align-items:center;}
 .publication-secondary-actions .actionbar-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:900; margin-right:4px;}
 .origin-unavailable{font-size:11.5px; color:var(--ink-soft); border:1px dashed var(--line); border-radius:8px; padding:7px 10px; background:#F8FAFC;}
@@ -2954,6 +2956,7 @@ function publicationDetailPanelHTML(p){
       <div class="scenario-basis">${esc(item.role || item.reason || '')}</div>
     </div>`).join('')}
   </div>` : '';
+  const previewText = cleanText(p.textoRecorte || 'Texto não disponível nesta publicação.');
   return `
     <section class="publication-detail" data-selected-pub="${esc(p.id)}">
       <div class="publication-detail-head">
@@ -3012,9 +3015,13 @@ function publicationDetailPanelHTML(p){
           ${!PUB_ARCHIVED.includes(p.status) ? `<button class="btn danger" data-detail-act="archive">Arquivar</button>` : ''}
         </div>
 
-        <div class="publication-mini-text">
-          <h4>Texto da publicação</h4>
-          <div class="analysis-full-text">${formattedPublicationTextHTML(p.textoRecorte)}</div>
+        <div class="publication-preview-card">
+          <h4>Prévia da publicação</h4>
+          <div class="publication-preview-text">${esc(previewText)}</div>
+          <div class="publication-preview-actions">
+            <button class="btn" data-detail-act="details">Abrir texto completo e análise</button>
+            ${originAccessHTML(p)}
+          </div>
         </div>
       </div>
     </section>
