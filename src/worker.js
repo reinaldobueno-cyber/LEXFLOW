@@ -684,6 +684,76 @@ function buildDailySummaryText(tenant, data, day){
   return {text:[...header, ...body].join('\n'), items, counts:{vencidos:vencidos.length, hoje:hoje.length, audiencias:audiencias.length, tarefas:tarefas.length}};
 }
 
+function escapeHtml(value){
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  }[ch]));
+}
+
+function buildDailySummaryHtml(tenant, summary, day, whatsappNumbers = []){
+  const counts = summary.counts || {};
+  const items = summary.items || [];
+  const cleanWhatsapp = whatsappNumbers.map(n => String(n || '').replace(/\D/g, '')).filter(Boolean);
+  const firstWhatsapp = cleanWhatsapp[0] || '';
+  const whatsappUrl = firstWhatsapp ? `https://wa.me/${firstWhatsapp}?text=${encodeURIComponent(summary.text)}` : '';
+  const itemRows = items.length ? items.map((item, idx) => `
+    <tr>
+      <td style="padding:12px;border-bottom:1px solid #e7edf5;color:#64748b;">${idx + 1}</td>
+      <td style="padding:12px;border-bottom:1px solid #e7edf5;"><strong>${escapeHtml(item.tipo)}</strong><br><span style="color:#475569;">${escapeHtml(item.desc || 'Sem descrição')}</span></td>
+      <td style="padding:12px;border-bottom:1px solid #e7edf5;">${escapeHtml(item.cliente || 'Sem cliente')}</td>
+      <td style="padding:12px;border-bottom:1px solid #e7edf5;font-family:Consolas,monospace;">${escapeHtml(item.processo || 'Sem processo')}</td>
+      <td style="padding:12px;border-bottom:1px solid #e7edf5;">${escapeHtml(formatBrDate(item.data))}</td>
+      <td style="padding:12px;border-bottom:1px solid #e7edf5;">${escapeHtml(item.resp || 'sem responsável')}</td>
+    </tr>
+  `).join('') : `
+    <tr><td colspan="6" style="padding:18px;border-bottom:1px solid #e7edf5;color:#475569;">Nenhum compromisso crítico para hoje.</td></tr>
+  `;
+
+  return `
+    <div style="margin:0;background:#f4f7fb;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+      <div style="max-width:860px;margin:0 auto;background:#ffffff;border:1px solid #dbe4ef;border-radius:16px;overflow:hidden;">
+        <div style="padding:24px 28px;background:#10233f;color:#ffffff;">
+          <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#b9c7d8;">LexFlow</div>
+          <h1 style="margin:8px 0 4px;font-size:24px;line-height:1.2;">Compromissos do dia</h1>
+          <div style="color:#cbd5e1;">${escapeHtml(tenant?.name || 'LexFlow')} - ${escapeHtml(formatBrDate(day))}</div>
+        </div>
+        <div style="padding:22px 28px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
+            <span style="background:#fee2e2;color:#991b1b;padding:8px 12px;border-radius:999px;font-weight:700;">Vencidos: ${counts.vencidos || 0}</span>
+            <span style="background:#fff7ed;color:#9a3412;padding:8px 12px;border-radius:999px;font-weight:700;">Hoje: ${counts.hoje || 0}</span>
+            <span style="background:#eff6ff;color:#1d4ed8;padding:8px 12px;border-radius:999px;font-weight:700;">Audiências: ${counts.audiencias || 0}</span>
+            <span style="background:#f1f5f9;color:#334155;padding:8px 12px;border-radius:999px;font-weight:700;">Tarefas: ${counts.tarefas || 0}</span>
+          </div>
+          ${whatsappUrl ? `
+            <p style="margin:0 0 18px;color:#475569;">Para manter o WhatsApp sem API oficial nesta fase, use o botão abaixo: ele abre a conversa com o texto pronto para envio.</p>
+            <p style="margin:0 0 22px;"><a href="${escapeHtml(whatsappUrl)}" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 16px;border-radius:10px;font-weight:700;">Enviar resumo no WhatsApp</a></p>
+          ` : ''}
+          <table style="width:100%;border-collapse:collapse;border:1px solid #e7edf5;border-radius:12px;overflow:hidden;font-size:14px;">
+            <thead>
+              <tr style="background:#f8fafc;color:#475569;text-align:left;">
+                <th style="padding:10px;">#</th>
+                <th style="padding:10px;">Compromisso</th>
+                <th style="padding:10px;">Cliente</th>
+                <th style="padding:10px;">Processo</th>
+                <th style="padding:10px;">Data</th>
+                <th style="padding:10px;">Responsável</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+          <div style="margin-top:20px;padding:14px 16px;background:#f8fafc;border:1px solid #e7edf5;border-radius:12px;color:#475569;font-size:13px;">
+            Envio automático por e-mail gratuito. WhatsApp automático oficial pode ser ativado depois com Meta Cloud API ou provedor homologado.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 async function postWebhook(url, token, payload){
   if(!url) return {skipped:true, reason:'webhook_not_configured'};
   const headers = {'Content-Type':'application/json'};
@@ -731,7 +801,7 @@ async function dispatchDailySummary(env, tenant, settings, data, opts = {}){
         to,
         subject:`LexFlow - Compromissos do dia ${formatBrDate(day)}`,
         text:summary.text,
-        html:`<pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${summary.text.replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]))}</pre>`,
+        html:buildDailySummaryHtml(tenant, summary, day, cfg.whatsappNumbers),
         tenantId:tenant.id,
         day
       })});
