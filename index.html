@@ -344,14 +344,21 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .scenario-table th,.scenario-table td{padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top;}
 .scenario-table th{font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); background:#F8FAFC;}
 .scenario-table tr:last-child td{border-bottom:0;}
-.recursal-timeline{position:relative; display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; padding:16px 2px 4px; margin-top:2px;}
-.recursal-timeline::before{content:''; position:absolute; left:18px; right:18px; top:30px; height:2px; background:#D0D5DD;}
-.timeline-step{position:relative; z-index:1; display:flex; flex-direction:column; gap:5px; min-width:0;}
-.timeline-dot{width:30px; height:30px; border-radius:50%; background:#fff; border:3px solid #D0D5DD; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:var(--ink-soft); box-shadow:0 0 0 4px #fff;}
-.timeline-step:first-child .timeline-dot{border-color:var(--selo); color:var(--selo);}
-.timeline-date{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--selo); font-weight:900;}
-.timeline-title{font-size:11px; color:var(--ink); font-weight:900; line-height:1.25;}
-.timeline-meta{font-size:10.5px; color:var(--ink-soft); line-height:1.3;}
+.recursal-timeline{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:14px 0 4px; counter-reset:timeline;}
+.timeline-stage{position:relative; min-width:0; padding-top:26px;}
+.timeline-stage::before{content:''; position:absolute; left:18px; right:-30px; top:15px; height:2px; background:linear-gradient(90deg,#A7C6ED,#D8DEE8);}
+.timeline-stage:last-child::before{right:calc(100% - 18px);}
+.timeline-dot{position:absolute; left:0; top:0; width:32px; height:32px; border-radius:50%; background:#fff; border:2px solid #A7C6ED; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:var(--azul); box-shadow:0 0 0 5px #F0F7FF;}
+.timeline-stage:first-child .timeline-dot{border-color:var(--selo); color:var(--selo); box-shadow:0 0 0 5px #FFF8E6;}
+.timeline-card{border:1px solid #D8DEE8; border-radius:12px; background:#fff; padding:10px; box-shadow:0 8px 18px rgba(16,24,40,.05);}
+.timeline-stage:first-child .timeline-card{border-color:#F1C66D; background:#FFF9EA;}
+.timeline-date{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--selo); font-weight:900; margin-bottom:3px;}
+.timeline-title{font-size:12px; color:var(--ink); font-weight:900; line-height:1.25;}
+.timeline-meta{font-size:10.5px; color:var(--ink-soft); line-height:1.3; margin-top:2px;}
+.timeline-options{display:flex; flex-direction:column; gap:7px; margin-top:9px;}
+.timeline-option{border:1px solid var(--line); border-radius:9px; padding:8px; background:#F8FAFC;}
+.timeline-option b{display:block; font-size:11px; color:var(--ink); line-height:1.25;}
+.timeline-option span{display:block; font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
 .publication-form-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
 .publication-mini-text{border:1px solid var(--line); border-radius:10px; padding:14px; background:#fff; max-height:330px; overflow:auto;}
 .publication-mini-text h4{font-family:'Source Serif 4',serif; font-size:15px; margin-bottom:8px;}
@@ -1827,7 +1834,7 @@ function openDashboardFilter(view, filter){
     prazoFilters = {status:'', responsavel:'', cliente:'', showArchived:false, showValidation:false, sort:'prazoFatal', dir:1};
   }
   if(view==='publicacoes'){
-    pubFilters = {status:'', cliente:'', origin:'', quick:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
+    pubFilters = {status:'', cliente:'', origin:'', tipo:'', quick:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
   }
   if(view==='audiencias'){
     audiFilters = {status:'', cliente:'', showArchived:false, sort:'data', dir:1};
@@ -2247,15 +2254,33 @@ function publicationIntelligenceText(pub){
   ].filter(Boolean).join('\n');
 }
 
+function groupedDeadlineScenarios(scenarios){
+  const groups = new Map();
+  (scenarios || []).filter(item=>item?.dueDate && item?.rule).forEach(item=>{
+    if(!groups.has(item.dueDate)) groups.set(item.dueDate, []);
+    groups.get(item.dueDate).push(item);
+  });
+  return [...groups.entries()]
+    .sort((a,b)=>a[0].localeCompare(b[0]))
+    .map(([dueDate, items])=>({dueDate, items}));
+}
+
 function recursalTimelineHTML(scenarios){
-  const items = (scenarios || []).filter(item=>item?.dueDate && item?.rule);
-  if(items.length <= 1) return '';
+  const groups = groupedDeadlineScenarios(scenarios);
+  if(groups.length <= 1 && (groups[0]?.items.length || 0) <= 1) return '';
   return `<div class="recursal-timeline" aria-label="Linha do tempo recursal">
-    ${items.map((item, idx)=>`<div class="timeline-step">
+    ${groups.map((group, idx)=>`<div class="timeline-stage">
       <div class="timeline-dot">${idx + 1}</div>
-      <div class="timeline-date">${esc(fmtDate(item.dueDate))}</div>
-      <div class="timeline-title">${esc(item.rule.act)}</div>
-      <div class="timeline-meta">${esc(item.role || 'opção recursal')}</div>
+      <div class="timeline-card">
+        <div class="timeline-date">${esc(fmtDate(group.dueDate))}</div>
+        <div class="timeline-title">${group.items.length > 1 ? `${group.items.length} opções no mesmo dia` : esc(group.items[0].rule.act)}</div>
+        <div class="timeline-meta">${group.items.length > 1 ? 'Tratar em conjunto para não esconder alternativas.' : esc(group.items[0].role || 'opção recursal')}</div>
+        ${group.items.length > 1 ? `<div class="timeline-options">${group.items.map(item=>`
+          <div class="timeline-option">
+            <b>${esc(item.rule.act)}</b>
+            <span>${esc(item.role || 'opção recursal')}</span>
+          </div>`).join('')}</div>` : ''}
+      </div>
     </div>`).join('')}
   </div>`;
 }
@@ -2873,7 +2898,23 @@ function renderDashboard(){
 }
 
 /* ===================== PUBLICAÇÕES / RECORTES ===================== */
-let pubFilters = {status:'', cliente:'', origin:'', quick:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
+let pubFilters = {status:'', cliente:'', origin:'', tipo:'', quick:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
+
+function publicationActFamily(pub){
+  const text = publicationDeadlineText(pub);
+  if(text.includes('SENTENCA') || text.includes('JULGO') || text.includes('PROCEDENTE') || text.includes('IMPROCEDENTE') || text.includes('ACORDAO')) return 'julgamento';
+  if(text.includes('DECISAO MONOCRATICA') || text.includes('DECISAO INTERLOCUTORIA') || text.includes('DECISAO')) return 'decisao';
+  if(text.includes('INTIMACAO') || text.includes('INTIMADO') || text.includes('INTIMADA')) return 'intimacao';
+  if(text.includes('DESPACHO')) return 'despacho';
+  if(text.includes('CERTIDAO')) return 'certidao';
+  if(text.includes('CONTRARRAZOES') || text.includes('APELACAO') || text.includes('EMBARGOS') || text.includes('RECURSO')) return 'recursal';
+  return 'outros';
+}
+
+function publicationMatchesActFilter(pub, tipo){
+  if(!tipo) return true;
+  return publicationActFamily(pub) === tipo;
+}
 
 function publicationMatchesQuickFilter(pub, quick){
   if(!quick) return true;
@@ -2882,6 +2923,8 @@ function publicationMatchesQuickFilter(pub, quick){
   const linkStatus = sourceLinkStatus(pub);
   if(quick === 'restricted') return isRestrictedPublication(pub);
   if(quick === 'no_client') return displayClientName(pub) === 'Parte não identificada';
+  if(quick === 'recursal_options') return scenarios.length > 1;
+  if(quick === 'same_deadline') return groupedDeadlineScenarios(scenarios).some(group=>group.items.length > 1);
   if(quick === 'with_suggestion') return scenarios.some(item=>item.dueDate);
   if(quick === 'low_confidence') return scenarios.some(item=>item.needsReview) || suggestion.needsReview;
   if(quick === 'official_link') return linkStatus.state === 'ok';
@@ -2979,6 +3022,7 @@ function renderPublicacoes(){
   if(!pubFilters.showArchived) rows = rows.filter(p=>!PUB_ARCHIVED.includes(p.status));
   if(pubFilters.showRestricted) rows = rows.filter(isRestrictedPublication);
   if(pubFilters.origin) rows = rows.filter(p=>publicacaoOrigem(p)===pubFilters.origin);
+  if(pubFilters.tipo) rows = rows.filter(p=>publicationMatchesActFilter(p, pubFilters.tipo));
   if(pubFilters.quick) rows = rows.filter(p=>publicationMatchesQuickFilter(p, pubFilters.quick));
   if(pubFilters.status) rows = rows.filter(p=>p.status===pubFilters.status);
   if(pubFilters.cliente) rows = rows.filter(p=>String(p.cliente||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.processo||'').toLowerCase().includes(pubFilters.cliente.toLowerCase())||String(p.advogadoMonitorado||'').toLowerCase().includes(pubFilters.cliente.toLowerCase()));
@@ -2990,6 +3034,8 @@ function renderPublicacoes(){
   const quickFilters = [
     {id:'restricted', label:'Restritas', count:allRows.filter(isRestrictedPublication).length},
     {id:'no_client', label:'Parte não identificada', count:allRows.filter(p=>displayClientName(p)==='Parte não identificada').length},
+    {id:'recursal_options', label:'Recursais possíveis', count:allRows.filter(p=>publicationMatchesQuickFilter(p, 'recursal_options')).length},
+    {id:'same_deadline', label:'Mesmo vencimento', count:allRows.filter(p=>publicationMatchesQuickFilter(p, 'same_deadline')).length},
     {id:'with_suggestion', label:'Com prazo sugerido', count:allRows.filter(p=>deadlineScenarios(p).some(item=>item.dueDate)).length},
     {id:'low_confidence', label:'Revisão recomendada', count:allRows.filter(p=>deadlineScenarios(p).some(item=>item.needsReview)).length},
     {id:'official_link', label:'Link oficial pronto', count:allRows.filter(p=>sourceLinkStatus(p).state==='ok').length},
@@ -3001,6 +3047,7 @@ function renderPublicacoes(){
   let html = `${filterNote}${responsavelDatalistHTML()}<div class="filters">
     <input type="text" id="fCliente" placeholder="Buscar cliente ou processo..." value="${pubFilters.cliente}">
     <select id="fOrigem"><option value="">Todas as origens</option><option value="DJEN" ${pubFilters.origin==='DJEN'?'selected':''}>DJEN</option><option value="ControlJus" ${pubFilters.origin==='ControlJus'?'selected':''}>ControlJus</option></select>
+    <select id="fTipo"><option value="">Todos os atos</option><option value="intimacao" ${pubFilters.tipo==='intimacao'?'selected':''}>Intimações</option><option value="julgamento" ${pubFilters.tipo==='julgamento'?'selected':''}>Sentenças / acórdãos</option><option value="decisao" ${pubFilters.tipo==='decisao'?'selected':''}>Decisões</option><option value="recursal" ${pubFilters.tipo==='recursal'?'selected':''}>Atos recursais</option><option value="despacho" ${pubFilters.tipo==='despacho'?'selected':''}>Despachos</option><option value="certidao" ${pubFilters.tipo==='certidao'?'selected':''}>Certidões</option><option value="outros" ${pubFilters.tipo==='outros'?'selected':''}>Outros</option></select>
     <select id="fStatus"><option value="">Todos os status</option>${PUB_STATUSES.map(s=>`<option ${pubFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
     <label class="chk"><input type="checkbox" id="fRestritas" ${pubFilters.showRestricted?'checked':''}> Somente restritas</label>
     <label class="chk"><input type="checkbox" id="fArch" ${pubFilters.showArchived?'checked':''}> Mostrar arquivados</label>
@@ -3044,6 +3091,7 @@ function renderPublicacoes(){
 
   bindDebouncedTextInput('fCliente', value=>{ pubFilters.cliente=value; }, renderPublicacoes);
   document.getElementById('fOrigem').onchange = e=>{pubFilters.origin=e.target.value; renderPublicacoes();};
+  document.getElementById('fTipo').onchange = e=>{pubFilters.tipo=e.target.value; renderPublicacoes();};
   document.getElementById('fStatus').onchange = e=>{pubFilters.status=e.target.value; renderPublicacoes();};
   document.getElementById('fRestritas').onchange = e=>{pubFilters.showRestricted=e.target.checked; renderPublicacoes();};
   document.getElementById('fArch').onchange = e=>{pubFilters.showArchived=e.target.checked; renderPublicacoes();};
