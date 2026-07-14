@@ -748,6 +748,7 @@ const CONTROLJUS_PRIVATE_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/
 const CONTROLJUS_ENDPOINT_MODE = 'lexflow_cloudflare_browser_run_controljus';
 const DJEN_PUBLIC_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 const LEXFLOW_DJEN_ENDPOINT = 'https://lexflow.reinaldo-bueno.workers.dev/api/djen/comunicacoes';
+const DJEN_MANUAL_LOOKBACK_DAYS = 45;
 const LEXFLOW_A3_MODE_DEFAULT = 'browser_open';
 const LEXFLOW_A3_AGENT_DEFAULT = '';
 const APP_DATA_VERSION = '2026-07-07-authoritative-controljus-v3';
@@ -1571,6 +1572,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
   const byKey = new Map(DB.publicacoes.map(p=>[controlJusPublicacaoKey(p), p]));
   let created = 0;
   let updated = 0;
+  const touchedPublications = [];
 
   incoming.forEach(pub=>{
     const key = controlJusPublicacaoKey(pub);
@@ -1578,6 +1580,7 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
     if(!existing){
       DB.publicacoes.push(pub);
       byKey.set(key, pub);
+      touchedPublications.push(pub);
       created++;
       return;
     }
@@ -1588,14 +1591,16 @@ async function syncControlJusPublicacoes(force = true, opts = {}){
         updated++;
       }
     });
+    touchedPublications.push(existing);
     if(repairDjenClientFields()) updated++;
   });
+  const autoPrazos = autoCreatePrazosFromIntegratedPublications(touchedPublications);
 
   DB.config.lastControlJusSyncAt = payload.collectedAt || new Date().toISOString();
   DB.config.lastControlJusSyncStatus = payload.sync?.status || (res.status === 202 ? 'processing' : 'fresh');
   DB.config.lastControlJusSyncCount = incoming.length;
   DB.config.lastControlJusSyncError = '';
-  logHist(`Sincronização da fonte privada concluída: ${created} novas publicações, ${updated} campos atualizados, ${incoming.length} recebidas.`);
+  logHist(`Sincronização da fonte privada concluída: ${created} novas publicações, ${updated} campos atualizados, ${autoPrazos} prazos automáticos, ${incoming.length} recebidas.`);
   await saveDB();
   if(!preserveView){
     currentView = 'publicacoes';
@@ -1646,6 +1651,11 @@ async function syncDjenComunicacoes(force = true, opts = {}){
   if(!silent) toast('Sincronizando DJEN/CNJ...');
   const url = new URL(DB.config.lexflowDjenEndpoint || LEXFLOW_DJEN_ENDPOINT);
   if(force) url.searchParams.set('refresh', '1');
+  if(force){
+    const fim = isoOf(new Date());
+    url.searchParams.set('dataFim', fim);
+    url.searchParams.set('dataInicio', addDaysISO(fim, -DJEN_MANUAL_LOOKBACK_DAYS));
+  }
   if(isMaster() && AUTH.activeTenantId) url.searchParams.set('tenantId', AUTH.activeTenantId);
   const res = await apiFetch(url.toString());
   const payload = await res.json().catch(()=>({}));
@@ -1663,6 +1673,7 @@ async function syncDjenComunicacoes(force = true, opts = {}){
   const byKey = new Map(DB.publicacoes.map(p=>[controlJusPublicacaoKey(p), p]));
   let created = 0;
   let updated = 0;
+  const touchedPublications = [];
 
   incoming.forEach(pub=>{
     const key = controlJusPublicacaoKey(pub);
@@ -1670,6 +1681,7 @@ async function syncDjenComunicacoes(force = true, opts = {}){
     if(!existing){
       DB.publicacoes.push(pub);
       byKey.set(key, pub);
+      touchedPublications.push(pub);
       created++;
       return;
     }
@@ -1679,14 +1691,16 @@ async function syncDjenComunicacoes(force = true, opts = {}){
         updated++;
       }
     });
+    touchedPublications.push(existing);
     if(repairDjenClientFields()) updated++;
   });
+  const autoPrazos = autoCreatePrazosFromIntegratedPublications(touchedPublications);
 
   DB.config.lastDjenSyncAt = payload.collectedAt || new Date().toISOString();
   DB.config.lastDjenSyncStatus = payload.sync?.status || (res.status === 202 ? 'processing' : 'fresh_djen');
   DB.config.lastDjenSyncCount = incoming.length;
   DB.config.lastDjenSyncError = payload.diagnostics?.errors?.length ? payload.diagnostics.errors.join(' | ') : '';
-  logHist(`Sincronização DJEN/CNJ concluída: ${created} novas comunicações, ${updated} campos atualizados, ${incoming.length} recebidas.`);
+  logHist(`Sincronização DJEN/CNJ concluída: ${created} novas comunicações, ${updated} campos atualizados, ${autoPrazos} prazos automáticos, ${incoming.length} recebidas. Período: ${fmtDate(payload.periodo?.inicio)} a ${fmtDate(payload.periodo?.fim)}.`);
   await saveDB();
   if(!preserveView){
     currentView = 'publicacoes';
@@ -2830,8 +2844,21 @@ function openPubModal(p){
 async function createSuggestedPrazoFromPublication(pub){
   const suggestion = deadlineSuggestion(pub);
   if(!suggestion.dueDate || !suggestion.rule){ toast('Sem sugestão calculável para esta publicação'); return; }
+  const prazo = buildSuggestedPrazoFromPublication(pub, suggestion);
+  DB.prazos.push(prazo);
+  attachSuggestedPrazoToPublication(pub, prazo, suggestion);
+  logHist(`Prazo calculado pelo LexFlow para ${displayClientName(pub)} (${pub.processo}): ${fmtDate(suggestion.dueDate)} — ${suggestion.rule.act}.`);
+  await saveDB();
+  hideModal();
+  currentView = 'prazos';
+  prazoFilters.showValidation = true;
+  renderAll();
+  toast('Prazo calculado pelo LexFlow');
+}
+
+function buildSuggestedPrazoFromPublication(pub, suggestion){
   const cliente = displayClientName(pub);
-  const prazo = {
+  return {
     id:uid(),
     processo:pub.processo || '',
     cliente,
@@ -2874,19 +2901,70 @@ async function createSuggestedPrazoFromPublication(pub){
     link:pub.linkOrigem || '',
     concluidoEm:''
   };
-  DB.prazos.push(prazo);
+}
+
+function attachSuggestedPrazoToPublication(pub, prazo, suggestion){
   pub.status = 'Gerou prazo';
   pub.prazoGeradoId = prazo.id;
   pub.prazoSugerido = suggestion.dueDate;
   pub.prazoIdentificado = `Prazo sugerido em ${fmtDate(suggestion.dueDate)}`;
   pub.observacoes = [pub.observacoes, `Sugestão LexFlow: ${suggestion.rule.act}, ${fmtDate(suggestion.dueDate)}, ${suggestion.rule.basis}.`].filter(Boolean).join(' ');
-  logHist(`Prazo calculado pelo LexFlow para ${cliente} (${pub.processo}): ${fmtDate(suggestion.dueDate)} — ${suggestion.rule.act}.`);
-  await saveDB();
-  hideModal();
-  currentView = 'prazos';
-  prazoFilters.showValidation = true;
-  renderAll();
-  toast('Prazo calculado pelo LexFlow');
+}
+
+function buildPrazoFromExternalDeadline(pub){
+  const fatal = isoOf(pub.prazoFatal);
+  const dr = diasRestantes(fatal);
+  return {
+    id:uid(),
+    processo:pub.processo || '',
+    cliente:displayClientName(pub),
+    tribunal:pub.tribunal || '',
+    dataPublicacao:pub.dataPublicacao || '',
+    tipoPrazo:pub.tipoPublicacao || pub.prazoIdentificado || 'Prazo integrado',
+    prazoFatal:fatal,
+    origemPublicacaoId:pub.refId || pub.id || '',
+    responsavel:pub.responsavel || '',
+    status:pub.status && !PUB_UNTREATED.includes(pub.status) ? pub.status : 'Novo',
+    prioridade:dr !== null && dr <= 3 ? 'Alta' : 'Média',
+    observacao:[
+      `Prazo fatal informado pela fonte ${publicacaoOrigem(pub)}.`,
+      pub.prazoIdentificado || '',
+      pub.observacoes || ''
+    ].filter(Boolean).join(' '),
+    link:pub.linkOrigem || '',
+    concluidoEm:''
+  };
+}
+
+function attachExternalPrazoToPublication(pub, prazo){
+  pub.status = 'Gerou prazo';
+  pub.prazoGeradoId = prazo.id;
+  pub.prazoIdentificado = pub.prazoIdentificado || `Prazo fatal em ${fmtDate(prazo.prazoFatal)}`;
+}
+
+function autoCreatePrazosFromIntegratedPublications(publications){
+  let created = 0;
+  const existingOrigins = new Set((DB.prazos || []).map(p=>p.origemPublicacaoId).filter(Boolean));
+  const existingProcessDeadline = new Set((DB.prazos || []).map(p=>`${onlyDigits(p.processo)}:${p.prazoFatal || ''}:${normalizePersonName(p.tipoPrazo || '')}`));
+  (publications || []).forEach(pub=>{
+    if(!isIntegratedPublicacao(pub)) return;
+    if(pub.prazoGeradoId || existingOrigins.has(pub.refId || pub.id)) return;
+    if(PUB_ARCHIVED.includes(pub.status)) return;
+    const hasExternalDeadline = Boolean(isoOf(pub.prazoFatal));
+    const suggestion = hasExternalDeadline ? null : deadlineSuggestion(pub);
+    if(!hasExternalDeadline && (!suggestion.dueDate || !suggestion.rule)) return;
+    const prazo = hasExternalDeadline ? buildPrazoFromExternalDeadline(pub) : buildSuggestedPrazoFromPublication(pub, suggestion);
+    const dedupe = `${onlyDigits(prazo.processo)}:${prazo.prazoFatal || ''}:${normalizePersonName(prazo.tipoPrazo || '')}`;
+    if(existingProcessDeadline.has(dedupe)) return;
+    DB.prazos.push(prazo);
+    existingOrigins.add(prazo.origemPublicacaoId);
+    existingProcessDeadline.add(dedupe);
+    if(hasExternalDeadline) attachExternalPrazoToPublication(pub, prazo);
+    else attachSuggestedPrazoToPublication(pub, prazo, suggestion);
+    created++;
+  });
+  if(created) logHist(`Motor LexFlow criou automaticamente ${created} prazo(s) a partir de publicações integradas.`);
+  return created;
 }
 
 async function createTaskFromPublication(pub){

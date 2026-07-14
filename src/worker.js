@@ -6,7 +6,8 @@ const DJEN_CACHE_KEY = 'djen:comunicacoes:latest';
 const DJEN_ERROR_KEY = 'djen:last-error';
 const DEFAULT_CONTROLJUS_URLS = [
   'https://app.controljus.com.br/publicacoes/recortes',
-  'https://app.controljus.com.br/publicacoes/recortes/arquivadas'
+  'https://app.controljus.com.br/publicacoes/recortes/arquivadas',
+  'https://app.controljus.com.br/prazos'
 ];
 const DEFAULT_DJEN_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 const DEFAULT_DJEN_OABS = [
@@ -862,7 +863,19 @@ function sleep(ms){
 
 function isoDate(value){
   if(!value) return '';
-  const dt = new Date(value);
+  if(value instanceof Date) return dateOnly(value);
+  const raw = String(value).trim();
+  const br = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if(br){
+    const year = br[3].length === 2 ? `20${br[3]}` : br[3];
+    return `${year}-${String(br[2]).padStart(2, '0')}-${String(br[1]).padStart(2, '0')}`;
+  }
+  const longBr = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().match(/(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})/);
+  if(longBr){
+    const months = {janeiro:'01', fevereiro:'02', marco:'03', abril:'04', maio:'05', junho:'06', julho:'07', agosto:'08', setembro:'09', outubro:'10', novembro:'11', dezembro:'12'};
+    if(months[longBr[2]]) return `${longBr[3]}-${months[longBr[2]]}-${String(longBr[1]).padStart(2, '0')}`;
+  }
+  const dt = new Date(raw);
   if(Number.isNaN(dt.getTime())) return '';
   return dt.toISOString().slice(0, 10);
 }
@@ -1240,6 +1253,60 @@ function normalizeRecorte(item, sourceUrl){
   };
 }
 
+function firstField(item, fields){
+  for(const field of fields){
+    const value = item?.[field];
+    if(value !== undefined && value !== null && String(value).trim()) return value;
+  }
+  return '';
+}
+
+function normalizePrazoControlJus(item, sourceUrl){
+  const processo = firstField(item, ['processo', 'numeroProcesso', 'processoNumero', 'processoEletronico', 'processoFormatado', 'cnj', 'protocolo']);
+  const cliente = firstField(item, ['cliente', 'nomeCliente', 'parte', 'parteNome', 'nomeParte', 'interessado', 'nome', 'relacao']);
+  const tribunal = firstField(item, ['tribunal', 'tribunalSigla', 'orgaoSigla', 'diarioSigla', 'estadoSigla', 'ufString']);
+  const dataPublicacao = isoDate(firstField(item, ['dataPublicacao', 'publicacao', 'publicadoEm', 'dataDisponibilizacao', 'disponibilizacao', 'disponibilizacaoDataHora', 'data']));
+  const prazoFatal = isoDate(firstField(item, ['prazoFatal', 'dataPrazoFatal', 'dataFatal', 'vencimento', 'dataVencimento', 'deadline', 'prazo']));
+  const tipoPublicacao = firstField(item, ['tipoPrazo', 'tipo', 'pendencia', 'titulo', 'descricao', 'ato', 'categoria']) || 'Prazo ControlJus';
+  const rawText = firstField(item, ['textoRecorte', 'texto', 'textoLimpo', 'textoResumido', 'observacoes', 'observacao', 'resumo', 'conteudo']);
+  const texto = stripHtml(rawText || [
+    tribunal ? `${tribunal} - prazo capturado no ControlJus` : 'Prazo capturado no ControlJus',
+    processo ? `Processo ${processo}` : '',
+    cliente ? `Cliente/parte: ${cliente}` : '',
+    tipoPublicacao,
+    prazoFatal ? `Prazo fatal: ${formatBrDate(prazoFatal)}` : ''
+  ].filter(Boolean).join(' | '));
+  const baseId = firstField(item, ['id', 'prazoId', 'publicacaoId', 'pendenciaId']) || `${onlyDigits(processo)}-${prazoFatal}-${tipoPublicacao}`;
+  const restricaoMotivo = restrictedReasonFromText(`${texto} ${tipoPublicacao}`);
+  return {
+    refId: `CJ-PRAZO-${baseId}`,
+    dataPublicacao,
+    processo,
+    cliente,
+    tribunal,
+    tipoPublicacao,
+    textoRecorte: texto,
+    prazoIdentificado: prazoFatal ? `Prazo fatal em ${formatBrDate(prazoFatal)}` : detectPrazoText(texto),
+    prazoFatal,
+    status: prazoFatal ? 'Gerou prazo' : 'Novo',
+    responsavel: '',
+    observacoes: 'Fonte: ControlJus Prazos',
+    linkOrigem: sourceUrl,
+    controlJusId: `PRAZO-${baseId}`,
+    restrito:Boolean(restricaoMotivo),
+    restricaoMotivo
+  };
+}
+
+function payloadArray(body){
+  if(Array.isArray(body)) return body;
+  if(!body || typeof body !== 'object') return [];
+  for(const key of ['resultado', 'results', 'data', 'items', 'content', 'records', 'prazos', 'publicacoes', 'recortes']){
+    if(Array.isArray(body[key])) return body[key];
+  }
+  return [];
+}
+
 function backendBase(env){
   return (env.CONTROLJUS_BACKEND_URL || '').trim();
 }
@@ -1347,7 +1414,9 @@ async function fetchControlJusWithBrowser(env){
   const diagnostics = {
     capturedJson:0,
     recortesResponses:0,
+    prazosResponses:0,
     rawRecortes:0,
+    rawPrazos:0,
     tableRows:0,
     visitedUrls:[],
     needsLogin:false,
@@ -1366,7 +1435,7 @@ async function fetchControlJusWithBrowser(env){
     const headers = response.headers();
     const contentType = headers['content-type'] || '';
     if(!/json/i.test(contentType)) return;
-    if(!/publica|recorte|intim|arquivad|controljus/i.test(url)) return;
+    if(!/publica|recorte|intim|arquivad|controljus|prazo|pendenc/i.test(url)) return;
     try{
       captured.push({url, status:response.status(), body:await response.json()});
     }catch(e){}
@@ -1404,13 +1473,13 @@ async function fetchControlJusWithBrowser(env){
     }
 
     for(const targetUrl of urls){
-      const before = captured.filter(entry => entry.url.includes('/api/recortes/pesquisar')).length;
+      const before = captured.length;
       await page.goto(targetUrl, {waitUntil:'domcontentloaded', timeout:30000});
       diagnostics.visitedUrls.push(targetUrl);
       await Promise.race([
         new Promise(resolve => {
           const tick = setInterval(() => {
-            const current = captured.filter(entry => entry.url.includes('/api/recortes/pesquisar')).length;
+            const current = captured.length;
             if(current > before){
               clearInterval(tick);
               resolve();
@@ -1434,9 +1503,17 @@ async function fetchControlJusWithBrowser(env){
 
     const recortes = captured
       .filter(entry => entry.url.includes('/api/recortes/pesquisar'))
-      .flatMap(entry => Array.isArray(entry.body?.resultado) ? entry.body.resultado.map(item => ({...item, __sourceUrl:entry.url})) : []);
+      .flatMap(entry => payloadArray(entry.body).map(item => ({...item, __sourceUrl:entry.url})));
+    const prazos = captured
+      .filter(entry => /prazo|pendenc/i.test(entry.url))
+      .flatMap(entry => payloadArray(entry.body).map(item => ({...item, __sourceUrl:entry.url})))
+      .filter(item => firstField(item, ['prazoFatal', 'dataPrazoFatal', 'dataFatal', 'vencimento', 'dataVencimento', 'deadline', 'prazo']) || firstField(item, ['processo', 'numeroProcesso', 'processoNumero', 'processoEletronico', 'processoFormatado', 'cnj', 'protocolo']));
     const uniqueRecortes = [...new Map(recortes.map(item => [item.publicacaoId || item.id || JSON.stringify(item).slice(0, 100), item])).values()];
-    const publicacoes = uniqueRecortes.map(item => normalizeRecorte(item, item.__sourceUrl || urls[0]));
+    const uniquePrazos = [...new Map(prazos.map(item => [item.prazoId || item.id || item.publicacaoId || `${onlyDigits(firstField(item, ['processo', 'numeroProcesso', 'processoNumero', 'processoEletronico', 'processoFormatado', 'cnj', 'protocolo']))}:${firstField(item, ['prazoFatal', 'dataPrazoFatal', 'dataFatal', 'vencimento', 'dataVencimento', 'deadline', 'prazo'])}`, item])).values()];
+    const publicacoes = [
+      ...uniqueRecortes.map(item => normalizeRecorte(item, item.__sourceUrl || urls[0])),
+      ...uniquePrazos.map(item => normalizePrazoControlJus(item, item.__sourceUrl || urls[0]))
+    ];
 
     return {
       source:'ControlJus',
@@ -1449,7 +1526,9 @@ async function fetchControlJusWithBrowser(env){
         ...diagnostics,
         capturedJson:captured.length,
         recortesResponses:captured.filter(entry => entry.url.includes('/api/recortes/pesquisar')).length,
+        prazosResponses:captured.filter(entry => /prazo|pendenc/i.test(entry.url)).length,
         rawRecortes:recortes.length,
+        rawPrazos:prazos.length,
         tableRows:tableRows.length
       }
     };
