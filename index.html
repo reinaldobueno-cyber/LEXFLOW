@@ -3907,11 +3907,22 @@ async function openDailySummaryPreview(sendNow = false){
   const dailyText = payload.summary?.text || payload.text || 'Sem conteúdo para exibir.';
   const results = payload.results || [];
   const missingWebhook = results.some(r=>r.result?.reason === 'webhook_not_configured');
+  const resultDetails = result => {
+    const body = result?.body ? String(result.body) : '';
+    if(!body) return '';
+    try{
+      const parsed = JSON.parse(body);
+      return parsed.message || parsed.error || parsed.name || body.slice(0, 180);
+    }catch(_){
+      return body.slice(0, 180);
+    }
+  };
   const statusText = results.length
     ? results.map(r=>{
         if(r.result?.ok) return `${r.channel}: enviado para ${r.to}`;
         if(r.result?.reason === 'webhook_not_configured') return `${r.channel}: provedor/webhook ainda não configurado`;
-        return `${r.channel}: pendente (${r.result?.reason || r.result?.status || 'sem retorno'})`;
+        const detail = resultDetails(r.result);
+        return `${r.channel}: pendente (${r.result?.reason || r.result?.status || 'sem retorno'}${detail ? ` - ${detail}` : ''})`;
       }).join(' | ')
     : 'Nenhum canal configurado ou nenhum destinatário informado.';
   const whatsappTarget = (payload.config?.whatsappNumbers || []).map(n=>String(n||'').replace(/\D/g,'')).find(Boolean) || '';
@@ -3925,7 +3936,7 @@ async function openDailySummaryPreview(sendNow = false){
         <div class="analysis-sub">Snapshot: ${esc(payload.snapshotUpdatedAt ? fmtDateTime(payload.snapshotUpdatedAt) : 'ainda sem snapshot')}</div>
       </div>
       <div class="report-box">${esc(dailyText)}</div>
-      ${sendNow ? `<div class="coverage-gap"><b>Resultado do teste:</b> ${esc(statusText)}${missingWebhook ? '<br><br>Para envio automático real, configure um provedor de WhatsApp/e-mail nos secrets do Cloudflare. Enquanto isso, use o botão de WhatsApp manual para validar a mensagem.' : ''}</div>` : ''}
+      ${sendNow ? `<div class="coverage-gap"><b>Resultado do teste:</b> ${esc(statusText)}${missingWebhook ? '<br><br>WhatsApp automático depende de provedor/API. Enquanto isso, o botão Abrir no WhatsApp usa envio manual com a mensagem pronta.' : ''}</div>` : ''}
     </div>
     <div class="modal-foot">
       ${missingWebhook && whatsappTarget ? `<button class="btn azul" id="mOpenWhatsManual">Abrir no WhatsApp</button>` : ''}
