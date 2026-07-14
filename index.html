@@ -1173,6 +1173,7 @@ function logHist(texto){ DB.historico.unshift({ts:new Date().toISOString(), text
 let toastTimer;
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600); }
 function cleanText(v){ return String(v??'').replace(/\u0000/g,' ').replace(/\s+/g,' ').trim(); }
+function onlyDigits(value){ return String(value ?? '').replace(/\D/g, ''); }
 function esc(v){ return cleanText(v).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function recortePreview(text){
   const cleaned = cleanText(text);
