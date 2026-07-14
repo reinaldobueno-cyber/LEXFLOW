@@ -12,6 +12,7 @@ const DEFAULT_CONTROLJUS_URLS = [
 const DEFAULT_DJEN_ENDPOINT = 'https://comunicaapi.pje.jus.br/api/v1/comunicacao';
 const DEFAULT_DJEN_OABS = [
   {uf:'GO', numero:'60795', nome:'Igor Lazaro Pires Neto'},
+  {uf:'GO', numero:'60795A', nome:'Igor Lazaro Pires Neto'},
   {uf:'DF', numero:'59142', nome:'Igor Lazaro Pires Neto'},
   {uf:'GO', numero:'74242', nome:'Luiz Fernando Correa Pires'}
 ];
@@ -498,7 +499,7 @@ async function handleSettings(request, env, auth){
         authType:body.djen?.authType || current.integrations?.djen?.authType || 'public',
         serviceUrl:body.djen?.serviceUrl || current.integrations?.djen?.serviceUrl || DEFAULT_DJEN_ENDPOINT,
         frequency:body.djen?.frequency || current.integrations?.djen?.frequency || 'manual',
-        oabs:Array.isArray(body.djen?.oabs) ? body.djen.oabs.map(oab => ({uf:String(oab.uf || '').toUpperCase(), numero:onlyDigits(oab.numero), nome:String(oab.nome || '')})).filter(oab => oab.uf && oab.numero) : (current.integrations?.djen?.oabs || []),
+        oabs:Array.isArray(body.djen?.oabs) ? body.djen.oabs.map(oab => ({uf:String(oab.uf || '').toUpperCase(), numero:normalizeOabNumber(oab.numero), nome:String(oab.nome || '')})).filter(oab => oab.uf && oab.numero) : (current.integrations?.djen?.oabs || []),
         tokenEncrypted:current.integrations?.djen?.tokenEncrypted || null
       },
       a3:{
@@ -896,6 +897,10 @@ function onlyDigits(value){
   return String(value ?? '').replace(/\D/g, '');
 }
 
+function normalizeOabNumber(value){
+  return String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 function formatProcesso(value){
   const digits = onlyDigits(value);
   if(digits.length !== 20) return String(value || '');
@@ -1047,16 +1052,32 @@ async function djenHeaders(env, settings = null){
 }
 
 function parseDjenOabs(env, settings = null){
+  const expand = list => {
+    const expanded = [];
+    list.forEach(oab => {
+      const base = {
+        uf:String(oab.uf || '').toUpperCase(),
+        numero:normalizeOabNumber(oab.numero),
+        nome:String(oab.nome || '')
+      };
+      if(!base.uf || !base.numero) return;
+      expanded.push(base);
+      if(/^\d+$/.test(base.numero)){
+        expanded.push({...base, numero:`${base.numero}A`});
+      }
+    });
+    return [...new Map(expanded.map(oab => [`${oab.uf}:${oab.numero}:${oab.nome}`, oab])).values()];
+  };
   const tenantOabs = settings?.integrations?.djen?.oabs;
   if(Array.isArray(tenantOabs) && tenantOabs.length){
-    return tenantOabs.map(oab => ({uf:String(oab.uf || '').toUpperCase(), numero:onlyDigits(oab.numero), nome:String(oab.nome || '')})).filter(oab => oab.uf && oab.numero);
+    return expand(tenantOabs);
   }
   const configured = (env.DJEN_OABS || '').trim();
-  if(!configured) return DEFAULT_DJEN_OABS;
-  return configured.split(';').map(entry => {
+  if(!configured) return expand(DEFAULT_DJEN_OABS);
+  return expand(configured.split(';').map(entry => {
     const [uf, numero, ...nameParts] = entry.split(':').map(part => part.trim());
-    return {uf:(uf || '').toUpperCase(), numero:onlyDigits(numero), nome:nameParts.join(':') || `${uf} ${numero}`};
-  }).filter(oab => oab.uf && oab.numero);
+    return {uf:(uf || '').toUpperCase(), numero:normalizeOabNumber(numero), nome:nameParts.join(':') || `${uf} ${numero}`};
+  }));
 }
 
 function djenRange(requestUrl){

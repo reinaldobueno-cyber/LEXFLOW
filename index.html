@@ -4037,6 +4037,7 @@ async function openDailySummaryPreview(sendNow = false){
 function renderConfiguracoes(){
   const defaultOabs = [
     {uf:'GO', numero:'60795', nome:'Igor Lazaro Pires Neto'},
+    {uf:'GO', numero:'60795A', nome:'Igor Lazaro Pires Neto'},
     {uf:'DF', numero:'59142', nome:'Igor Lazaro Pires Neto'},
     {uf:'GO', numero:'74242', nome:'Luiz Fernando Correa Pires'}
   ];
@@ -4214,9 +4215,9 @@ function renderConfiguracoes(){
 
   function parseOabs(){
     return document.getElementById('cfgDjenOabs').value.split(/\n+/).map(line=>{
-      const m = line.trim().match(/^([A-Za-z]{2})\s*\/?\s*(\d[\d.\-]*)\s*(.*)$/);
+      const m = line.trim().match(/^([A-Za-z]{2})\s*\/?\s*([A-Za-z0-9.\-\/]+)\s*(.*)$/);
       if(!m) return null;
-      return {uf:m[1].toUpperCase(), numero:m[2].replace(/\D/g,''), nome:m[3].trim()};
+      return {uf:m[1].toUpperCase(), numero:m[2].toUpperCase().replace(/[^A-Z0-9]/g,''), nome:m[3].trim()};
     }).filter(Boolean);
   }
 
