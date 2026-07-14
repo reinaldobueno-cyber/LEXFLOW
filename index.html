@@ -377,31 +377,42 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .source-status.ok{background:#ECFDF3; color:var(--verde);}
 .source-status.warn{background:#FFFAEB; color:#A15C00;}
 .source-status.bad{background:#FEF3F2; color:var(--vermelho);}
-.agenda-toolbar{display:grid; grid-template-columns:1.2fr .8fr .8fr .8fr .8fr auto; gap:10px; align-items:center;}
-.agenda-monthbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin:14px 0;}
-.agenda-monthbar h3{font-family:'Source Serif 4',serif; font-size:20px; font-weight:700;}
+.agenda-filter-card{border:1px solid var(--line); border-radius:14px; background:#fff; padding:14px; box-shadow:var(--shadow); margin-bottom:16px;}
+.agenda-toolbar{display:grid; grid-template-columns:minmax(260px,1.4fr) 150px 150px minmax(170px,.8fr) minmax(150px,.75fr) minmax(140px,.7fr) auto auto; gap:10px; align-items:center;}
+.agenda-toolbar input,.agenda-toolbar select{height:38px;}
+.agenda-toolbar .chk{height:38px; align-items:center;}
+.agenda-hero{border:1px solid var(--line); border-radius:16px; background:linear-gradient(135deg,#102033 0,#183D5D 62%,#2864A6 100%); color:#fff; padding:22px 24px; box-shadow:0 18px 45px rgba(16,24,40,.18); margin-bottom:16px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; align-items:end;}
+.agenda-hero h3{font-family:'Source Serif 4',serif; font-size:26px; font-weight:700; line-height:1.1;}
+.agenda-hero p{font-size:13px; color:rgba(255,255,255,.76); margin-top:6px;}
+.agenda-summary{display:grid; grid-template-columns:repeat(4,86px); gap:8px;}
+.agenda-summary-card{border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.09); border-radius:12px; padding:10px;}
+.agenda-summary-card strong{display:block; font-family:'Source Serif 4',serif; font-size:22px; line-height:1;}
+.agenda-summary-card span{display:block; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:rgba(255,255,255,.7); margin-top:5px; font-weight:900;}
+.agenda-monthbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin:0 0 12px;}
+.agenda-monthbar h3{font-family:'Source Serif 4',serif; font-size:18px; font-weight:700;}
 .agenda-month-actions{display:flex; gap:8px; align-items:center;}
-.agenda-shell{display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:16px; align-items:start;}
-.agenda-calendar{border:1px solid var(--line); border-radius:12px; background:#fff; overflow:hidden; box-shadow:var(--shadow);}
+.agenda-shell{display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:16px; align-items:start;}
+.agenda-calendar{border:1px solid var(--line); border-radius:16px; background:#fff; overflow:hidden; box-shadow:var(--shadow);}
 .agenda-weekdays{display:grid; grid-template-columns:repeat(7,1fr); background:#F8FAFC; border-bottom:1px solid var(--line);}
-.agenda-weekdays div{padding:10px; text-align:center; font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; font-weight:900;}
+.agenda-weekdays div{padding:11px 10px; text-align:center; font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.08em; font-weight:900;}
 .agenda-grid{display:grid; grid-template-columns:repeat(7, minmax(0,1fr));}
-.agenda-day{min-height:138px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:10px; background:#fff; display:flex; flex-direction:column; gap:8px; min-width:0;}
+.agenda-day{min-height:142px; border-right:1px solid #E6EAF0; border-bottom:1px solid #E6EAF0; padding:10px; background:#fff; display:flex; flex-direction:column; gap:8px; min-width:0; transition:background .15s, box-shadow .15s;}
 .agenda-day:nth-child(7n){border-right:0;}
-.agenda-day.muted{background:#F8FAFC; color:#98A2B3;}
+.agenda-day:hover{background:#FBFDFF;}
+.agenda-day.muted{background:#FAFBFC; color:#98A2B3;}
 .agenda-day.today{box-shadow:inset 0 0 0 2px #B2DDFF; background:#F5FBFF;}
-.agenda-day.selected{box-shadow:inset 0 0 0 2px var(--azul);}
+.agenda-day.selected{box-shadow:inset 0 0 0 2px var(--azul); background:#F6FAFF;}
 .agenda-day-head{display:flex; justify-content:space-between; gap:8px; align-items:center;}
-.agenda-day-num{font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:900;}
-.agenda-day-count{font-size:10px; font-weight:900; color:var(--ink-soft); background:#EEF2F6; border-radius:999px; padding:2px 6px;}
-.agenda-events{display:flex; flex-direction:column; gap:5px; min-width:0;}
-.agenda-event{border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 8px; display:grid; grid-template-columns:22px minmax(0,1fr); gap:7px; align-items:start; cursor:pointer; text-align:left; color:var(--ink); box-shadow:0 5px 12px rgba(16,24,40,.04);}
-.agenda-event:hover{border-color:#B2DDFF; background:#F8FBFF;}
-.agenda-event.audiencia{border-color:#B2DDFF; background:#EFF8FF;}
-.agenda-event.prazo{border-color:#F3D59B; background:#FFFAEB;}
-.agenda-event.tarefa{border-color:#D0D5DD; background:#F8FAFC;}
-.agenda-event.vencido{border-color:#FDA29B; background:#FFF7F5;}
-.agenda-event-icon{width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:11px;}
+.agenda-day-num{font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:900; color:var(--ink);}
+.agenda-day-count{font-size:10px; font-weight:900; color:var(--azul); background:#EFF8FF; border-radius:999px; padding:2px 7px;}
+.agenda-events{display:flex; flex-direction:column; gap:6px; min-width:0;}
+.agenda-event{border:1px solid #E2E8F0; background:#fff; border-radius:10px; padding:7px 8px; display:grid; grid-template-columns:24px minmax(0,1fr); gap:8px; align-items:center; cursor:pointer; text-align:left; color:var(--ink); box-shadow:0 6px 14px rgba(16,24,40,.035); min-width:0;}
+.agenda-event:hover{border-color:#9CCAF5; background:#F8FBFF; transform:translateY(-1px);}
+.agenda-event.audiencia{border-left:3px solid var(--azul);}
+.agenda-event.prazo{border-left:3px solid var(--selo);}
+.agenda-event.tarefa{border-left:3px solid var(--ink-soft);}
+.agenda-event.vencido{border-left-color:var(--vermelho); background:#FFFDFC;}
+.agenda-event-icon{width:24px; height:24px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:11px;}
 .agenda-event.audiencia .agenda-event-icon{background:var(--azul);}
 .agenda-event.prazo .agenda-event-icon{background:var(--selo);}
 .agenda-event.tarefa .agenda-event-icon{background:var(--ink-soft);}
@@ -410,16 +421,16 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .agenda-event-icon.prazo{background:var(--selo);}
 .agenda-event-icon.tarefa{background:var(--ink-soft);}
 .agenda-event-title{font-size:11px; font-weight:900; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.agenda-event-meta{font-size:10.5px; color:var(--ink-soft); line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.agenda-more{border:0; background:transparent; color:var(--azul); font-size:11px; font-weight:900; text-align:left; padding:2px 0; cursor:pointer;}
-.agenda-side{border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:var(--shadow); padding:14px; position:sticky; top:110px;}
-.agenda-side h4{font-family:'Source Serif 4',serif; font-size:17px; margin-bottom:4px;}
+.agenda-event-meta{font-size:10px; color:var(--ink-soft); line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.agenda-more{border:1px dashed #B2DDFF; background:#F8FBFF; color:var(--azul); font-size:11px; font-weight:900; text-align:center; padding:5px 8px; border-radius:8px; cursor:pointer;}
+.agenda-side{border:1px solid var(--line); border-radius:16px; background:#fff; box-shadow:var(--shadow); padding:16px; position:sticky; top:110px;}
+.agenda-side h4{font-family:'Source Serif 4',serif; font-size:20px; margin-bottom:4px;}
 .agenda-side-sub{font-size:12px; color:var(--ink-soft); margin-bottom:12px;}
 .agenda-side-list{display:flex; flex-direction:column; gap:8px;}
-.agenda-side-item{border:1px solid var(--line); border-radius:10px; padding:10px; display:grid; grid-template-columns:28px minmax(0,1fr); gap:9px; cursor:pointer; text-align:left; background:#fff;}
+.agenda-side-item{border:1px solid var(--line); border-radius:12px; padding:10px; display:grid; grid-template-columns:30px minmax(0,1fr); gap:10px; cursor:pointer; text-align:left; background:#fff; min-width:0;}
 .agenda-side-item:hover{border-color:#B2DDFF; background:#F8FBFF;}
-.agenda-side-item .agenda-event-icon{width:28px; height:28px;}
-.agenda-legend{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+.agenda-side-item .agenda-event-icon{width:30px; height:30px;}
+.agenda-legend{display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line);}
 .agenda-legend span{display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-soft); font-weight:700;}
 .agenda-legend i{width:9px; height:9px; border-radius:50%; display:inline-block;}
 .agenda-legend .aud{background:var(--azul);}
@@ -2548,6 +2559,14 @@ function monthLabel(key){
   return dt.toLocaleDateString('pt-BR', {month:'short', year:'numeric'}).replace('.', '');
 }
 
+function monthLongLabel(key){
+  if(!key) return 'Sem data';
+  const [yy, mm] = key.split('-').map(Number);
+  const dt = new Date(yy, (mm || 1) - 1, 1);
+  const label = dt.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 function rowMonths(row){
   const months = new Set();
   row.publicacoes.forEach(p=>{ const k = monthKey(p.dataPublicacao); if(k) months.add(k); });
@@ -3887,6 +3906,15 @@ function agendaEventButton(ev, compact=false){
   </button>`;
 }
 
+function agendaStats(events){
+  return {
+    audiencias: events.filter(ev=>ev.type==='audiencia').length,
+    prazos: events.filter(ev=>ev.type==='prazo').length,
+    tarefas: events.filter(ev=>ev.type==='tarefa').length,
+    vencidos: events.filter(ev=>!ev.done && diasRestantes(ev.date) < 0).length
+  };
+}
+
 function agendaMonthDays(monthKeyValue){
   const [year, month] = (monthKeyValue || monthKey(TODAY)).split('-').map(Number);
   const first = new Date(year, month - 1, 1);
@@ -3965,22 +3993,36 @@ function renderAudiencias(){
   const selectedEvents = eventsByDate[selectedDate] || [];
   const days = agendaMonthDays(audiFilters.month);
   const [yy, mm] = audiFilters.month.split('-').map(Number);
-  const monthName = monthLabel(audiFilters.month);
+  const monthName = monthLongLabel(audiFilters.month);
+  const stats = agendaStats(events);
   const filterNote = dashboardFilter==='audi_7' ? `<div class="section-title">Filtro: Audiências próximas (7 dias) <span class="cnt">${events.length}</span></div>` : '';
 
-  let html = `${filterNote}${responsavelDatalistHTML()}<div class="filters agenda-toolbar">
+  let html = `${filterNote}${responsavelDatalistHTML()}
+  <section class="agenda-hero">
+    <div>
+      <h3>${esc(monthName)}</h3>
+      <p>Agenda consolidada de audiências, prazos calculados e tarefas do escritório.</p>
+    </div>
+    <div class="agenda-summary">
+      <div class="agenda-summary-card"><strong>${stats.audiencias}</strong><span>Audiências</span></div>
+      <div class="agenda-summary-card"><strong>${stats.prazos}</strong><span>Prazos</span></div>
+      <div class="agenda-summary-card"><strong>${stats.tarefas}</strong><span>Tarefas</span></div>
+      <div class="agenda-summary-card"><strong>${stats.vencidos}</strong><span>Vencidos</span></div>
+    </div>
+  </section>
+  <div class="agenda-filter-card"><div class="agenda-toolbar">
     <input type="text" id="fAudCliente" placeholder="Buscar cliente, processo ou ato..." value="${esc(audiFilters.cliente)}">
     <input type="month" id="fAudMonth" value="${esc(audiFilters.month)}">
     <input type="date" id="fAudDate" value="${esc(audiFilters.date)}">
     <select id="fAudAdv"><option value="">Todos os advogados</option>${advogados.map(a=>`<option ${audiFilters.advogado===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <select id="fAudTipo"><option value="">Todos os tipos</option><option value="audiencia" ${audiFilters.tipo==='audiencia'?'selected':''}>Audiências</option><option value="prazo" ${audiFilters.tipo==='prazo'?'selected':''}>Prazos</option><option value="tarefa" ${audiFilters.tipo==='tarefa'?'selected':''}>Tarefas</option></select>
-    <button class="btn primary small" id="addAudiBtn">+ Nova audiência</button>
     <select id="fAudStatus"><option value="">Todos os status</option>${[...new Set([...AUDI_STATUSES,...PRAZO_STATUSES,...taskColumns()])].map(s=>`<option ${audiFilters.status===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+    <button class="btn primary small" id="addAudiBtn">+ Nova audiência</button>
     <label class="chk"><input type="checkbox" id="fArch" ${audiFilters.showArchived?'checked':''}> Mostrar arquivados</label>
-  </div>
+  </div></div>
   <div class="agenda-monthbar">
     <div>
-      <h3>${esc(monthName)}</h3>
+      <h3>Calendário mensal</h3>
       <div class="agenda-side-sub">${events.length} compromisso(s) carregado(s) no filtro atual</div>
     </div>
     <div class="agenda-month-actions">
@@ -4005,8 +4047,8 @@ function renderAudiencias(){
               ${dayEvents.length ? `<span class="agenda-day-count">${dayEvents.length}</span>` : ''}
             </div>
             <div class="agenda-events">
-              ${dayEvents.slice(0,3).map(ev=>agendaEventButton(ev, true)).join('')}
-              ${dayEvents.length > 3 ? `<button class="agenda-more" data-day-more="${iso}">+ ${dayEvents.length - 3} mais</button>` : ''}
+              ${dayEvents.slice(0,2).map(ev=>agendaEventButton(ev, true)).join('')}
+              ${dayEvents.length > 2 ? `<button class="agenda-more" data-day-more="${iso}">+ ${dayEvents.length - 2} no painel</button>` : ''}
             </div>
           </div>`;
         }).join('')}
