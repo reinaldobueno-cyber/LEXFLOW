@@ -646,10 +646,16 @@ function isDone(status, doneList){
   return doneList.includes(String(status || '').trim());
 }
 
+function addDaysISO(day, days){
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function buildDailySummaryText(tenant, data, day){
   const prazos = (data?.prazos || []).filter(p => {
     const d = String(p.prazoFatal || '').slice(0, 10);
-    return d && !isDone(p.status, ['Concluído','Arquivado']) && d <= day;
+    return d && !isDone(p.status, ['Concluído','Descartado','Arquivado']);
   });
   const audiencias = (data?.audiencias || []).filter(a => {
     const d = String(a.data || '').slice(0, 10);
@@ -659,12 +665,31 @@ function buildDailySummaryText(tenant, data, day){
     const d = String(t.dataLimite || '').slice(0, 10);
     return d && !isDone(t.status, ['Concluída','Desconsiderada','Arquivado']) && d <= day;
   });
+  const nextWindow = addDaysISO(day, 7);
   const vencidos = prazos.filter(p => String(p.prazoFatal || '').slice(0, 10) < day);
   const hoje = prazos.filter(p => String(p.prazoFatal || '').slice(0, 10) === day);
+  const proximos = prazos
+    .filter(p => {
+      const d = String(p.prazoFatal || '').slice(0, 10);
+      return d > day && d <= nextWindow && (p.linhaTempoRecursal || p.validacaoStatus === 'opcao_recursal_monitorada');
+    })
+    .sort((a,b)=>String(a.prazoFatal || '').localeCompare(String(b.prazoFatal || '')));
   const atrasoTarefas = tarefas.filter(t => String(t.dataLimite || '').slice(0, 10) < day);
+  const prazoItem = (tipo, p) => ({
+    tipo,
+    cliente:p.cliente,
+    processo:p.processo,
+    desc:[
+      p.linhaTempoRecursal || p.validacaoStatus === 'opcao_recursal_monitorada' ? `Timeline ${p.ordemLinhaTempo || ''}`.trim() : '',
+      p.tipoPrazo
+    ].filter(Boolean).join(' - '),
+    data:p.prazoFatal,
+    resp:p.responsavel
+  });
   const items = [
-    ...vencidos.map(p => ({tipo:'PRAZO VENCIDO', cliente:p.cliente, processo:p.processo, desc:p.tipoPrazo, data:p.prazoFatal, resp:p.responsavel})),
-    ...hoje.map(p => ({tipo:'PRAZO HOJE', cliente:p.cliente, processo:p.processo, desc:p.tipoPrazo, data:p.prazoFatal, resp:p.responsavel})),
+    ...vencidos.map(p => prazoItem(p.linhaTempoRecursal ? 'OPÇÃO REC. VENCIDA' : 'PRAZO VENCIDO', p)),
+    ...hoje.map(p => prazoItem(p.linhaTempoRecursal ? 'OPÇÃO REC. HOJE' : 'PRAZO HOJE', p)),
+    ...proximos.map(p => prazoItem('PRÓXIMA OPÇÃO REC.', p)),
     ...audiencias.map(a => ({tipo:'AUDIÊNCIA', cliente:a.cliente, processo:a.processo, desc:[a.tipo, a.horario].filter(Boolean).join(' - '), data:a.data, resp:a.responsavel})),
     ...atrasoTarefas.map(t => ({tipo:'TAREFA ATRASADA', cliente:t.cliente, processo:t.processo, desc:t.titulo, data:t.dataLimite, resp:t.responsavel})),
     ...tarefas.filter(t => String(t.dataLimite || '').slice(0, 10) === day).map(t => ({tipo:'TAREFA HOJE', cliente:t.cliente, processo:t.processo, desc:t.titulo, data:t.dataLimite, resp:t.responsavel}))
@@ -676,6 +701,7 @@ function buildDailySummaryText(tenant, data, day){
     '',
     `Prazos vencidos: ${vencidos.length}`,
     `Prazos vencem hoje: ${hoje.length}`,
+    `Próximas opções recursais (7d): ${proximos.length}`,
     `Audiências hoje: ${audiencias.length}`,
     `Tarefas vencidas/hoje: ${tarefas.length}`,
     ''
@@ -683,7 +709,7 @@ function buildDailySummaryText(tenant, data, day){
   const body = items.length
     ? ['Itens:', ...items.map((item, idx) => `${idx + 1}. [${item.tipo}] ${item.cliente || 'Sem cliente'} | ${item.processo || 'Sem processo'} | ${item.desc || 'Sem descrição'} | ${formatBrDate(item.data)} | resp.: ${item.resp || 'sem responsável'}`)]
     : ['Nenhum compromisso crítico para hoje.'];
-  return {text:[...header, ...body].join('\n'), items, counts:{vencidos:vencidos.length, hoje:hoje.length, audiencias:audiencias.length, tarefas:tarefas.length}};
+  return {text:[...header, ...body].join('\n'), items, counts:{vencidos:vencidos.length, hoje:hoje.length, proximos:proximos.length, audiencias:audiencias.length, tarefas:tarefas.length}};
 }
 
 function escapeHtml(value){
@@ -727,6 +753,7 @@ function buildDailySummaryHtml(tenant, summary, day, whatsappNumbers = []){
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
             <span style="background:#fee2e2;color:#991b1b;padding:8px 12px;border-radius:999px;font-weight:700;">Vencidos: ${counts.vencidos || 0}</span>
             <span style="background:#fff7ed;color:#9a3412;padding:8px 12px;border-radius:999px;font-weight:700;">Hoje: ${counts.hoje || 0}</span>
+            <span style="background:#fffbeb;color:#a16207;padding:8px 12px;border-radius:999px;font-weight:700;">Opções 7d: ${counts.proximos || 0}</span>
             <span style="background:#eff6ff;color:#1d4ed8;padding:8px 12px;border-radius:999px;font-weight:700;">Audiências: ${counts.audiencias || 0}</span>
             <span style="background:#f1f5f9;color:#334155;padding:8px 12px;border-radius:999px;font-weight:700;">Tarefas: ${counts.tarefas || 0}</span>
           </div>

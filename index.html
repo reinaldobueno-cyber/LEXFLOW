@@ -748,8 +748,8 @@ function riskColor(dias, done){
   return 'verde';
 }
 
-const PRAZO_STATUSES = ['Novo','Em análise','Em elaboração','Aguardando revisão','Protocolar','Concluído','Vencido','Arquivado'];
-const PRAZO_DONE = ['Concluído','Arquivado'];
+const PRAZO_STATUSES = ['Novo','Opção recursal','Em análise','Em elaboração','Aguardando revisão','Protocolar','Concluído','Descartado','Vencido','Arquivado'];
+const PRAZO_DONE = ['Concluído','Descartado','Arquivado'];
 const PRAZO_ARCHIVED = ['Arquivado'];
 const PRAZO_REVIEW_RECOMMENDED = ['revisao_recomendada','sem_regra_confiavel'];
 const AUDI_STATUSES = ['Agendada','Preparar documentos','Confirmar cliente','Confirmar link','Realizada','Remarcada','Cancelada','Arquivado'];
@@ -2497,6 +2497,9 @@ function validationStatusLabel(status){
     calculado_lexflow:'Calculado LexFlow',
     revisao_recomendada:'Revisão recomendada',
     sem_regra_confiavel:'Sem regra confiável',
+    opcao_recursal_monitorada:'Opção recursal',
+    opcao_recursal_escolhida:'Opção escolhida',
+    opcoes_recursais:'Opções recursais',
     confirmado:'Confirmado',
     rejeitado:'Rejeitado'
   }[status] || 'Sem motor');
@@ -2507,6 +2510,9 @@ function validationStatusColor(status){
     calculado_lexflow:'azul',
     revisao_recomendada:'laranja',
     sem_regra_confiavel:'vermelho',
+    opcao_recursal_monitorada:'amarelo',
+    opcao_recursal_escolhida:'azul',
+    opcoes_recursais:'amarelo',
     confirmado:'verde',
     rejeitado:'vermelho'
   }[status] || 'cinza');
@@ -3081,7 +3087,7 @@ async function createSuggestedPrazoFromPublication(pub){
   const scenarios = deadlineScenarios(pub).filter(item=>item.dueDate && item.rule);
   if(!scenarios.length){ toast('Sem sugestão calculável para esta publicação'); return; }
   if(scenarios.length > 1){
-    openDeadlineScenarioChoiceModal(pub, scenarios);
+    openDeadlineTimelineModal(pub, scenarios);
     return;
   }
   const existingKeys = new Set((DB.prazos || []).map(p=>`${p.origemPublicacaoId || ''}:${p.regraPrazoId || ''}:${p.prazoFatal || ''}`));
@@ -3103,36 +3109,64 @@ async function createSuggestedPrazoFromPublication(pub){
   toast('Prazo calculado pelo LexFlow');
 }
 
-function openDeadlineScenarioChoiceModal(pub, scenarios){
+function createRecursalTimelinePrazos(pub, scenarios){
+  const existingKeys = new Set((DB.prazos || []).map(p=>`${p.origemPublicacaoId || ''}:${p.regraPrazoId || ''}:${p.prazoFatal || ''}`));
+  const created = [];
+  scenarios.filter(item=>item.dueDate && item.rule).forEach((suggestion, idx)=>{
+    const prazo = buildSuggestedPrazoFromPublication(pub, suggestion, scenarios.length);
+    const key = `${prazo.origemPublicacaoId || ''}:${prazo.regraPrazoId || ''}:${prazo.prazoFatal || ''}`;
+    if(existingKeys.has(key)) return;
+    prazo.tipoPrazo = `Opção recursal: ${suggestion.rule.act}`;
+    prazo.status = 'Opção recursal';
+    prazo.prioridade = idx === 0 ? 'Alta' : 'Média';
+    prazo.validacaoStatus = 'opcao_recursal_monitorada';
+    prazo.linhaTempoRecursal = true;
+    prazo.ordemLinhaTempo = idx + 1;
+    prazo.observacao = [
+      prazo.observacao,
+      `Linha do tempo recursal LexFlow: opção ${idx + 1} de ${scenarios.length}. Deve permanecer visível até conclusão, descarte ou perda do prazo.`
+    ].join(' ');
+    DB.prazos.push(prazo);
+    existingKeys.add(key);
+    created.push(prazo);
+  });
+  if(created.length){
+    attachSuggestedPrazoToPublication(pub, created[0], scenarios[0], created);
+    pub.prazoIdentificado = `Timeline recursal com ${created.length} opção(ões)`;
+    pub.linhaTempoRecursalIds = Array.from(new Set([...(pub.linhaTempoRecursalIds || []), ...created.map(p=>p.id)]));
+  }
+  return created;
+}
+
+function openDeadlineTimelineModal(pub, scenarios){
   const box = document.getElementById('modalBox');
   box.className = 'modal modal-wide';
   box.innerHTML = `
-    <div class="modal-head"><h3>Escolher prazo aplicável</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-head"><h3>Linha do tempo recursal</h3><button class="close-x" id="mClose">✕</button></div>
     <div class="modal-body">
       <div class="analysis-hero">
         <div class="analysis-title">${esc(displayClientName(pub))}</div>
         <div class="analysis-sub">${esc(pub?.processo || 'sem processo')} · ${esc(pub?.tribunal || 'sem tribunal')}</div>
       </div>
       <div class="validation-note">
-        O LexFlow encontrou mais de uma opção recursal possível. Isso não significa que todas devem virar prazo ativo.
-        Escolha apenas o caminho que será acompanhado pelo escritório, ou crie uma tarefa de análise.
+        O LexFlow encontrou mais de uma janela possível. Todas podem ser acompanhadas na agenda do processo:
+        se não fizer embargos, ainda aparece a apelação; se um caminho for descartado, marque como Descartado.
       </div>
       <div class="scenario-strip">
         ${scenarios.map((item, idx)=>`
-          <label class="scenario-chip ${idx===0?'primary':''}" style="cursor:pointer;">
-            <input type="radio" name="deadlineScenario" value="${esc(item.rule.id)}" ${idx===0?'checked':''}>
+          <div class="scenario-chip ${idx===0?'primary':''}">
             <span class="scenario-act">${esc(item.rule.act)}</span>
             <span class="scenario-date">${esc(fmtDate(item.dueDate))}</span>
             <span class="scenario-basis">${esc(item.rule.basis || item.reason || '')}</span>
-            <span class="scenario-basis">${esc(item.role || 'opção recursal')} · confiança ${esc(item.confidence || 'baixa')}</span>
-          </label>
+            <span class="scenario-basis">Etapa ${idx + 1} · ${esc(item.role || 'opção recursal')} · confiança ${esc(item.confidence || 'baixa')}</span>
+          </div>
         `).join('')}
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn" id="mTask">Criar tarefa de análise</button>
       <button class="btn" id="mCancel">Cancelar</button>
-      <button class="btn primary" id="mConfirm">Gerar prazo escolhido</button>
+      <button class="btn primary" id="mConfirm">Gerar timeline completa</button>
     </div>
   `;
   showModal();
@@ -3143,23 +3177,15 @@ function openDeadlineScenarioChoiceModal(pub, scenarios){
     hideModal();
   };
   document.getElementById('mConfirm').onclick = async ()=>{
-    const selectedId = document.querySelector('input[name="deadlineScenario"]:checked')?.value;
-    const suggestion = scenarios.find(item=>item.rule.id === selectedId) || scenarios[0];
-    const key = `${pub.refId || pub.id || ''}:${suggestion.rule.id}:${suggestion.dueDate || ''}`;
-    const exists = (DB.prazos || []).some(p=>`${p.origemPublicacaoId || ''}:${p.regraPrazoId || ''}:${p.prazoFatal || ''}` === key);
-    if(exists){ toast('Esse prazo já foi gerado para esta publicação'); return; }
-    const prazo = buildSuggestedPrazoFromPublication(pub, suggestion, 1);
-    prazo.validacaoStatus = 'opcao_recursal_escolhida';
-    prazo.observacao = [prazo.observacao, `Opção escolhida entre ${scenarios.length} hipóteses recursais identificadas.`].join(' ');
-    DB.prazos.push(prazo);
-    attachSuggestedPrazoToPublication(pub, prazo, suggestion, [prazo]);
-    logHist(`Opção recursal escolhida no LexFlow para ${displayClientName(pub)} (${pub.processo}): ${suggestion.rule.act} em ${fmtDate(suggestion.dueDate)}.`);
+    const created = createRecursalTimelinePrazos(pub, scenarios);
+    if(!created.length){ toast('A timeline recursal já foi gerada para esta publicação'); return; }
+    logHist(`Timeline recursal criada para ${displayClientName(pub)} (${pub.processo}): ${created.map(p=>`${p.regraPrazoAto} em ${fmtDate(p.prazoFatal)}`).join('; ')}.`);
     await saveDB();
     hideModal();
     currentView = 'prazos';
     prazoFilters.showValidation = true;
     renderAll();
-    toast('Prazo escolhido gerado');
+    toast('Timeline recursal gerada');
   };
 }
 
@@ -3285,15 +3311,8 @@ function autoCreatePrazosFromIntegratedPublications(publications){
     const scenarios = deadlineScenarios(pub).filter(item=>item.dueDate && item.rule);
     if(!scenarios.length) return;
     if(scenarios.length > 1){
-      pub.status = pub.status && !PUB_UNTREATED.includes(pub.status) ? pub.status : 'Em análise';
-      pub.prazoIdentificado = `${scenarios.length} opções recursais para escolha`;
-      pub.prazoOpcoesIdentificadas = scenarios.map(item=>({
-        regraPrazoId:item.rule.id,
-        ato:item.rule.act,
-        prazoFatal:item.dueDate,
-        fundamento:item.rule.basis,
-        confianca:item.confidence
-      }));
+      const createdForPub = createRecursalTimelinePrazos(pub, scenarios);
+      created += createdForPub.length;
       return;
     }
     const createdForPub = [];
@@ -3367,6 +3386,7 @@ function deadlineReportText(rows){
   const hoje = active.filter(p=>!PRAZO_DONE.includes(p.status) && diasRestantes(p.prazoFatal)===0).length;
   const proximos = active.filter(p=>{ const d=diasRestantes(p.prazoFatal); return !PRAZO_DONE.includes(p.status) && d>0 && d<=7; }).length;
   const semResp = active.filter(p=>!PRAZO_DONE.includes(p.status) && !p.responsavel).length;
+  const timeline = active.filter(p=>p.linhaTempoRecursal || p.validacaoStatus === 'opcao_recursal_monitorada');
   const lines = [
     'LexFlow - Relatório de prazos',
     `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
@@ -3375,6 +3395,7 @@ function deadlineReportText(rows){
     `Vencidos: ${vencidos}`,
     `Vencem hoje: ${hoje}`,
     `Próximos 7 dias: ${proximos}`,
+    `Opções recursais monitoradas: ${timeline.length}`,
     `Sem responsável: ${semResp}`,
     '',
     'Itens:'
@@ -3382,7 +3403,8 @@ function deadlineReportText(rows){
   rows.slice(0, 40).forEach((p, idx)=>{
     const dr = diasRestantes(p.prazoFatal);
     const restam = PRAZO_DONE.includes(p.status) ? 'concluído' : (dr<0?'vencido':dr===0?'vence hoje':`${dr}d`);
-    lines.push(`${idx+1}. ${p.cliente || 'Parte não identificada'} | ${p.processo || 'sem processo'} | ${p.tipoPrazo || 'prazo'} | fatal ${fmtDate(p.prazoFatal)} | ${restam} | resp.: ${p.responsavel || 'sem responsável'}`);
+    const prefix = p.linhaTempoRecursal ? `timeline ${p.ordemLinhaTempo || ''}`.trim() : 'prazo';
+    lines.push(`${idx+1}. [${prefix}] ${p.cliente || 'Parte não identificada'} | ${p.processo || 'sem processo'} | ${p.tipoPrazo || 'prazo'} | até ${fmtDate(p.prazoFatal)} | ${restam} | resp.: ${p.responsavel || 'sem responsável'}`);
   });
   if(rows.length > 40) lines.push(`... +${rows.length - 40} itens não listados neste resumo.`);
   return lines.join('\n');
@@ -3470,7 +3492,7 @@ function renderPrazos(){
       <td><span class="tribunal-tag">${p.tribunal}</span></td>
       <td>${p.origemPublicacaoId?`<span class="pill st-azul"><span class="dot"></span>Integrada</span>`:'<span class="pill st-cinza"><span class="dot"></span>Validação</span>'}</td>
       <td>${fmtDate(p.dataPublicacao)}</td>
-      <td>${esc(p.tipoPrazo)}${p.fundamentoLegal?`<div class="recorte-meta">${esc(p.fundamentoLegal)}</div>`:''}</td>
+      <td>${esc(p.tipoPrazo)}${p.linhaTempoRecursal?`<div class="recorte-meta">Linha do tempo recursal · etapa ${esc(p.ordemLinhaTempo || '')}</div>`:''}${p.fundamentoLegal?`<div class="recorte-meta">${esc(p.fundamentoLegal)}</div>`:''}</td>
       <td>${validationPill(p)}${p.prazoAjustado?`<div class="recorte-meta">ajustado</div>`:''}</td>
       <td>${fmtDate(p.prazoFatal)}</td>
       <td>${pill(done?'Concluído':(dr<0?'Vencido':dr===0?'Hoje':dr+'d'), color)}</td>
