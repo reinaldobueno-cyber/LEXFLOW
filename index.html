@@ -72,7 +72,7 @@ body.authenticated #loginScreen{display:none;}
 .topbar h1{font-family:'Source Serif 4', serif; font-size:24px; font-weight:700; letter-spacing:0;}
 .topbar .sub{font-size:12.5px; color:var(--ink-soft); margin-top:4px;}
 .topbar-actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;}
-.content{padding:28px 34px 60px 34px; flex:1;}
+.content{padding:28px 34px 60px 34px; flex:1; min-width:0; overflow-x:hidden;}
 
 .btn{font-family:'IBM Plex Sans', sans-serif; font-size:12.5px; font-weight:700; min-height:36px; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--white); color:var(--ink); cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:background .12s, border-color .12s, box-shadow .12s, transform .12s;}
 .btn:hover{border-color:#C8D0DA; background:#F9FAFB; box-shadow:0 1px 2px rgba(16,24,40,.08);}
@@ -377,10 +377,16 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .source-status.ok{background:#ECFDF3; color:var(--verde);}
 .source-status.warn{background:#FFFAEB; color:#A15C00;}
 .source-status.bad{background:#FEF3F2; color:var(--vermelho);}
-.agenda-filter-card{border:1px solid var(--line); border-radius:14px; background:#fff; padding:14px; box-shadow:var(--shadow); margin-bottom:16px;}
-.agenda-toolbar{display:grid; grid-template-columns:minmax(260px,1.4fr) 150px 150px minmax(170px,.8fr) minmax(150px,.75fr) minmax(140px,.7fr) auto auto; gap:10px; align-items:center;}
-.agenda-toolbar input,.agenda-toolbar select{height:38px;}
-.agenda-toolbar .chk{height:38px; align-items:center;}
+.agenda-filter-card{border:1px solid #DDE5EF; border-radius:18px; background:linear-gradient(180deg,#fff 0,#FBFCFE 100%); padding:14px; box-shadow:0 16px 38px rgba(16,24,40,.07); margin-bottom:16px; max-width:100%;}
+.agenda-toolbar{display:grid; grid-template-columns:minmax(240px,1.25fr) minmax(145px,.65fr) minmax(145px,.65fr) minmax(170px,.82fr) minmax(145px,.7fr) minmax(145px,.7fr) auto auto; gap:10px; align-items:end; max-width:100%;}
+.agenda-field{display:flex; flex-direction:column; gap:5px; min-width:0;}
+.agenda-field-label{font-size:9.5px; color:#667085; text-transform:uppercase; letter-spacing:.08em; font-weight:900;}
+.agenda-field input,.agenda-field select{width:100%; height:42px; border:1px solid #D7E0EA; border-radius:12px; background:#F8FAFC; color:var(--ink); font-family:'IBM Plex Sans',sans-serif; font-size:12.5px; padding:0 12px; box-shadow:inset 0 1px 0 rgba(255,255,255,.9); transition:border-color .15s, box-shadow .15s, background .15s;}
+.agenda-field input:focus,.agenda-field select:focus{outline:0; border-color:#84CAFF; background:#fff; box-shadow:0 0 0 4px rgba(46,144,250,.12);}
+.agenda-field input::placeholder{color:#98A2B3;}
+.agenda-toolbar .btn{height:42px; border-radius:12px; white-space:nowrap; align-self:end;}
+.agenda-check{height:42px; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:0 12px; border:1px solid #D7E0EA; border-radius:12px; background:#F8FAFC; color:#667085; font-size:12px; font-weight:800; white-space:nowrap; align-self:end; cursor:pointer;}
+.agenda-check input{width:14px; height:14px; accent-color:var(--selo);}
 .agenda-hero{border:1px solid var(--line); border-radius:16px; background:linear-gradient(135deg,#102033 0,#183D5D 62%,#2864A6 100%); color:#fff; padding:22px 24px; box-shadow:0 18px 45px rgba(16,24,40,.18); margin-bottom:16px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; align-items:end;}
 .agenda-hero h3{font-family:'Source Serif 4',serif; font-size:26px; font-weight:700; line-height:1.1;}
 .agenda-hero p{font-size:13px; color:rgba(255,255,255,.76); margin-top:6px;}
@@ -391,9 +397,9 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .agenda-monthbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin:0 0 12px;}
 .agenda-monthbar h3{font-family:'Source Serif 4',serif; font-size:18px; font-weight:700;}
 .agenda-month-actions{display:flex; gap:8px; align-items:center;}
-.agenda-shell{display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:16px; align-items:start;}
-.agenda-calendar{border:1px solid var(--line); border-radius:16px; background:#fff; overflow:hidden; box-shadow:var(--shadow);}
-.agenda-weekdays{display:grid; grid-template-columns:repeat(7,1fr); background:#F8FAFC; border-bottom:1px solid var(--line);}
+.agenda-shell{display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,340px); gap:16px; align-items:start; max-width:100%; overflow:hidden;}
+.agenda-calendar{border:1px solid var(--line); border-radius:16px; background:#fff; overflow:hidden; box-shadow:var(--shadow); min-width:0;}
+.agenda-weekdays{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); background:#F8FAFC; border-bottom:1px solid var(--line); min-width:0;}
 .agenda-weekdays div{padding:11px 10px; text-align:center; font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.08em; font-weight:900;}
 .agenda-grid{display:grid; grid-template-columns:repeat(7, minmax(0,1fr));}
 .agenda-day{min-height:142px; border-right:1px solid #E6EAF0; border-bottom:1px solid #E6EAF0; padding:10px; background:#fff; display:flex; flex-direction:column; gap:8px; min-width:0; transition:background .15s, box-shadow .15s;}
@@ -406,7 +412,8 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .agenda-day-num{font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:900; color:var(--ink);}
 .agenda-day-count{font-size:10px; font-weight:900; color:var(--azul); background:#EFF8FF; border-radius:999px; padding:2px 7px;}
 .agenda-events{display:flex; flex-direction:column; gap:6px; min-width:0;}
-.agenda-event{border:1px solid #E2E8F0; background:#fff; border-radius:10px; padding:7px 8px; display:grid; grid-template-columns:24px minmax(0,1fr); gap:8px; align-items:center; cursor:pointer; text-align:left; color:var(--ink); box-shadow:0 6px 14px rgba(16,24,40,.035); min-width:0;}
+.agenda-event{border:1px solid #E2E8F0; background:#fff; border-radius:10px; padding:7px 8px; display:grid; grid-template-columns:24px minmax(0,1fr); gap:8px; align-items:center; cursor:pointer; text-align:left; color:var(--ink); box-shadow:0 6px 14px rgba(16,24,40,.035); min-width:0; max-width:100%; overflow:hidden;}
+.agenda-event > span:last-child{min-width:0; overflow:hidden;}
 .agenda-event:hover{border-color:#9CCAF5; background:#F8FBFF; transform:translateY(-1px);}
 .agenda-event.audiencia{border-left:3px solid var(--azul);}
 .agenda-event.prazo{border-left:3px solid var(--selo);}
@@ -420,16 +427,18 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .agenda-event-icon.audiencia{background:var(--azul);}
 .agenda-event-icon.prazo{background:var(--selo);}
 .agenda-event-icon.tarefa{background:var(--ink-soft);}
-.agenda-event-title{font-size:11px; font-weight:900; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.agenda-event-meta{font-size:10px; color:var(--ink-soft); line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.agenda-event-title{display:block; font-size:11px; font-weight:900; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.agenda-event-meta{display:block; font-size:10px; color:var(--ink-soft); line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .agenda-more{border:1px dashed #B2DDFF; background:#F8FBFF; color:var(--azul); font-size:11px; font-weight:900; text-align:center; padding:5px 8px; border-radius:8px; cursor:pointer;}
-.agenda-side{border:1px solid var(--line); border-radius:16px; background:#fff; box-shadow:var(--shadow); padding:16px; position:sticky; top:110px;}
+.agenda-side{border:1px solid var(--line); border-radius:16px; background:#fff; box-shadow:var(--shadow); padding:16px; position:sticky; top:110px; min-width:0; max-width:100%; overflow:hidden;}
 .agenda-side h4{font-family:'Source Serif 4',serif; font-size:20px; margin-bottom:4px;}
 .agenda-side-sub{font-size:12px; color:var(--ink-soft); margin-bottom:12px;}
 .agenda-side-list{display:flex; flex-direction:column; gap:8px;}
-.agenda-side-item{border:1px solid var(--line); border-radius:12px; padding:10px; display:grid; grid-template-columns:30px minmax(0,1fr); gap:10px; cursor:pointer; text-align:left; background:#fff; min-width:0;}
+.agenda-side-item{border:1px solid var(--line); border-radius:12px; padding:10px; display:grid; grid-template-columns:30px minmax(0,1fr); gap:10px; cursor:pointer; text-align:left; background:#fff; min-width:0; max-width:100%; overflow:hidden;}
 .agenda-side-item:hover{border-color:#B2DDFF; background:#F8FBFF;}
 .agenda-side-item .agenda-event-icon{width:30px; height:30px;}
+.agenda-side-text{min-width:0; max-width:100%; overflow:hidden;}
+.agenda-side-text .agenda-event-title,.agenda-side-text .agenda-event-meta{display:block; max-width:100%;}
 .agenda-legend{display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line);}
 .agenda-legend span{display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-soft); font-weight:700;}
 .agenda-legend i{width:9px; height:9px; border-radius:50%; display:inline-block;}
@@ -588,6 +597,9 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .connection-detail{font-size:12px; color:var(--ink-soft); line-height:1.45; margin-top:3px;}
 @media (max-width: 1100px){ .publication-workspace{grid-template-columns:1fr;} .publication-detail{position:static;} }
 @media (max-width: 860px){ .path-cards,.deadline-validation-grid,.deadline-summary,.archive-summary,.archive-card,.archive-coverage,.help-grid,.publication-form-row{grid-template-columns:1fr;} .archive-counts{justify-content:flex-start;} }
+@media (max-width: 1500px){
+  .agenda-toolbar{grid-template-columns:minmax(220px,1.35fr) repeat(3,minmax(145px,1fr));}
+}
 @media (max-width: 1180px){
   .dashboard-hero, .dashboard-grid{grid-template-columns:1fr;}
   .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
@@ -4011,14 +4023,14 @@ function renderAudiencias(){
     </div>
   </section>
   <div class="agenda-filter-card"><div class="agenda-toolbar">
-    <input type="text" id="fAudCliente" placeholder="Buscar cliente, processo ou ato..." value="${esc(audiFilters.cliente)}">
-    <input type="month" id="fAudMonth" value="${esc(audiFilters.month)}">
-    <input type="date" id="fAudDate" value="${esc(audiFilters.date)}">
-    <select id="fAudAdv"><option value="">Todos os advogados</option>${advogados.map(a=>`<option ${audiFilters.advogado===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
-    <select id="fAudTipo"><option value="">Todos os tipos</option><option value="audiencia" ${audiFilters.tipo==='audiencia'?'selected':''}>Audiências</option><option value="prazo" ${audiFilters.tipo==='prazo'?'selected':''}>Prazos</option><option value="tarefa" ${audiFilters.tipo==='tarefa'?'selected':''}>Tarefas</option></select>
-    <select id="fAudStatus"><option value="">Todos os status</option>${[...new Set([...AUDI_STATUSES,...PRAZO_STATUSES,...taskColumns()])].map(s=>`<option ${audiFilters.status===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+    <label class="agenda-field"><span class="agenda-field-label">Buscar</span><input type="text" id="fAudCliente" placeholder="Cliente, processo ou ato" value="${esc(audiFilters.cliente)}"></label>
+    <label class="agenda-field"><span class="agenda-field-label">Mês</span><input type="month" id="fAudMonth" value="${esc(audiFilters.month)}"></label>
+    <label class="agenda-field"><span class="agenda-field-label">Data</span><input type="date" id="fAudDate" value="${esc(audiFilters.date)}"></label>
+    <label class="agenda-field"><span class="agenda-field-label">Advogado</span><select id="fAudAdv"><option value="">Todos os advogados</option>${advogados.map(a=>`<option ${audiFilters.advogado===a?'selected':''}>${esc(a)}</option>`).join('')}</select></label>
+    <label class="agenda-field"><span class="agenda-field-label">Tipo</span><select id="fAudTipo"><option value="">Todos os tipos</option><option value="audiencia" ${audiFilters.tipo==='audiencia'?'selected':''}>Audiências</option><option value="prazo" ${audiFilters.tipo==='prazo'?'selected':''}>Prazos</option><option value="tarefa" ${audiFilters.tipo==='tarefa'?'selected':''}>Tarefas</option></select></label>
+    <label class="agenda-field"><span class="agenda-field-label">Status</span><select id="fAudStatus"><option value="">Todos os status</option>${[...new Set([...AUDI_STATUSES,...PRAZO_STATUSES,...taskColumns()])].map(s=>`<option ${audiFilters.status===s?'selected':''}>${esc(s)}</option>`).join('')}</select></label>
     <button class="btn primary small" id="addAudiBtn">+ Nova audiência</button>
-    <label class="chk"><input type="checkbox" id="fArch" ${audiFilters.showArchived?'checked':''}> Mostrar arquivados</label>
+    <label class="agenda-check"><input type="checkbox" id="fArch" ${audiFilters.showArchived?'checked':''}> Arquivados</label>
   </div></div>
   <div class="agenda-monthbar">
     <div>
@@ -4060,7 +4072,7 @@ function renderAudiencias(){
       <div class="agenda-side-list">
         ${selectedEvents.length ? selectedEvents.map(ev=>`<button class="agenda-side-item" data-event-id="${esc(ev.id)}">
           <span class="agenda-event-icon ${esc(ev.type)}">${agendaEventIcon(ev.type)}</span>
-          <span><span class="agenda-event-title">${esc(ev.party)}</span><span class="agenda-event-meta">${esc(ev.time ? `${ev.time} · ${ev.title}` : ev.title)} · ${esc(ev.processo || 'sem processo')}</span></span>
+          <span class="agenda-side-text"><span class="agenda-event-title">${esc(ev.party)}</span><span class="agenda-event-meta">${esc(ev.time ? `${ev.time} · ${ev.title}` : ev.title)} · ${esc(ev.processo || 'sem processo')}</span></span>
         </button>`).join('') : '<div class="empty">Clique em outro dia ou ajuste os filtros.</div>'}
       </div>
       <div class="agenda-legend"><span><i class="aud"></i>Audiência</span><span><i class="pra"></i>Prazo</span><span><i class="tar"></i>Tarefa</span><span><i class="ven"></i>Vencido</span></div>
