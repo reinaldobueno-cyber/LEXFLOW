@@ -377,6 +377,55 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .source-status.ok{background:#ECFDF3; color:var(--verde);}
 .source-status.warn{background:#FFFAEB; color:#A15C00;}
 .source-status.bad{background:#FEF3F2; color:var(--vermelho);}
+.agenda-toolbar{display:grid; grid-template-columns:1.2fr .8fr .8fr .8fr .8fr auto; gap:10px; align-items:center;}
+.agenda-monthbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin:14px 0;}
+.agenda-monthbar h3{font-family:'Source Serif 4',serif; font-size:20px; font-weight:700;}
+.agenda-month-actions{display:flex; gap:8px; align-items:center;}
+.agenda-shell{display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:16px; align-items:start;}
+.agenda-calendar{border:1px solid var(--line); border-radius:12px; background:#fff; overflow:hidden; box-shadow:var(--shadow);}
+.agenda-weekdays{display:grid; grid-template-columns:repeat(7,1fr); background:#F8FAFC; border-bottom:1px solid var(--line);}
+.agenda-weekdays div{padding:10px; text-align:center; font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; font-weight:900;}
+.agenda-grid{display:grid; grid-template-columns:repeat(7, minmax(0,1fr));}
+.agenda-day{min-height:138px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:10px; background:#fff; display:flex; flex-direction:column; gap:8px; min-width:0;}
+.agenda-day:nth-child(7n){border-right:0;}
+.agenda-day.muted{background:#F8FAFC; color:#98A2B3;}
+.agenda-day.today{box-shadow:inset 0 0 0 2px #B2DDFF; background:#F5FBFF;}
+.agenda-day.selected{box-shadow:inset 0 0 0 2px var(--azul);}
+.agenda-day-head{display:flex; justify-content:space-between; gap:8px; align-items:center;}
+.agenda-day-num{font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:900;}
+.agenda-day-count{font-size:10px; font-weight:900; color:var(--ink-soft); background:#EEF2F6; border-radius:999px; padding:2px 6px;}
+.agenda-events{display:flex; flex-direction:column; gap:5px; min-width:0;}
+.agenda-event{border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 8px; display:grid; grid-template-columns:22px minmax(0,1fr); gap:7px; align-items:start; cursor:pointer; text-align:left; color:var(--ink); box-shadow:0 5px 12px rgba(16,24,40,.04);}
+.agenda-event:hover{border-color:#B2DDFF; background:#F8FBFF;}
+.agenda-event.audiencia{border-color:#B2DDFF; background:#EFF8FF;}
+.agenda-event.prazo{border-color:#F3D59B; background:#FFFAEB;}
+.agenda-event.tarefa{border-color:#D0D5DD; background:#F8FAFC;}
+.agenda-event.vencido{border-color:#FDA29B; background:#FFF7F5;}
+.agenda-event-icon{width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:11px;}
+.agenda-event.audiencia .agenda-event-icon{background:var(--azul);}
+.agenda-event.prazo .agenda-event-icon{background:var(--selo);}
+.agenda-event.tarefa .agenda-event-icon{background:var(--ink-soft);}
+.agenda-event.vencido .agenda-event-icon{background:var(--vermelho);}
+.agenda-event-icon.audiencia{background:var(--azul);}
+.agenda-event-icon.prazo{background:var(--selo);}
+.agenda-event-icon.tarefa{background:var(--ink-soft);}
+.agenda-event-title{font-size:11px; font-weight:900; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.agenda-event-meta{font-size:10.5px; color:var(--ink-soft); line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.agenda-more{border:0; background:transparent; color:var(--azul); font-size:11px; font-weight:900; text-align:left; padding:2px 0; cursor:pointer;}
+.agenda-side{border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:var(--shadow); padding:14px; position:sticky; top:110px;}
+.agenda-side h4{font-family:'Source Serif 4',serif; font-size:17px; margin-bottom:4px;}
+.agenda-side-sub{font-size:12px; color:var(--ink-soft); margin-bottom:12px;}
+.agenda-side-list{display:flex; flex-direction:column; gap:8px;}
+.agenda-side-item{border:1px solid var(--line); border-radius:10px; padding:10px; display:grid; grid-template-columns:28px minmax(0,1fr); gap:9px; cursor:pointer; text-align:left; background:#fff;}
+.agenda-side-item:hover{border-color:#B2DDFF; background:#F8FBFF;}
+.agenda-side-item .agenda-event-icon{width:28px; height:28px;}
+.agenda-legend{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+.agenda-legend span{display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-soft); font-weight:700;}
+.agenda-legend i{width:9px; height:9px; border-radius:50%; display:inline-block;}
+.agenda-legend .aud{background:var(--azul);}
+.agenda-legend .pra{background:var(--selo);}
+.agenda-legend .tar{background:var(--ink-soft);}
+.agenda-legend .ven{background:var(--vermelho);}
 .deadline-validation-grid{display:grid; grid-template-columns:1.1fr .9fr; gap:14px;}
 .deadline-decision-card{border:1px solid var(--line); border-radius:10px; padding:14px; background:#F8FAFC;}
 .deadline-decision-card h4{font-family:'Source Serif 4',serif; font-size:16px; margin-bottom:6px;}
@@ -533,6 +582,9 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
   .decision-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
   .analysis-grid{grid-template-columns:1fr;}
   .analysis-meta-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
+  .agenda-shell{grid-template-columns:1fr;}
+  .agenda-side{position:static;}
+  .agenda-toolbar{grid-template-columns:1fr 1fr;}
 }
 @media (max-width: 680px){
   .today-panel{grid-template-columns:1fr;}
@@ -542,6 +594,10 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
   .command-side{grid-column:2; text-align:left; display:flex; gap:8px; align-items:center;}
   .command-title .cliente{white-space:normal;}
   .analysis-meta-grid{grid-template-columns:1fr;}
+  .agenda-toolbar{grid-template-columns:1fr;}
+  .agenda-day{min-height:112px; padding:7px;}
+  .agenda-event{grid-template-columns:1fr; padding:6px;}
+  .agenda-event-icon{display:none;}
 }
 
 @media (max-width: 860px){
@@ -1845,7 +1901,8 @@ function openDashboardFilter(view, filter){
     pubFilters = {status:'', cliente:'', origin:'', tipo:'', quick:'', showArchived:false, showRestricted:false, sort:'dataPublicacao', dir:-1};
   }
   if(view==='audiencias'){
-    audiFilters = {status:'', cliente:'', showArchived:false, sort:'data', dir:1};
+    audiFilters = {cliente:'', status:'', month:monthKey(TODAY), date:'', advogado:'', tipo:'', showArchived:false, selectedDate:isoOf(TODAY)};
+    if(filter==='audi_7') audiFilters.tipo = 'audiencia';
   }
   renderAll();
 }
@@ -3744,70 +3801,259 @@ function openPrazoModal(p, fromPub){
   };
 }
 
-/* ===================== AUDIÊNCIAS ===================== */
-let audiFilters = {status:'', cliente:'', showArchived:false, sort:'data', dir:1};
+/* ===================== AUDIÊNCIAS / AGENDA ===================== */
+let audiFilters = {cliente:'', status:'', month:monthKey(TODAY), date:'', advogado:'', tipo:'', showArchived:false, selectedDate:isoOf(TODAY)};
+
+function agendaEventId(type, item){
+  return `${type}:${item.id}`;
+}
+
+function monitoredLawyerForPrazo(p){
+  const pub = (DB.publicacoes || []).find(x=>x.id === p.origemPublicacaoId || x.refId === p.origemPublicacaoId);
+  return cleanText(pub?.advogadoMonitorado || p.responsavel || '');
+}
+
+function agendaEvents(){
+  const events = [];
+  (DB.audiencias || []).forEach(a=>{
+    if(!a.data) return;
+    if(!audiFilters.showArchived && AUDI_ARCHIVED.includes(a.status)) return;
+    events.push({
+      id:agendaEventId('audiencia', a), type:'audiencia', item:a, date:a.data, time:a.horario || '',
+      title:a.tipo || 'Audiência', party:a.cliente || 'Sem cliente', processo:a.processo || '',
+      tribunal:a.estado || '', advogado:a.responsavel || '', status:a.status, done:AUDI_DONE.includes(a.status)
+    });
+  });
+  (DB.prazos || []).forEach(p=>{
+    if(!p.prazoFatal) return;
+    if(!audiFilters.showArchived && PRAZO_ARCHIVED.includes(p.status)) return;
+    if(!isIntegratedPrazo(p) && !p.motorPrazo) return;
+    events.push({
+      id:agendaEventId('prazo', p), type:'prazo', item:p, date:p.prazoFatal, time:'',
+      title:p.tipoPrazo || 'Prazo processual', party:p.cliente || 'Sem cliente', processo:p.processo || '',
+      tribunal:p.tribunal || '', advogado:monitoredLawyerForPrazo(p), status:p.status, done:PRAZO_DONE.includes(p.status)
+    });
+  });
+  (DB.tarefas || []).forEach(t=>{
+    if(!t.dataLimite) return;
+    if(!audiFilters.showArchived && TAREFA_ARCHIVED.includes(t.status)) return;
+    events.push({
+      id:agendaEventId('tarefa', t), type:'tarefa', item:t, date:t.dataLimite, time:'',
+      title:t.titulo || 'Tarefa', party:t.cliente || 'Sem cliente', processo:t.processo || '',
+      tribunal:'', advogado:t.responsavel || '', status:t.status, done:isTaskDone(t)
+    });
+  });
+  return events;
+}
+
+function agendaAdvogados(events){
+  const set = new Set();
+  events.forEach(ev=>{ if(cleanText(ev.advogado)) set.add(cleanText(ev.advogado)); });
+  return [...set].sort((a,b)=>a.localeCompare(b, 'pt-BR'));
+}
+
+function filteredAgendaEvents(){
+  let events = agendaEvents();
+  if(dashboardFilter==='audi_7') events = events.filter(ev=>ev.type==='audiencia' && !ev.done && diasRestantes(ev.date)>=0 && diasRestantes(ev.date)<=7);
+  if(audiFilters.month) events = events.filter(ev=>monthKey(ev.date) === audiFilters.month);
+  if(audiFilters.date) events = events.filter(ev=>isoOf(ev.date) === audiFilters.date);
+  if(audiFilters.tipo) events = events.filter(ev=>ev.type === audiFilters.tipo);
+  if(audiFilters.status) events = events.filter(ev=>ev.status === audiFilters.status);
+  if(audiFilters.advogado) events = events.filter(ev=>normalizePersonName(ev.advogado).includes(normalizePersonName(audiFilters.advogado)));
+  if(audiFilters.cliente){
+    const q = normalizePersonName(audiFilters.cliente);
+    events = events.filter(ev=>normalizePersonName(`${ev.party} ${ev.processo} ${ev.title} ${ev.tribunal} ${ev.advogado}`).includes(q));
+  }
+  return events.sort((a,b)=>`${a.date} ${a.time || '99:99'}`.localeCompare(`${b.date} ${b.time || '99:99'}`));
+}
+
+function agendaEventIcon(type){
+  return type === 'audiencia' ? 'A' : (type === 'prazo' ? 'P' : 'T');
+}
+
+function agendaEventLabel(type){
+  return type === 'audiencia' ? 'Audiência' : (type === 'prazo' ? 'Prazo' : 'Tarefa');
+}
+
+function agendaEventButton(ev, compact=false){
+  const dr = diasRestantes(ev.date);
+  const vencido = !ev.done && dr !== null && dr < 0;
+  return `<button class="agenda-event ${ev.type} ${vencido?'vencido':''}" data-event-id="${esc(ev.id)}">
+    <span class="agenda-event-icon">${agendaEventIcon(ev.type)}</span>
+    <span>
+      <span class="agenda-event-title">${esc(compact && ev.time ? `${ev.time} · ${ev.party}` : ev.party)}</span>
+      <span class="agenda-event-meta">${esc(ev.time ? `${ev.time} · ${ev.title}` : ev.title)}</span>
+    </span>
+  </button>`;
+}
+
+function agendaMonthDays(monthKeyValue){
+  const [year, month] = (monthKeyValue || monthKey(TODAY)).split('-').map(Number);
+  const first = new Date(year, month - 1, 1);
+  const start = new Date(first);
+  const mondayIndex = (first.getDay() + 6) % 7;
+  start.setDate(first.getDate() - mondayIndex);
+  const days = [];
+  for(let i=0;i<42;i++){
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
+function openAgendaEventModal(ev){
+  const item = ev.item;
+  const dr = diasRestantes(ev.date);
+  const statusLine = dr === null ? '' : (dr < 0 ? `Vencido há ${Math.abs(dr)} dia(s)` : (dr === 0 ? 'Hoje' : `Faltam ${dr} dia(s)`));
+  const box = document.getElementById('modalBox');
+  box.className = 'modal';
+  box.innerHTML = `
+    <div class="modal-head"><h3>${agendaEventLabel(ev.type)} na agenda</h3><button class="close-x" id="mClose">✕</button></div>
+    <div class="modal-body">
+      <section class="analysis-hero">
+        <div class="analysis-title">${esc(ev.party)}</div>
+        <div class="analysis-sub">
+          <span class="tribunal-tag">${esc(agendaEventLabel(ev.type))}</span>
+          <span class="mono">${esc(fmtDate(ev.date))}${ev.time ? ` · ${esc(ev.time)}` : ''}</span>
+          ${statusLine ? `<span class="pill st-${dr<0?'vermelho':dr===0?'laranja':'verde'}"><span class="dot"></span>${esc(statusLine)}</span>` : ''}
+        </div>
+      </section>
+      <div class="analysis-meta-grid">
+        <div class="analysis-kv"><div class="k">Processo</div><div class="v">${esc(ev.processo || '—')}</div></div>
+        <div class="analysis-kv"><div class="k">Tribunal</div><div class="v">${esc(ev.tribunal || '—')}</div></div>
+        <div class="analysis-kv"><div class="k">Tipo</div><div class="v">${esc(ev.title)}</div></div>
+        <div class="analysis-kv"><div class="k">Advogado / responsável</div><div class="v">${esc(ev.advogado || 'sem responsável')}</div></div>
+        <div class="analysis-kv"><div class="k">Status</div><div class="v">${esc(ev.status || '—')}</div></div>
+        <div class="analysis-kv"><div class="k">Data</div><div class="v">${esc(fmtDate(ev.date))}${ev.time ? ` · ${esc(ev.time)}` : ''}</div></div>
+      </div>
+      ${item.observacao || item.observacoes ? `<div class="help-intro">${esc(item.observacao || item.observacoes)}</div>` : ''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="mCalendar">Adicionar à agenda</button>
+      <button class="btn" id="mWhatsapp">WhatsApp</button>
+      <button class="btn primary" id="mEdit">Editar</button>
+      <button class="btn" id="mClose2">Fechar</button>
+    </div>
+  `;
+  showModal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('mClose2').onclick = hideModal;
+  document.getElementById('mCalendar').onclick = ()=>openAgendaModal(ev.type, item);
+  document.getElementById('mWhatsapp').onclick = ()=>openWhatsAppShare(ev.type, item);
+  document.getElementById('mEdit').onclick = ()=>{
+    hideModal();
+    if(ev.type==='audiencia') openAudiModal(item);
+    else if(ev.type==='prazo') openPrazoModal(item);
+    else openTaskModal(item);
+  };
+}
 
 function renderAudiencias(){
-  let rows = DB.audiencias.slice();
-  if(dashboardFilter==='audi_7') rows = rows.filter(a=>{ if(AUDI_DONE.includes(a.status)) return false; const d=diasRestantes(a.data); return d>=0 && d<=7; });
-  if(!audiFilters.showArchived) rows = rows.filter(a=>!AUDI_ARCHIVED.includes(a.status));
-  if(audiFilters.status) rows = rows.filter(a=>a.status===audiFilters.status);
-  if(audiFilters.cliente) rows = rows.filter(a=>a.cliente.toLowerCase().includes(audiFilters.cliente.toLowerCase()) || a.processo.toLowerCase().includes(audiFilters.cliente.toLowerCase()));
-  rows.sort((a,b)=>{ let va=a[audiFilters.sort], vb=b[audiFilters.sort]; if(audiFilters.sort==='data'){va=new Date(a.data+'T'+(a.horario||'00:00')); vb=new Date(b.data+'T'+(b.horario||'00:00'));} if(va<vb) return -1*audiFilters.dir; if(va>vb) return 1*audiFilters.dir; return 0; });
+  if(!audiFilters.month) audiFilters.month = monthKey(TODAY);
+  const allEvents = agendaEvents();
+  const advogados = agendaAdvogados(allEvents);
+  const events = filteredAgendaEvents();
+  const eventsByDate = events.reduce((acc, ev)=>{
+    const key = isoOf(ev.date);
+    if(!acc[key]) acc[key] = [];
+    acc[key].push(ev);
+    return acc;
+  }, {});
+  const selectedDate = audiFilters.date || audiFilters.selectedDate || Object.keys(eventsByDate)[0] || isoOf(TODAY);
+  audiFilters.selectedDate = selectedDate;
+  const selectedEvents = eventsByDate[selectedDate] || [];
+  const days = agendaMonthDays(audiFilters.month);
+  const [yy, mm] = audiFilters.month.split('-').map(Number);
+  const monthName = monthLabel(audiFilters.month);
+  const filterNote = dashboardFilter==='audi_7' ? `<div class="section-title">Filtro: Audiências próximas (7 dias) <span class="cnt">${events.length}</span></div>` : '';
 
-  const filterNote = dashboardFilter==='audi_7' ? `<div class="section-title">Filtro: Audiências próximas (7 dias) <span class="cnt">${rows.length}</span></div>` : '';
-  let html = `${filterNote}${responsavelDatalistHTML()}<div class="filters">
-    <input type="text" id="fAudCliente" placeholder="Buscar cliente ou processo..." value="${audiFilters.cliente}">
-    <select id="fAudStatus"><option value="">Todos os status</option>${AUDI_STATUSES.map(s=>`<option ${audiFilters.status===s?'selected':''}>${s}</option>`).join('')}</select>
-    <label class="chk"><input type="checkbox" id="fArch" ${audiFilters.showArchived?'checked':''}> Mostrar arquivados</label>
+  let html = `${filterNote}${responsavelDatalistHTML()}<div class="filters agenda-toolbar">
+    <input type="text" id="fAudCliente" placeholder="Buscar cliente, processo ou ato..." value="${esc(audiFilters.cliente)}">
+    <input type="month" id="fAudMonth" value="${esc(audiFilters.month)}">
+    <input type="date" id="fAudDate" value="${esc(audiFilters.date)}">
+    <select id="fAudAdv"><option value="">Todos os advogados</option>${advogados.map(a=>`<option ${audiFilters.advogado===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
+    <select id="fAudTipo"><option value="">Todos os tipos</option><option value="audiencia" ${audiFilters.tipo==='audiencia'?'selected':''}>Audiências</option><option value="prazo" ${audiFilters.tipo==='prazo'?'selected':''}>Prazos</option><option value="tarefa" ${audiFilters.tipo==='tarefa'?'selected':''}>Tarefas</option></select>
     <button class="btn primary small" id="addAudiBtn">+ Nova audiência</button>
+    <select id="fAudStatus"><option value="">Todos os status</option>${[...new Set([...AUDI_STATUSES,...PRAZO_STATUSES,...taskColumns()])].map(s=>`<option ${audiFilters.status===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+    <label class="chk"><input type="checkbox" id="fArch" ${audiFilters.showArchived?'checked':''}> Mostrar arquivados</label>
+  </div>
+  <div class="agenda-monthbar">
+    <div>
+      <h3>${esc(monthName)}</h3>
+      <div class="agenda-side-sub">${events.length} compromisso(s) carregado(s) no filtro atual</div>
+    </div>
+    <div class="agenda-month-actions">
+      <button class="btn small" id="prevMonth">Mês anterior</button>
+      <button class="btn small" id="todayMonth">Hoje</button>
+      <button class="btn small" id="nextMonth">Próximo mês</button>
+    </div>
+  </div>
+  <div class="agenda-shell">
+    <section class="agenda-calendar">
+      <div class="agenda-weekdays"><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div><div>Dom</div></div>
+      <div class="agenda-grid">
+        ${days.map(day=>{
+          const iso = isoOf(day);
+          const dayEvents = eventsByDate[iso] || [];
+          const muted = day.getMonth() !== (mm - 1);
+          const isToday = iso === isoOf(TODAY);
+          const selected = iso === selectedDate;
+          return `<div class="agenda-day ${muted?'muted':''} ${isToday?'today':''} ${selected?'selected':''}" data-day="${iso}">
+            <div class="agenda-day-head">
+              <span class="agenda-day-num">${day.getDate()}</span>
+              ${dayEvents.length ? `<span class="agenda-day-count">${dayEvents.length}</span>` : ''}
+            </div>
+            <div class="agenda-events">
+              ${dayEvents.slice(0,3).map(ev=>agendaEventButton(ev, true)).join('')}
+              ${dayEvents.length > 3 ? `<button class="agenda-more" data-day-more="${iso}">+ ${dayEvents.length - 3} mais</button>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </section>
+    <aside class="agenda-side">
+      <h4>${selectedDate ? fmtDate(selectedDate) : 'Selecione um dia'}</h4>
+      <div class="agenda-side-sub">${selectedEvents.length ? `${selectedEvents.length} compromisso(s) no dia` : 'Sem compromissos para o filtro atual'}</div>
+      <div class="agenda-side-list">
+        ${selectedEvents.length ? selectedEvents.map(ev=>`<button class="agenda-side-item" data-event-id="${esc(ev.id)}">
+          <span class="agenda-event-icon ${esc(ev.type)}">${agendaEventIcon(ev.type)}</span>
+          <span><span class="agenda-event-title">${esc(ev.party)}</span><span class="agenda-event-meta">${esc(ev.time ? `${ev.time} · ${ev.title}` : ev.title)} · ${esc(ev.processo || 'sem processo')}</span></span>
+        </button>`).join('') : '<div class="empty">Clique em outro dia ou ajuste os filtros.</div>'}
+      </div>
+      <div class="agenda-legend"><span><i class="aud"></i>Audiência</span><span><i class="pra"></i>Prazo</span><span><i class="tar"></i>Tarefa</span><span><i class="ven"></i>Vencido</span></div>
+    </aside>
   </div>`;
-  html += `<div class="table-wrap"><table><thead><tr>
-    <th data-s="data">Data</th><th>Horário</th><th>Cliente</th><th>Processo</th><th>Estado</th>
-    <th>Tipo</th><th>Modalidade</th><th>Link</th><th>Status</th><th>Restam</th><th></th>
-  </tr></thead><tbody>`;
-  if(rows.length===0){ html += `<tr><td colspan="11"><div class="empty">Nenhuma audiência encontrada com esses filtros.</div></td></tr>`; }
-  rows.forEach(a=>{
-    const dr = diasRestantes(a.data);
-    const done = AUDI_DONE.includes(a.status);
-    const archived = AUDI_ARCHIVED.includes(a.status);
-    const color = riskColor(dr, done);
-    html += `<tr data-id="${a.id}" class="${archived?'archived':''}">
-      <td>${fmtDate(a.data)}</td>
-      <td class="mono">${a.horario||'—'}</td>
-      <td class="cliente">${a.cliente}</td>
-      <td class="proc">${a.processo}</td>
-      <td><span class="tribunal-tag">${a.estado}</span></td>
-      <td>${a.tipo}</td>
-      <td>${a.modalidade||'—'}</td>
-      <td>${a.link?`<a class="link-audi" href="${a.link.split(' ')[0]}" target="_blank">acessar ↗</a>`:'—'}</td>
-      <td><select class="status-select" data-act="status">${AUDI_STATUSES.map(s=>`<option ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
-      <td>${pill(done?'—':(dr<0?'Passou':dr===0?'Hoje':dr+'d'), color)}</td>
-      <td class="row-actions">${calendarActionsHTML('audiencia', a)}<div class="ops-actions"><button class="ops-action" data-act="edit"><span class="mark lex">L</span>Editar</button>${!archived?`<button class="ops-action" data-act="archive" title="Arquivar sem excluir"><span class="mark neutral">A</span>Arquivar</button>`:''}</div></td>
-    </tr>`;
-  });
-  html += `</tbody></table></div>`;
-  document.getElementById('content').innerHTML = html;
 
+  document.getElementById('content').innerHTML = html;
+  const moveMonth = delta=>{
+    const dt = new Date(yy, mm - 1 + delta, 1);
+    audiFilters.month = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+    audiFilters.date = '';
+    renderAudiencias();
+  };
   bindDebouncedTextInput('fAudCliente', value=>{ audiFilters.cliente=value; }, renderAudiencias);
-  document.getElementById('fAudStatus').onchange = e=>{audiFilters.status=e.target.value; renderAudiencias();};
-  document.getElementById('fArch').onchange = e=>{audiFilters.showArchived=e.target.checked; renderAudiencias();};
+  document.getElementById('fAudMonth').onchange = e=>{ audiFilters.month=e.target.value || monthKey(TODAY); audiFilters.date=''; renderAudiencias(); };
+  document.getElementById('fAudDate').onchange = e=>{ audiFilters.date=e.target.value; audiFilters.selectedDate=e.target.value || audiFilters.selectedDate; if(e.target.value) audiFilters.month=monthKey(e.target.value); renderAudiencias(); };
+  document.getElementById('fAudAdv').onchange = e=>{ audiFilters.advogado=e.target.value; renderAudiencias(); };
+  document.getElementById('fAudTipo').onchange = e=>{ audiFilters.tipo=e.target.value; renderAudiencias(); };
+  document.getElementById('fAudStatus').onchange = e=>{ audiFilters.status=e.target.value; renderAudiencias(); };
+  document.getElementById('fArch').onchange = e=>{ audiFilters.showArchived=e.target.checked; renderAudiencias(); };
   document.getElementById('addAudiBtn').onclick = ()=>openAudiModal(null);
-  document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const s=th.dataset.s; if(audiFilters.sort===s) audiFilters.dir*=-1; else {audiFilters.sort=s; audiFilters.dir=1;} renderAudiencias(); });
-  document.querySelectorAll('tbody tr[data-id]').forEach(tr=>{
-    const id=tr.dataset.id; const a = DB.audiencias.find(x=>x.id===id);
-    tr.querySelector('[data-act="status"]').onchange = async e=>{
-      const old=a.status; a.status=e.target.value;
-      if(a.status==='Realizada' && old!=='Realizada') a.concluidoEm = new Date().toISOString();
-      logHist(`Audiência de ${a.cliente} (${a.processo}) alterada: ${old} → ${a.status}`);
-      await saveDB(); renderAll(); toast('Status atualizado');
-    };
-    tr.querySelectorAll('[data-act="agenda"]').forEach(btn=>btn.onclick = ()=>openAgendaModal('audiencia', a));
-    tr.querySelectorAll('[data-act="ics"]').forEach(btn=>btn.onclick = ()=>downloadCalendarICS('audiencia', a));
-    tr.querySelectorAll('[data-act="whatsapp"]').forEach(btn=>btn.onclick = ()=>openWhatsAppShare('audiencia', a));
-    tr.querySelector('[data-act="edit"]').onclick = ()=>openAudiModal(a);
-    const archBtn = tr.querySelector('[data-act="archive"]');
-    if(archBtn) archBtn.onclick = async ()=>{ a.status='Arquivado'; logHist(`Audiência de ${a.cliente} (${a.processo}) arquivada.`); await saveDB(); renderAll(); toast('Audiência arquivada'); };
+  document.getElementById('prevMonth').onclick = ()=>moveMonth(-1);
+  document.getElementById('nextMonth').onclick = ()=>moveMonth(1);
+  document.getElementById('todayMonth').onclick = ()=>{ audiFilters.month=monthKey(TODAY); audiFilters.date=isoOf(TODAY); audiFilters.selectedDate=isoOf(TODAY); renderAudiencias(); };
+  document.querySelectorAll('[data-day]').forEach(day=>day.onclick = e=>{
+    if(e.target.closest('[data-event-id]')) return;
+    audiFilters.selectedDate = day.dataset.day;
+    audiFilters.date = '';
+    renderAudiencias();
+  });
+  const eventMap = new Map(events.map(ev=>[ev.id, ev]));
+  document.querySelectorAll('[data-event-id]').forEach(btn=>btn.onclick = e=>{
+    e.stopPropagation();
+    const ev = eventMap.get(btn.dataset.eventId);
+    if(ev) openAgendaEventModal(ev);
   });
 }
 
