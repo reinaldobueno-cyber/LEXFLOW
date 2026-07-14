@@ -764,7 +764,8 @@ async function postWebhook(url, token, payload){
 }
 
 async function sendEmailNotification(env, payload){
-  if(env.EMAIL_WEBHOOK_URL){
+  const provider = String(env.EMAIL_PROVIDER || 'resend').trim().toLowerCase();
+  if(provider === 'webhook' && env.EMAIL_WEBHOOK_URL){
     return postWebhook(env.EMAIL_WEBHOOK_URL, env.EMAIL_WEBHOOK_TOKEN, payload);
   }
   if(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL){
@@ -784,6 +785,9 @@ async function sendEmailNotification(env, payload){
     });
     const body = await response.text().catch(() => '');
     return {ok:response.ok, provider:'resend', status:response.status, body:body.slice(0, 500)};
+  }
+  if(env.EMAIL_WEBHOOK_URL){
+    return postWebhook(env.EMAIL_WEBHOOK_URL, env.EMAIL_WEBHOOK_TOKEN, payload);
   }
   return postWebhook('', '', payload);
 }
