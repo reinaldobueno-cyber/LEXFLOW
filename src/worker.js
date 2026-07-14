@@ -764,6 +764,9 @@ async function postWebhook(url, token, payload){
 }
 
 async function sendEmailNotification(env, payload){
+  if(env.EMAIL_WEBHOOK_URL){
+    return postWebhook(env.EMAIL_WEBHOOK_URL, env.EMAIL_WEBHOOK_TOKEN, payload);
+  }
   if(env.RESEND_API_KEY && env.RESEND_FROM_EMAIL){
     const response = await fetch('https://api.resend.com/emails', {
       method:'POST',
@@ -782,7 +785,7 @@ async function sendEmailNotification(env, payload){
     const body = await response.text().catch(() => '');
     return {ok:response.ok, provider:'resend', status:response.status, body:body.slice(0, 500)};
   }
-  return postWebhook(env.EMAIL_WEBHOOK_URL, env.EMAIL_WEBHOOK_TOKEN, payload);
+  return postWebhook('', '', payload);
 }
 
 async function dispatchDailySummary(env, tenant, settings, data, opts = {}){
