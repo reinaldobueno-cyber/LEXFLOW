@@ -273,6 +273,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .modal-head{padding:18px 22px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;}
 .modal-head h3{font-family:'Source Serif 4',serif; font-size:17px; font-weight:600;}
 .modal-body{padding:20px 22px; display:flex; flex-direction:column; gap:13px;}
+.modal-body>*{min-width:0;}
 .help-modal{max-width:860px;}
 .help-intro{background:#F8FAFC; border:1px solid var(--line); border-radius:8px; padding:14px 16px; color:var(--ink-2); font-size:13px; line-height:1.55;}
 .help-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;}
@@ -341,14 +342,14 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .scenario-chip .scenario-act{font-size:11px; font-weight:900; color:var(--ink);}
 .scenario-chip .scenario-date{font-size:13px; font-weight:900; color:var(--selo);}
 .scenario-chip .scenario-basis{font-size:10.5px; color:var(--ink-soft); line-height:1.35;}
-.scenario-table{width:100%; max-width:100%; table-layout:fixed; border-collapse:separate; border-spacing:0; margin-top:10px; border:1px solid var(--line); border-radius:8px; overflow:hidden; font-size:12px;}
-.scenario-table th,.scenario-table td{padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; overflow-wrap:anywhere; word-break:normal;}
-.scenario-table th:nth-child(1),.scenario-table td:nth-child(1){width:31%;}
-.scenario-table th:nth-child(2),.scenario-table td:nth-child(2){width:18%;}
-.scenario-table th:nth-child(3),.scenario-table td:nth-child(3){width:33%;}
-.scenario-table th:nth-child(4),.scenario-table td:nth-child(4){width:18%;}
-.scenario-table th{font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); background:#F8FAFC;}
-.scenario-table tr:last-child td{border-bottom:0;}
+.scenario-card-list{display:flex; flex-direction:column; gap:8px; margin-top:10px;}
+.scenario-detail-card{border:1px solid var(--line); border-radius:10px; background:#fff; padding:10px 12px; display:grid; grid-template-columns:minmax(0,1.2fr) minmax(88px,.45fr); gap:8px 12px; min-width:0;}
+.scenario-detail-card:first-child{background:#FFF9EA; border-color:#F1C66D;}
+.scenario-detail-title{font-size:12px; font-weight:900; color:var(--ink); line-height:1.3; overflow-wrap:anywhere;}
+.scenario-detail-role{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
+.scenario-detail-date{font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:900; color:var(--selo); text-align:right; white-space:nowrap;}
+.scenario-detail-base{grid-column:1/-1; font-size:11.5px; color:var(--ink-soft); line-height:1.45; overflow-wrap:anywhere;}
+.scenario-detail-confidence{grid-column:1/-1; font-size:10.5px; color:var(--azul); font-weight:800;}
 .recursal-timeline{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:14px 0 4px; counter-reset:timeline;}
 .timeline-stage{position:relative; min-width:0; padding-top:26px;}
 .timeline-stage::before{content:''; position:absolute; left:18px; right:-30px; top:15px; height:2px; background:linear-gradient(90deg,#A7C6ED,#D8DEE8);}
@@ -503,7 +504,7 @@ select.status-select{font-family:'IBM Plex Sans'; font-size:11.5px; font-weight:
 .step.todo .tag{background:var(--paper-2); color:var(--ink-soft);}
 .step p{font-size:12.5px; color:var(--ink-soft); line-height:1.5; max-width:640px;}
 .path-cards{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:28px;}
-.path-card{background:var(--white); border:1px solid var(--line); border-radius:8px; padding:18px 20px; box-shadow:var(--shadow);}
+.path-card{background:var(--white); border:1px solid var(--line); border-radius:8px; padding:18px 20px; box-shadow:var(--shadow); min-width:0; overflow-wrap:anywhere;}
 .path-card .path-tag{font-size:10px; text-transform:uppercase; font-weight:700; letter-spacing:.05em; color:var(--selo);}
 .path-card h4{font-family:'Source Serif 4',serif; font-size:15.5px; margin:6px 0 8px 0;}
 .path-card p{font-size:12.5px; color:var(--ink-soft); line-height:1.55;}
@@ -2204,17 +2205,17 @@ function suggestionDetailsHTML(pub){
   const factors = s.factors?.length ? `<ul class="calc-factors">${s.factors.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>` : '';
   const scenarioRows = scenarios.length > 1 ? `
     <p><b>Opções recursais:</b> a mesma decisão não deve gerar todos estes prazos automaticamente; o LexFlow mostra as hipóteses para escolha do caminho aplicável.</p>
-    <table class="scenario-table">
-      <thead><tr><th>Ato</th><th>Prazo sugerido</th><th>Base</th><th>Confiança</th></tr></thead>
-      <tbody>
-        ${scenarios.map(item=>`<tr>
-          <td><b>${esc(item.rule.act)}</b><br><span class="mono">${esc(item.role || 'concorrente')}</span></td>
-          <td>${item.dueDate ? esc(fmtDate(item.dueDate)) : 'Sem data automática'}</td>
-          <td>${esc(item.rule.basis || item.reason || 'Base não mapeada')}</td>
-          <td>${esc(item.confidence || 'baixa')}${item.needsReview ? '<br><span class="mono">revisão recomendada</span>' : ''}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
+    <div class="scenario-card-list">
+      ${scenarios.map(item=>`<div class="scenario-detail-card">
+        <div>
+          <div class="scenario-detail-title">${esc(item.rule.act)}</div>
+          <div class="scenario-detail-role">${esc(item.role || 'concorrente')}</div>
+        </div>
+        <div class="scenario-detail-date">${item.dueDate ? esc(fmtDate(item.dueDate)) : 'Sem data'}</div>
+        <div class="scenario-detail-base"><b>Base:</b> ${esc(item.rule.basis || item.reason || 'Base não mapeada')}</div>
+        <div class="scenario-detail-confidence">Confiança: ${esc(item.confidence || 'baixa')}${item.needsReview ? ' · revisão recomendada' : ''}</div>
+      </div>`).join('')}
+    </div>
   ` : '';
   return `
     <div class="path-card" style="box-shadow:none;">
